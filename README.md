@@ -16,6 +16,9 @@ Current supported features are:
 * [Last.fm][lastfm] scrobbling
 * [ListenBrainz][listenbrainz] scrobbling
 * Jukebox mode
+* Get artists cover art and album cover art from Spotify (NEW)
+* Get Artists information from localnfo (NEW)
+* add some New API (NEW)
 
 Supysonic currently targets the version 1.12.0 of the Subsonic API. For more
 details, go check the [API implementation status][docs-api].

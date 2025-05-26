@@ -58,6 +58,8 @@ def decode_password(password):
 
 @api.before_request
 def authorize():
+    # 跳过不需要身份验证的端点
+    # 尝试 HTTP 基本认证
     if request.authorization:
         username = request.authorization.username
         user = UserManager.try_auth(username, request.authorization.password)
@@ -69,18 +71,55 @@ def authorize():
             "Failed login attempt for user %s (IP: %s)", username, request.remote_addr
         )
         raise Unauthorized()
-
-    username = request.values["u"]
-    password = request.values["p"]
-    password = decode_password(password)
-
-    user = UserManager.try_auth(username, password)
+    
+    # 必需参数检查
+    if 'u' not in request.values:
+        raise Unauthorized("Required parameter 'u' is missing")
+    
+    username = request.values['u']
+    
+    # 方法 1: 明文密码
+    if 'p' in request.values:
+        password = request.values['p']
+        if password.startswith('enc:'):
+            # 处理编码密码（hex编码）
+            try:
+                password = binascii.unhexlify(password[4:]).decode('utf-8')
+            except:
+                raise Unauthorized("Invalid encoded password")
+        
+        user = UserManager.try_auth(username, password)
+    
+    # 方法 2: 散列密码
+    elif 't' in request.values and 's' in request.values:
+        token = request.values['t']  # md5(密码+盐)
+        salt = request.values['s']   # 随机盐
+        
+        # 从数据库获取用户信息
+        try:
+            from ..db import User
+            stored_user = User.get(User.name == username)
+            
+            # 生成预期的散列值
+            import hashlib
+            expected_token = hashlib.md5((stored_user.password + salt).encode('utf-8')).hexdigest()
+            
+            # 比较令牌
+            if token.lower() == expected_token.lower():
+                user = stored_user
+            else:
+                user = None
+        except:
+            user = None
+    
+    else:
+        # 缺少认证参数
+        raise Unauthorized("Missing authentication parameters")
+    
+    # 检查认证结果
     if user is None:
-        logger.error(
-            "Failed login attempt for user %s (IP: %s)", username, request.remote_addr
-        )
-        raise Unauthorized()
-
+        logger.warn("Failed login attempt for '%s'", username)
+        raise Unauthorized("Wrong username or password")
     request.user = user
 
 

@@ -13,6 +13,7 @@ import time
 
 from datetime import datetime
 from hashlib import sha1
+import hashlib
 from peewee import (
     AutoField,
     BlobField,
@@ -30,8 +31,10 @@ from peewee import fn
 from playhouse.db_url import parseresult_to_dict, schemes
 from urllib.parse import urlparse
 from uuid import UUID, uuid4
+from PIL import Image as PILImage
+from .tool import read_dict_from_json
 
-SCHEMA_VERSION = "20240318"
+SCHEMA_VERSION = "20250524"
 
 
 def now():
@@ -81,6 +84,19 @@ class PathMixin:
         _Model.__setattr__(self, attr, value)
         if attr == "path":
             _Model.__setattr__(self, "_path_hash", sha1(value.encode("utf-8")).digest())
+
+
+class Image(_Model):
+    """存储艺术家和专辑的图片"""
+
+    id = AutoField()  # 改为自增整数ID
+    path = CharField(4096)  # 文件路径
+    # 关联类型：artist 或 album
+    image_type = CharField(max_length=10)
+    # 关联的ID（艺术家或专辑的字符串ID）
+    related_id = CharField(max_length=36)
+    # 创建时间
+    created = DateTimeField(default=now)
 
 
 class Folder(PathMixin, _Model):
@@ -217,13 +233,31 @@ class Folder(PathMixin, _Model):
 class Artist(_Model):
     id = PrimaryKeyField()
     name = CharField()
+    artist_info_json = CharField(4096, null=True)
 
+    # 更精确的 as_subsonic_artist 方法
     def as_subsonic_artist(self, user):
+        # 使用去重查询获取艺术家参与的所有专辑
+        album_count = (
+            Album.select()
+            .distinct()
+            .join(
+                AlbumArtist,
+                join_type='LEFT OUTER JOIN',
+                on=(Album.id == AlbumArtist.album_id),
+            )
+            .where(
+                (Album.artist == self)  # 作为主艺术家
+                | (AlbumArtist.artist_id == self)  # 作为专辑合作艺术家
+            )
+            .count()
+        )
+
         info = {
             "id": str(self.id),
             "name": self.name,
             # coverArt
-            "albumCount": self.albums.count(),
+            "albumCount": album_count,
         }
 
         try:
@@ -231,24 +265,55 @@ class Artist(_Model):
             info["starred"] = starred.date.isoformat()
         except StarredArtist.DoesNotExist:
             pass
-
         return info
 
+    def get_info(self):
+        info = {
+            "biography": "",
+            "musicBrainzId": "",
+            "lastFmUrl": "",
+            "smallImageUrl": "",
+            "mediumImageUrl": "",
+            "largeImageUrl": "",
+        }
+        if self.artist_info_json:
+            try:
+                local_data = read_dict_from_json(self.artist_info_json)
+                info["biography"] = local_data.get("biography", "")
+                info["musicBrainzId"] = local_data.get("musicBrainzId", "")
+                info["lastFmUrl"] = local_data.get("lastFmUrl", "")
+                info["smallImageUrl"] = local_data['image'].get("small", "")
+                info["mediumImageUrl"] = local_data['image'].get("medium", "")
+                info["largeImageUrl"] = local_data['image'].get("large", "")
+                return info
+            except ValueError:
+                return info
+        return info
+
+    # 更新 Artist 类的 prune 方法
     @classmethod
     def prune(cls):
+        # 获取所有被引用的艺术家ID
         album_artists = Album.select(Album.artist)
         track_artists = Track.select(Track.artist)
-
+        album_multi_artists = AlbumArtist.select(AlbumArtist.artist_id)
+        track_multi_artists = TrackArtist.select(TrackArtist.artist_id)
+        # 删除指向不再被引用艺术家的收藏标记
         StarredArtist.delete().where(
             StarredArtist.starred.not_in(album_artists),
             StarredArtist.starred.not_in(track_artists),
+            StarredArtist.starred.not_in(album_multi_artists),
+            StarredArtist.starred.not_in(track_multi_artists),  # 添加这一行
         ).execute()
 
+        # 删除不再被引用的艺术家记录
         return (
             cls.delete()
             .where(
                 cls.id.not_in(album_artists),
                 cls.id.not_in(track_artists),
+                cls.id.not_in(album_multi_artists),
+                cls.id.not_in(track_multi_artists),  # 添加这一行
             )
             .execute()
         )
@@ -259,21 +324,50 @@ class Album(_Model):
     name = CharField()
     artist = ForeignKeyField(Artist, backref="albums")
 
+    # 在 Album 类中添加获取艺术家的方法
+
+    def get_all_artists(self):
+        """获取专辑的所有艺术家（包括主艺术家和其他艺术家）
+
+        Returns:
+            所有艺术家列表，按位置排序
+        """
+        # 查询 AlbumArtist 表中与当前专辑相关的所有记录
+        artist_relations = self.album_artists.order_by(AlbumArtist.position)
+
+        # 从关系中提取艺术家对象
+        artists = [rel.artist_id for rel in artist_relations]
+
+        return artists
+
     def as_subsonic_album(self, user):  # "AlbumID3" type in XSD
         duration, created, year = self.tracks.select(
             fn.sum(Track.duration), fn.min(Track.created), fn.min(Track.year)
         ).scalar(as_tuple=True)
-
+        all_artists = self.get_all_artists()
         info = {
             "id": str(self.id),
-            "name": self.name,
-            "artist": self.artist.name,
+            "name": str(self.name),
+            "artist": str(self.artist.name),
             "artistId": str(self.artist.id),
             "songCount": self.tracks.count(),
             "duration": duration,
+            "albumArtist": str(self.artist.name),
+            "albumArtistId": str(self.artist.id),
             "created": created.isoformat(),
         }
 
+        #     # 添加参与者信息
+        participants = {"albumartist": [], "artist": []}
+
+        for artist in all_artists:
+            # participants["albumartist"].append(
+            #     {"id": str(artist.id), "name": str(artist.name)}
+            # )
+            participants["artist"].append(
+                {"id": str(artist.id), "name": str(artist.name)}
+            )
+        info["participants"] = participants
         track_with_cover = (
             self.tracks.join(Folder).where(Folder.cover_art.is_null(False)).first()
         )
@@ -313,10 +407,30 @@ class Album(_Model):
     def prune(cls):
         albums = Track.select(Track.album)
         StarredAlbum.delete().where(StarredAlbum.starred.not_in(albums)).execute()
+        AlbumArtist.delete().where(AlbumArtist.album_id.not_in(albums)).execute()
         return cls.delete().where(cls.id.not_in(albums)).execute()
 
 
+class AlbumArtist(_Model):
+    """专辑与艺术家的多对多关系表"""
+
+    id = AutoField()
+    album_id = ForeignKeyField(Album, backref="album_artists", column_name="album_id")
+    artist_id = ForeignKeyField(
+        Artist, backref="artist_albums", column_name="artist_id"
+    )
+    position = IntegerField(default=0)  # 用于排序，主艺术家为1，其他递增,0为还没确定
+
+    class Meta:
+        table_name = 'album_artist'
+        indexes = (
+            # 确保 album-artist 组合唯一
+            (('album', 'artist'), True),
+        )
+
+
 class Track(PathMixin, _Model):
+    # 在代码里面有递归删除
     id = PrimaryKeyField()
     disc = IntegerField()
     number = IntegerField()
@@ -424,6 +538,22 @@ class Track(PathMixin, _Model):
 
     def sort_key(self):
         return f"{self.album.artist.name}{self.album.name}{self.disc:02}{self.number:02}{self.title}".lower()
+
+
+class TrackArtist(_Model):
+    """曲目与艺术家的多对多关系表"""
+
+    id = AutoField()
+    track_id = ForeignKeyField(Track, backref="track_artists")
+    artist_id = ForeignKeyField(Artist, backref="artist_tracks")
+    position = IntegerField(default=0)  # 用于排序，主艺术家为1，其他递增，0为还没确定
+
+    class Meta:
+        table_name = 'track_artist'
+        indexes = (
+            # 确保 track-artist 组合唯一
+            (('track', 'artist'), True),
+        )
 
 
 class User(_Model):
@@ -674,6 +804,9 @@ def init_database(database_uri):
         raise RuntimeError(f"Unsupported database: {uri.scheme}")
 
     db_class = schemes.get(uri.scheme)
+    temp = db_class(**args)
+    if uri.scheme == "sqlite":
+        path = os.makedirs(os.path.dirname(temp.database), exist_ok=True)
     db.initialize(db_class(**args))
     db.connect()
 

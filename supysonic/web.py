@@ -16,7 +16,7 @@ from os import makedirs, path
 
 from .config import IniConfig
 from .cache import Cache
-from .db import init_database, open_connection, close_connection
+from .db import init_database, open_connection, close_connection, Folder
 from .utils import get_secret_key
 
 logger = logging.getLogger(__package__)

@@ -13,7 +13,8 @@ CREATE INDEX index_folder_parent_id_fk ON folder(parent_id);
 
 CREATE TABLE IF NOT EXISTS artist (
     id CHAR(32) PRIMARY KEY,
-    name VARCHAR(256) NOT NULL
+    name VARCHAR(256) NOT NULL,
+    artist_info_json VARCHAR(4096) NULL
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS album (
@@ -148,6 +149,43 @@ CREATE TABLE IF NOT EXISTS playlist (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE INDEX index_playlist_user_id_fk ON playlist(user_id);
 
+
+CREATE TABLE  album_artist (
+    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+    album_id CHAR(32) NOT NULL,
+    artist_id CHAR(32) NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (album_id) REFERENCES album(id) ON DELETE CASCADE,
+    FOREIGN KEY (artist_id) REFERENCES artist(id) ON DELETE CASCADE,
+    UNIQUE KEY(album_id, artist_id)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+
+CREATE TABLE  track_artist (
+    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+    track_id CHAR(32) NOT NULL,
+    artist_id CHAR(32) NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (track_id) REFERENCES track(id) ON DELETE CASCADE,
+    FOREIGN KEY (artist_id) REFERENCES artist(id) ON DELETE CASCADE,
+    UNIQUE KEY(track_id, artist_id)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+
+
+CREATE TABLE image (
+    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+    path VARCHAR(4096) NOT NULL,
+    image_type VARCHAR(10) NOT NULL,
+    related_id VARCHAR(36) NOT NULL,
+    created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+CREATE INDEX index_album_artist_album_id_fk ON album_artist(album_id);
+CREATE INDEX index_album_artist_artist_id_fk ON album_artist(artist_id);
+CREATE INDEX index_track_artist_track_id_fk ON track_artist(track_id);
+CREATE INDEX index_track_artist_artist_id_fk ON track_artist(artist_id);
 CREATE TABLE meta (
     `key` VARCHAR(32) PRIMARY KEY,
     value VARCHAR(256) NOT NULL

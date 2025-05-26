@@ -13,7 +13,8 @@ from . import api_routing
 
 @api_routing("/ping")
 def ping():
-    return request.formatter.empty
+    # 返回空内容但有正确的响应包装
+    return request.formatter("connect_status", {"status": "OK"})  # 或者 return request.formatter.respond()
 
 
 @api_routing("/getLicense")

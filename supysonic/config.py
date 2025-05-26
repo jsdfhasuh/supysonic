@@ -55,6 +55,7 @@ class DefaultConfig:
     }
     LASTFM = {"api_key": None, "secret": None}
     LISTENBRAINZ = {"api_url": "https://api.listenbrainz.org"}
+    SPOTIFY = {"client_id": None, "client_secret": None}
     TRANSCODING = {}
     MIMETYPES = {}
 

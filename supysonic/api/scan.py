@@ -15,6 +15,7 @@ from ..daemon.exceptions import DaemonUnavailableError
 from . import api_routing
 from .user import admin_only
 from .exceptions import ServerError
+from ..db import Folder, Artist, Album, Track
 
 
 @api_routing("/startScan")
@@ -38,6 +39,15 @@ def startScan():
 @api_routing("/getScanStatus")
 @admin_only
 def getScanStatus():
+    if request.values['c'] == 'Stream Music':
+        return request.formatter(
+            "scanStatus",
+            {
+                "scanning": False,
+                "count": Track.select().count(),
+            },
+        )    
+
     try:
         scanned = DaemonClient(
             current_app.config["DAEMON"]["socket"]

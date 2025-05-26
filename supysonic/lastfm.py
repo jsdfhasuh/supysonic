@@ -8,7 +8,8 @@
 import hashlib
 import logging
 import requests
-
+from bs4 import BeautifulSoup
+import time
 logger = logging.getLogger(__name__)
 
 
@@ -70,6 +71,84 @@ class LastFm:
             trackNumber=track.number,
             duration=track.duration,
         )
+        
+    def get_artistinfo(self, name,lang='en'):
+        if not self.__enabled:
+            return
+        result = self.__api_request(
+            False,
+            method="artist.getinfo",
+            artist=name,
+            lang=lang,
+            autocorrect=1,
+        )
+        return result
+    
+    
+
+    def get_lastfm_wiki(self, url, timeout=30, retry_delay=1):
+        """
+        Scrape Last.fm wiki page content for an artist
+        
+        Args:
+            url: URL of the Last.fm wiki page
+            timeout: Request timeout in seconds (default: 30)
+            retry_delay: Delay between retries in seconds (default: 1)
+            
+        Returns:
+            String containing wiki content or error dictionary
+        """
+        try_count = 3
+        start_time = time.time()
+        while try_count > 0:
+            # 检查总体超时
+            if time.time() - start_time > timeout * 2:  # 总超时时间为请求超时的2倍
+                logger.warning(f"Total operation timeout exceeded for URL: {url}")
+                return ""
+            try:
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+                # 添加请求超时
+                response = requests.get(url, headers=headers, timeout=timeout)
+                response.raise_for_status()
+                soup = BeautifulSoup(response.text, 'html.parser')
+                # 通过类名查找元素
+                wiki_content = soup.find('div', class_='wiki-content')
+                if wiki_content:
+                    # 获取纯文本，去除所有HTML标签
+                    description = wiki_content.get_text(strip=True)
+                    # 检查内容长度，避免返回空内容
+                    if description and len(description.strip()) > 0:
+                        return description
+                    else:
+                        logger.warning(f"Empty wiki content found for URL: {url}")
+                        return ""
+                else:
+                    logger.warning(f"No wiki-content element found for URL: {url}")
+                    return ""
+            except requests.exceptions.Timeout:
+                try_count -= 1
+                logger.warning(f"Request timeout for URL: {url}, retries left: {try_count}")
+                if try_count == 0:
+                    return ""
+            except requests.exceptions.RequestException as e:
+                try_count -= 1
+                logger.warning(f"Request error for URL: {url}, error: {str(e)}, retries left: {try_count}")
+                if try_count == 0:
+                    return ""
+            except Exception as e:
+                try_count -= 1
+                logger.warning(f"Parsing error for URL: {url}, error: {str(e)}, retries left: {try_count}")
+                if try_count == 0:
+                    return {'error': f'Error parsing page: {str(e)}'}
+            # 如果还有重试机会，等待一段时间后重试
+            if try_count > 0:
+                logger.info(f"Waiting {retry_delay} seconds before retry...")
+                time.sleep(retry_delay)
+                retry_delay *= 1.5  # 递增重试延迟时间
+        return ""
+
 
     def __api_request(self, write, **kwargs):
         if not self.__enabled:

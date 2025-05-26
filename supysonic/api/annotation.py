@@ -181,7 +181,7 @@ def scrobble():
     if submission in (None, "", True, "true", "True", 1, "1"):
         lfm.scrobble(res, t)
         lbz.scrobble(res, t)
-    else:
+    elif submission in (False, "false", "False", 0, "0"):
         lfm.now_playing(res)
         lbz.now_playing(res)
 

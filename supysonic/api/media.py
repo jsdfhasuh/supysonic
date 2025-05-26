@@ -16,7 +16,7 @@ import requests
 import shlex
 import subprocess
 import zlib
-
+from ..tool import read_dict_from_json
 from flask import request, Response, send_file
 from flask import current_app
 from PIL import Image
@@ -25,6 +25,7 @@ from zipstream import ZipStream
 
 from ..cache import CacheMiss
 from ..db import Track, Album, Artist, Folder, now
+from ..db import Image as db_image
 from ..covers import EXTENSIONS
 
 from . import get_entity, get_entity_id, api_routing
@@ -363,12 +364,49 @@ def _get_cover_path(eid):
     raise NotFound("Entity")
 
 
+def __new_get_cover_path(eid,input_size):
+    """Get a path to cover art from a collection (Album, Folder)
+
+    If `extract` is True, will fall back to extracting cover art from tracks
+    Returns None if no cover art is available.
+    """
+    
+    if 'al-' in eid:
+        id = eid.replace('al-', '')
+        cover_image = db_image.get_or_none(image_type="album",related_id=id)
+        if cover_image:
+            return cover_image.path
+    elif 'ar-' in eid:
+        id = eid.replace('ar-', '')
+        artist = Artist.get_or_none(id=id)
+        if not artist:
+            return None
+        if artist.artist_info_json:
+            result = read_dict_from_json(artist.artist_info_json)
+            if 'image' in result:
+                if input_size:
+                    return result['image'][input_size]
+                for size in result['image']:
+                    return result['image'][size]
+        # 情况2: 使用艺术家的第一个专辑封面
+        temp_album = Album.select().where(Album.artist == artist).first()
+        if temp_album:
+            cover_image = db_image.get_or_none(
+                image_type="album", 
+                related_id=temp_album.id
+            )
+            return cover_image.path if cover_image else None
+    
+    return None
+                    
+    
 @api_routing("/getCoverArt")
 def cover_art():
     cache = current_app.cache
 
     eid = request.values["id"]
-    cover_path = _get_cover_path(eid)
+    input_size = request.values.get("input_size","")
+    cover_path = __new_get_cover_path(eid,input_size)
 
     if not cover_path:
         raise NotFound("Cover art")

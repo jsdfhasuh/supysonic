@@ -32,7 +32,7 @@ class UserManager:
             raise ValueError(f"User '{name}' exists")
 
         crypt, salt = UserManager.__encrypt_password(password)
-        return User.create(name=name, password=crypt, salt=salt, **kwargs)
+        return User.create(name=name, password=password, salt=salt, **kwargs)
 
     @staticmethod
     def delete(uid):
@@ -49,7 +49,7 @@ class UserManager:
         user = User.get_or_none(name=name)
         if user is None:
             return None
-        elif UserManager.__encrypt_password(password, user.salt)[0] != user.password:
+        elif password != user.password:
             return None
         else:
             return user
@@ -60,7 +60,7 @@ class UserManager:
         if UserManager.__encrypt_password(old_pass, user.salt)[0] != user.password:
             raise ValueError("Wrong password")
 
-        user.password = UserManager.__encrypt_password(new_pass, user.salt)[0]
+        user.password = new_pass
         user.save()
 
     @staticmethod
@@ -72,7 +72,7 @@ class UserManager:
         else:
             raise TypeError("Requires a User instance or a user name (string)")
 
-        user.password = UserManager.__encrypt_password(new_pass, user.salt)[0]
+        user.password = new_pass
         user.save()
 
     @staticmethod

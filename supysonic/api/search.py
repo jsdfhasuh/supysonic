@@ -199,11 +199,17 @@ def search_id3():
     song_count = int(song_count) if song_count else 20
     song_offset = int(song_offset) if song_offset else 0
     root = get_root_folder(mfid)
-
-    artists = Artist.select().where(Artist.name.contains(query))
-    albums = Album.select().where(Album.name.contains(query))
-    songs = Track.select().where(Track.title.contains(query))
-
+    if query == '""' or not query:
+        artists = Artist.select()
+        albums = Album.select()
+        songs = Track.select()
+    else:
+        artists = Artist.select().where(Artist.name.contains(query))
+        albums = Album.select().where(Album.name.contains(query))
+        songs = Track.select().where(Track.title.contains(query))
+    print(f"len artists: {len(artists)}")
+    print(f"len albums: {len(albums)}")
+    print(f"len songs: {len(songs)}")
     if root is not None:
         artists = artists.join(Track).where(Track.root_folder == root)
         albums = albums.join(Track).where(Track.root_folder == root)
@@ -226,3 +232,4 @@ def search_id3():
             )
         ),
     )
+    

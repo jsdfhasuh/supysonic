@@ -183,6 +183,7 @@ def artist_info():
     info = res.as_subsonic_artist(request.user)
     albums = set(res.albums)
     albums |= {t.album for t in res.tracks}
+    albums |= {rel.album_id for rel in res.artist_albums}
     info["album"] = [
         a.as_subsonic_album(request.user)
         for a in sorted(albums, key=lambda a: a.sort_key())
@@ -190,6 +191,37 @@ def artist_info():
 
     return request.formatter("artist", info)
 
+@api_routing("/getArtistInfo2")
+def artist_info2():
+    id = request.values.get("id")
+    image_base_url = request.url.replace("/getArtistInfo2", "/getCoverArt")
+    image_base_url = image_base_url.replace(f"{id}",f"ar-{id}")
+
+    res = get_entity(Artist)
+    info = res.get_info()
+    info['smallImageUrl'] = f"{image_base_url}&input_size=small"
+    info['mediumImageUrl'] = f"{image_base_url}&input_size=medium"
+    info['largeImageUrl'] = f"{image_base_url}&input_size=large"
+
+    # Add similar artists if available
+    similar_artists = []
+    # for artist in Artist.select().order_by(fn.random()).limit(8):
+    #     if artist.id != res.id:
+    #         similar_info = {
+    #             "id": str(artist.id),
+    #             "name": artist.name,
+    #         }
+    #         # Add album count
+    #         album_count = len(set(artist.albums) | {t.album for t in artist.tracks})
+    #         if album_count > 0:
+    #             similar_info["albumCount"] = album_count
+            
+    #         similar_artists.append(similar_info)
+    
+    if similar_artists:
+        info["similarArtist"] = similar_artists
+
+    return request.formatter("artistInfo2", info)
 
 @api_routing("/getAlbum")
 def album_info():

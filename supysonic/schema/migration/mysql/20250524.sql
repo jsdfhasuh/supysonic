@@ -1,0 +1,1 @@
+ALTER TABLE artist ADD COLUMN artist_info_json VARCHAR(4096) NULL;

@@ -364,18 +364,26 @@ def _get_cover_path(eid):
     raise NotFound("Entity")
 
 
-def __new_get_cover_path(eid,input_size):
+def __new_get_cover_path(eid, input_size):
     """Get a path to cover art from a collection (Album, Folder)
 
     If `extract` is True, will fall back to extracting cover art from tracks
     Returns None if no cover art is available.
     """
-    
+
     if 'al-' in eid:
         id = eid.replace('al-', '')
-        cover_image = db_image.get_or_none(image_type="album",related_id=id)
+        cover_image = db_image.get_or_none(image_type="album", related_id=id)
         if cover_image:
-            return cover_image.path
+            if os.path.exists(cover_image.path):
+                return cover_image.path
+            else:
+                db_image.delete().where(
+                    db_image.image_type == "album", db_image.related_id == id
+                ).execute()
+                return None
+        else:
+            return None
     elif 'ar-' in eid:
         id = eid.replace('ar-', '')
         artist = Artist.get_or_none(id=id)
@@ -392,24 +400,25 @@ def __new_get_cover_path(eid,input_size):
         temp_album = Album.select().where(Album.artist == artist).first()
         if temp_album:
             cover_image = db_image.get_or_none(
-                image_type="album", 
-                related_id=temp_album.id
+                image_type="album", related_id=temp_album.id
             )
             return cover_image.path if cover_image else None
-    
+
     return None
-                    
-    
+
+
 @api_routing("/getCoverArt")
 def cover_art():
     cache = current_app.cache
 
     eid = request.values["id"]
-    input_size = request.values.get("input_size","")
-    cover_path = __new_get_cover_path(eid,input_size)
+    input_size = request.values.get("input_size", "")
+    cover_path = __new_get_cover_path(eid, input_size)
 
     if not cover_path:
         raise NotFound("Cover art")
+    elif not os.path.isfile(cover_path):
+        raise NotFound("Cover art file does not exist")
 
     size = request.values.get("size")
     if size:

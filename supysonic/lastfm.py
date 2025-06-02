@@ -10,6 +10,8 @@ import logging
 import requests
 from bs4 import BeautifulSoup
 import time
+import re
+
 logger = logging.getLogger(__name__)
 
 
@@ -71,8 +73,8 @@ class LastFm:
             trackNumber=track.number,
             duration=track.duration,
         )
-        
-    def get_artistinfo(self, name,lang='en'):
+
+    def get_artistinfo(self, name, lang='en'):
         if not self.__enabled:
             return
         result = self.__api_request(
@@ -83,18 +85,40 @@ class LastFm:
             autocorrect=1,
         )
         return result
-    
-    
+
+    def get_albuminfo(self, artist_name, album_name, lang='en'):
+        if not self.__enabled:
+            return
+        album_name = album_name.replace("[DISC 1]", "")
+        # 然后处理各种格式的光盘标识
+        album_name = re.sub(
+            r"\s*\[DISC\s*\d*\]\s*", "", album_name, flags=re.IGNORECASE
+        )
+        # 匹配 "Disc N" 或 "Disk N" 格式
+        album_name = re.sub(
+            r"\s*\b(?:Disc|Disk)\s*\d+\b\s*", "", album_name, flags=re.IGNORECASE
+        )
+        # 处理其他可能的变体，如 "CD N"
+        album_name = re.sub(r"\s*\bCD\s*\d+\b\s*", "", album_name, flags=re.IGNORECASE)
+        result = self.__api_request(
+            False,
+            method="album.getInfo",
+            artist=artist_name,
+            album=album_name,
+            lang=lang,
+            autocorrect=1,
+        )
+        return result
 
     def get_lastfm_wiki(self, url, timeout=30, retry_delay=1):
         """
         Scrape Last.fm wiki page content for an artist
-        
+
         Args:
             url: URL of the Last.fm wiki page
             timeout: Request timeout in seconds (default: 30)
             retry_delay: Delay between retries in seconds (default: 1)
-            
+
         Returns:
             String containing wiki content or error dictionary
         """
@@ -129,17 +153,23 @@ class LastFm:
                     return ""
             except requests.exceptions.Timeout:
                 try_count -= 1
-                logger.warning(f"Request timeout for URL: {url}, retries left: {try_count}")
+                logger.warning(
+                    f"Request timeout for URL: {url}, retries left: {try_count}"
+                )
                 if try_count == 0:
                     return ""
             except requests.exceptions.RequestException as e:
                 try_count -= 1
-                logger.warning(f"Request error for URL: {url}, error: {str(e)}, retries left: {try_count}")
+                logger.warning(
+                    f"Request error for URL: {url}, error: {str(e)}, retries left: {try_count}"
+                )
                 if try_count == 0:
                     return ""
             except Exception as e:
                 try_count -= 1
-                logger.warning(f"Parsing error for URL: {url}, error: {str(e)}, retries left: {try_count}")
+                logger.warning(
+                    f"Parsing error for URL: {url}, error: {str(e)}, retries left: {try_count}"
+                )
                 if try_count == 0:
                     return {'error': f'Error parsing page: {str(e)}'}
             # 如果还有重试机会，等待一段时间后重试
@@ -148,7 +178,6 @@ class LastFm:
                 time.sleep(retry_delay)
                 retry_delay *= 1.5  # 递增重试延迟时间
         return ""
-
 
     def __api_request(self, write, **kwargs):
         if not self.__enabled:

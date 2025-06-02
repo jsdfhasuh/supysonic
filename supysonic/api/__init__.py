@@ -145,6 +145,9 @@ def get_entity(cls, param="id"):
         eid = uuid.UUID(eid)
     return cls[eid]
 
+def get_entity_by_name(cls, param):
+    name = request.values[param]
+    return cls.get(name=name) or cls.select().where(cls.name == name).first()
 
 def get_entity_id(cls, eid):
     """Return the entity ID as its proper type."""

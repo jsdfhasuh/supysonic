@@ -18,6 +18,7 @@ from flask import current_app
 from .config import IniConfig
 from .lastfm import LastFm
 from .spotify import MySpotify
+from .MusicBrainz import get_musicbrainz_album_image_info
 from .covers import find_cover_in_folder, CoverFile
 from .db import (
     User,
@@ -51,6 +52,9 @@ class Stats:
         self.added = StatsDetails()
         self.deleted = StatsDetails()
         self.errors = []
+        self.lost_covers = StatsDetails()
+        self.lost_covers_albums = {}
+        self.lost_covers_artists = []
 
 
 class ScanQueue(Queue):
@@ -125,9 +129,10 @@ class Scanner(Thread):
                 continue
 
             self.__scan_folder(folder)
-        
+
         self.dicede_all_positions()
         self.prune()
+        logger.info('begin to find all covers')
         self.find_all_covers()
         if self.__on_done is not None:
             self.__on_done()
@@ -200,7 +205,7 @@ class Scanner(Thread):
     def prune(self):
         if self.__stopped.is_set():
             return
-        
+
         self.__stats.deleted.albums += Album.prune()
         self.__stats.deleted.artists += Artist.prune()
         Folder.prune()
@@ -328,8 +333,12 @@ class Scanner(Thread):
         trdict["bitrate"] = tag.bitrate // 1000
         trdict["last_modification"] = mtime
         for nfo_track in nfo_data.get('album', {}).get('track', []):
-            nfo_track_number = int(nfo_track.get("cdnum", 1))
-            nfo_track_disc = int(nfo_track.get("position", 1))
+            try:
+                nfo_track_number = int(nfo_track.get("cdnum", 1))
+                nfo_track_disc = int(nfo_track.get("cdnum", 1))
+            except:
+                nfo_track_number = nfo_track.get("cdnum", 1)
+                nfo_track_disc = nfo_track.get("cdnum", 1)
             if (
                 nfo_track_disc == trdict["number"]
                 and nfo_track_number == trdict["disc"]
@@ -450,6 +459,12 @@ class Scanner(Thread):
         track = folder.tracks.select().first()
         if track is not None:
             album = track.album
+            if album:
+                Image.create(
+                    image_type="album",
+                    related_id=album.id,
+                    path=path,
+                )
         cover_name = os.path.basename(path)
         if not folder.cover_art:
             folder.cover_art = cover_name
@@ -479,9 +494,21 @@ class Scanner(Thread):
                 continue
             else:
                 lost_cover_album.append(album)
+                self.__stats.lost_covers_albums[album.name] = ""
+                self.__stats.lost_covers.albums += 1
+        user = User.get_or_none(User.name == "root")
+        get_cover_interner = False
+        if user and user.lastfm_status and self.__config.SPOTIFY['client_id']:
+            get_cover_interner = True
+            lfm = LastFm(self.__config.LASTFM, user)
+            sp = MySpotify(self.__config.SPOTIFY)
         for album in lost_cover_album:
             track = Track.select().where(Track.album == album.id).first()
+            self.__stats.lost_covers_albums[album.name] = (
+                os.path.dirname(track.path) if track else ""
+            )
             cover = mediafile.MediaFile(track.path).art
+            # find_local_cover
             if cover:
                 image_path = os.path.join(
                     self.__config.BASE['tempdatafolder'], "album", f"{album.name}.png"
@@ -494,27 +521,85 @@ class Scanner(Thread):
                     related_id=album.id,
                     path=image_path,
                 )
+                self.__stats.lost_covers.albums -= 1
+                self.__stats.lost_covers_albums.pop(album.name, None)
+
             # try spotify cover
-            if self.__config.SPOTIFY['client_id']:
-                sp = MySpotify(self.__config.SPOTIFY)
-                sp_result = sp.get_album_info(album.name)
-                if sp_result:
-                    if sp_result['albums']['items']:
-                        dl_url = sp_result['albums']['items'][0]['images'][0]['url']
+            if get_cover_interner and not cover:
+                album_artist_name = album.artist.name
+                lastfm_album = lfm.get_albuminfo(
+                    artist_name=album_artist_name, album_name=album.name
+                )
+                dl_status = False
+                if lastfm_album:
+                    if lastfm_album['album']['image']:
                         save_folder = os.path.dirname(track.path)
-                        save_name = f"cover.png"
-                        if download_image(
-                            save_folder=save_folder,
-                            save_name=save_name,
-                            url=dl_url,
-                            logger=logger,
-                        ):
-                            Image.create(
-                                image_type="album",
-                                related_id=album.id,
-                                path=os.path.join(save_folder, save_name),
+                        album_mbid = lastfm_album['album']['mbid']
+                        if album_mbid:
+                            musicBrainzId_json = get_musicbrainz_album_image_info(
+                                mb_album_id=album_mbid
                             )
-                    
+                            if musicBrainzId_json:
+                                for image in musicBrainzId_json.get('images', []):
+                                    if image.get('front', False):
+                                        dl_url = image['image']
+                                        image_path = download_image(
+                                            save_folder=os.path.dirname(track.path),
+                                            save_name=f"cover.png",
+                                            url=dl_url,
+                                            logger=logger,
+                                        )
+                                        if image_path:
+                                            Image.create(
+                                                image_type="album",
+                                                related_id=album.id,
+                                                path=image_path,
+                                            )
+                                            logger.info(
+                                                f"download {album.name} cover image"
+                                            )
+                                            self.__stats.lost_covers.albums -= 1
+                                            self.__stats.lost_covers_albums.pop(
+                                                album.name, None
+                                            )
+                                            dl_status = True
+                                            break
+                                        else:
+                                            logger.error("Download image failed")
+                                            continue
+                            if dl_status:
+                                # try to download from lastfm
+                                # lastfm cover is not good
+                                # but we can try
+                                break
+                        for image in lastfm_album['album']['image']:
+                            size = image['size']
+                            if size not in ["large"]:
+                                continue
+                            dl_url = image['#text']
+                            if not dl_url:
+                                continue
+                            image_path = download_image(
+                                save_folder=save_folder,
+                                save_name=f"cover.png",
+                                url=dl_url,
+                                logger=logger,
+                            )
+                            if image_path:
+                                Image.create(
+                                    image_type="album",
+                                    related_id=album.id,
+                                    path=image_path,
+                                )
+                                logger.info(f"download {album.name} cover image")
+                                dl_status = True
+                                self.__stats.lost_covers.albums -= 1
+                                self.__stats.lost_covers_albums.pop(album.name, None)
+                                break
+                            else:
+                                logger.error("Download image failed")
+                                continue
+
         # check artist
         lost_cover_artist = []
         for artist in Artist.select():
@@ -522,17 +607,26 @@ class Scanner(Thread):
                 continue
             else:
                 lost_cover_artist.append(artist)
+                self.__stats.lost_covers.artists += 1
+                self.__stats.lost_covers_artists.append(artist.name)
         # check if the root user in
-        user = User.get_or_none(User.name == "root")
-        if user:
-            # check user have lastfm status
+
+        if get_cover_interner:
             if user.lastfm_status and self.__config.SPOTIFY['client_id']:
                 sp = MySpotify(self.__config.SPOTIFY, user)
                 lfm = LastFm(self.__config.LASTFM, user)
                 for artist in lost_cover_artist:
+                    if artist.name == "Various Artists" or len(artist.name) < 2:
+                        continue
                     result = lfm.get_artistinfo(
                         name=artist.name, lang=self.__config.LASTFM['display_lang']
                     )
+                    if (
+                        not result
+                        or result.get('message', "")
+                        == 'The artist you supplied could not be found'
+                    ):
+                        continue
                     result_json = {}
                     result_json['image'] = {}
                     musicBrainzId = result['artist'].get('mbid', "")
@@ -545,6 +639,7 @@ class Scanner(Thread):
                     sp_result = sp.get_artist_info(artist.name)
                     os.makedirs(artists_folder, exist_ok=True)
                     # get image from spotify
+                    dl_status = False
                     if sp_result:
                         dl_status = True
                         if sp_result['artists']['items']:
@@ -557,15 +652,15 @@ class Scanner(Thread):
                                 elif size_num < 300:
                                     size = "small"
                                 dl_url = element['url']
-                                if download_image(
+                                image_path = download_image(
                                     save_folder=artists_folder,
                                     save_name=size,
                                     url=dl_url,
                                     logger=logger,
-                                ):
-                                    result_json['image'][size] = os.path.join(
-                                        artists_folder, f"{size}.png"
-                                    )
+                                )
+                                if image_path:
+                                    result_json['image'][size] = image_path
+                                    self.__stats.lost_covers.artists -= 1
                                 else:
                                     logger.error("Download image failed")
                                     dl_status = False
@@ -607,9 +702,52 @@ class Scanner(Thread):
                             artists_folder, f"info.json"
                         )
                         artist.save()
-            else:
-                logger.warning("User %s doesn't have lastfm status", user.name)
-                pass
+                        self.__stats.lost_covers_artists.remove(artist.name)
+
+        if get_cover_interner:
+            if user.lastfm_status and self.__config.SPOTIFY['client_id']:
+                # check if the artist who have infor.json the picture is exist
+                for artist in Artist.select().where(
+                    Artist.artist_info_json.is_null(False)
+                ):
+                    if not os.path.exists(artist.artist_info_json):
+                        continue
+                    info = read_dict_from_json(artist.artist_info_json)
+                    if not info or not info.get('image'):
+                        continue
+                    for size, image_path in info['image'].items():
+                        if not os.path.exists(image_path):
+                            sp_result = sp.get_artist_info(artist.name)
+                            # get image from spotify
+                            artists_folder = os.path.dirname(image_path)
+                            if sp_result:
+                                if sp_result['artists']['items']:
+                                    for element in sp_result['artists']['items'][0][
+                                        'images'
+                                    ]:
+                                        size_num = element['height']
+                                        if size_num > 600:
+                                            size = "large"
+                                        elif 600 > size_num > 300:
+                                            size = "medium"
+                                        elif size_num < 300:
+                                            size = "small"
+                                        dl_url = element['url']
+                                        if download_image(
+                                            save_folder=artists_folder,
+                                            save_name=size,
+                                            url=dl_url,
+                                            logger=logger,
+                                        ):
+                                            info['image'][size] = os.path.join(
+                                                artists_folder, f"{size}.png"
+                                            )
+                                            write_dict_to_json(
+                                                data=info,
+                                                filename=os.path.join(
+                                                    artists_folder, f"info.json"
+                                                ),
+                                            )
 
     def _record_album_artists(self, artists, album):
         # find all artists in the database

@@ -8,7 +8,7 @@ class MySpotify:
     def __init__(self,config,scope = "user-library-read"):
         if config["client_id"] is not None and config["client_secret"] is not None:
             self.SPOTIPY_CLIENT_SECRET = config["client_secret"]
-            self.SPOTIPY_CLIENT_ID = config["client_id"].encode("utf-8")
+            self.SPOTIPY_CLIENT_ID = config["client_id"]
             self.__enabled = True
         else:
             return False
@@ -36,7 +36,7 @@ class MySpotify:
         retry_count = 0
         while retry_count < 3:
             try:
-                results = self.sp.search(q=name, type='album', limit=5)
+                results = self.sp.search(q=name, type='album')
                 if results:
                     return results
                 if retry_count == 2:

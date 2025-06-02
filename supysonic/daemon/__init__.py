@@ -24,18 +24,23 @@ daemon = None
 
 
 def setup_logging(config):
+    # 始终添加控制台日志处理器
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+    logger.addHandler(console_handler)
+
+    # 如果配置了日志文件，也添加文件日志处理器
     if config["log_file"]:
         if config["log_rotate"]:
-            log_handler = TimedRotatingFileHandler(config["log_file"], when="midnight")
+            file_handler = TimedRotatingFileHandler(config["log_file"], when="midnight")
         else:
-            log_handler = logging.FileHandler(config["log_file"])
-        log_handler.setFormatter(
+            file_handler = logging.FileHandler(config["log_file"])
+        file_handler.setFormatter(
             logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
         )
-    else:
-        log_handler = logging.StreamHandler()
-        log_handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
-    logger.addHandler(log_handler)
+        logger.addHandler(file_handler)
+
+    # 设置日志级别
     if "log_level" in config:
         level = getattr(logging, config["log_level"].upper(), logging.NOTSET)
         logger.setLevel(level)

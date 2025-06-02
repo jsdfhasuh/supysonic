@@ -13,7 +13,7 @@ from peewee import fn
 
 from ..db import Folder, Artist, Album, Track
 
-from . import get_entity, get_root_folder, api_routing
+from . import get_entity, get_root_folder, api_routing, get_entity_by_name
 
 
 @api_routing("/getMusicFolders")
@@ -53,14 +53,17 @@ def build_indexes(source):
     indexes = {}
     pattern = build_ignored_articles_pattern()
     for item in source:
-        name = item.name
-        if pattern:
-            name = re.sub(pattern, "", name, flags=re.I)
-        index = name[0].upper()
-        if index in string.digits:
-            index = "#"
-        elif index not in string.ascii_letters:
+        name = item.name or ""  # 确保 name 不是 None
+        if not name.strip():  # 检查名称是否为空或只包含空格
             index = "?"
+        else:
+            if pattern:
+                name = re.sub(pattern, "", name, flags=re.I)
+            index = name[0].upper()
+            if index in string.digits:
+                index = "#"
+            elif index not in string.ascii_letters:
+                index = "?"
 
         if index not in indexes:
             indexes[index] = []
@@ -149,6 +152,17 @@ def list_genres():
     )
 
 
+@api_routing("/getTopSongs")
+def top_songs():
+    res = get_entity_by_name(Artist, param='artist')
+    # 获取该艺人下按播放次数排序的前 10 首歌曲
+    tracks = res.tracks.select().order_by(Track.play_count.desc())
+    topSongs = [
+        track.as_subsonic_child(request.user, request.client) for track in tracks
+    ]
+    return request.formatter("topSongs", {"song": topSongs})
+
+
 @api_routing("/getArtists")
 def list_artists():
     mfid = request.values.get("musicFolderId")
@@ -191,11 +205,12 @@ def artist_info():
 
     return request.formatter("artist", info)
 
+
 @api_routing("/getArtistInfo2")
 def artist_info2():
     id = request.values.get("id")
     image_base_url = request.url.replace("/getArtistInfo2", "/getCoverArt")
-    image_base_url = image_base_url.replace(f"{id}",f"ar-{id}")
+    image_base_url = image_base_url.replace(f"{id}", f"ar-{id}")
 
     res = get_entity(Artist)
     info = res.get_info()
@@ -215,13 +230,14 @@ def artist_info2():
     #         album_count = len(set(artist.albums) | {t.album for t in artist.tracks})
     #         if album_count > 0:
     #             similar_info["albumCount"] = album_count
-            
+
     #         similar_artists.append(similar_info)
-    
+
     if similar_artists:
         info["similarArtist"] = similar_artists
 
     return request.formatter("artistInfo2", info)
+
 
 @api_routing("/getAlbum")
 def album_info():

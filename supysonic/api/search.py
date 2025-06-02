@@ -192,21 +192,25 @@ def search_id3():
         ),
     )
 
-    artist_count = int(artist_count) if artist_count else 20
+    artist_count = int(artist_count) if artist_count else 100
     artist_offset = int(artist_offset) if artist_offset else 0
-    album_count = int(album_count) if album_count else 20
+    album_count = int(album_count) if album_count else 100
     album_offset = int(album_offset) if album_offset else 0
-    song_count = int(song_count) if song_count else 20
+    song_count = int(song_count) if song_count else 1000
     song_offset = int(song_offset) if song_offset else 0
     root = get_root_folder(mfid)
     if query == '""' or not query:
         artists = Artist.select()
         albums = Album.select()
-        songs = Track.select()
+        songs = Track.select().order_by(Track.created.desc())
     else:
         artists = Artist.select().where(Artist.name.contains(query))
         albums = Album.select().where(Album.name.contains(query))
-        songs = Track.select().where(Track.title.contains(query))
+        songs = (
+            Track.select()
+            .where(Track.title.contains(query))
+            .order_by(Track.created.desc())
+        )
     print(f"len artists: {len(artists)}")
     print(f"len albums: {len(albums)}")
     print(f"len songs: {len(songs)}")
@@ -232,4 +236,3 @@ def search_id3():
             )
         ),
     )
-    

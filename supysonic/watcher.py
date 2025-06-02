@@ -159,6 +159,26 @@ class ScannerProcessingQueue(Thread):
                     self.__process_cover_item(scanner, item)
                 else:
                     self.__process_regular_item(scanner, item)
+                # 检查队列是否已空
+                with self.__cond:
+                    if not self.__queue:
+                        logger.info("Beginging cover scan")
+                        scanner.find_all_covers()
+                        stats = scanner.stats()
+
+                        logger.info(
+                            "Cover scan completed,results: lost artists: %d, lost albums: %d",
+                            stats.lost_covers.artists,
+                            stats.lost_covers.albums,
+                        )
+                        for album in stats.lost_covers_albums:
+                            logger.info(
+                                f"album lost cover: {album} - {stats.lost_covers_albums[album]}"
+                            )
+                        for artist in stats.lost_covers_artists:
+                            logger.info(f"artist lost cover: {artist}")
+                    else:
+                        logger.info("Continuing with next item")
 
                 item = self.__next_item()
 

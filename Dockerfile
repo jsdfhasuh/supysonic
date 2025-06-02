@@ -38,4 +38,4 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 EXPOSE 5000
 
 # 启动命令
-ENTRYPOINT ["python", "/app/run_supysonic.py"]
+ENTRYPOINT ["sh", "/app/setup.sh"]

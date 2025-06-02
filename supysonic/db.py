@@ -313,7 +313,6 @@ class Artist(_Model):
                 cls.id.not_in(album_artists),
                 cls.id.not_in(track_artists),
                 cls.id.not_in(album_multi_artists),
-                cls.id.not_in(track_multi_artists),  # 添加这一行
             )
             .execute()
         )

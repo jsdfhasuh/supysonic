@@ -3,16 +3,23 @@ import os
 import json
 import requests
 
-def download_image(url, save_folder,save_name ,logger=None):
+
+def download_image(url, save_folder, save_name, logger=None):
     try_count = 3
     while True:
         # Check image type from URL or fall back to content-type check
-        image_type = os.path.splitext(url)[1].lower()
-        if not image_type or '.png' not in save_name:
+        web_image_type = os.path.splitext(url)[1].lower()
+        if not web_image_type:
             image_type = '.png'
+        if web_image_type:
+            for element in ['.png', '.jpg']:
+                save_name = save_name.replace(element, '')
+            image_type = web_image_type
+        if image_type in save_name:
+            pass
         else:
-            image_type = ""
-        save_path = os.path.join(save_folder, save_name + image_type)
+            save_name = save_name + image_type
+        save_path = os.path.join(save_folder, save_name)
         folder_path = os.path.dirname(save_path)
         os.makedirs(folder_path, exist_ok=True)
         if os.path.exists(save_path):
@@ -41,7 +48,6 @@ def write_dict_to_json(data, filename):
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     with open(filename, "w") as json_file:
         json.dump(data, json_file, ensure_ascii=False, indent=4)
-    
 
 
 def read_dict_from_json(filename):

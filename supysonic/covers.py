@@ -65,7 +65,7 @@ def is_valid_cover(path):
         return False
 
 
-def find_cover_in_folder(path, album_name=None):
+def  find_cover_in_folder(path, album_name=None):
     if not os.path.isdir(path):
         raise ValueError("Invalid path")
 

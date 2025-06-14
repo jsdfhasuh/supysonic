@@ -214,3 +214,7 @@ class NfoHandler:
                 result[key] = value
 
         return result
+
+    @classmethod
+    def is_nfo_file(cls, path: str) -> bool:
+        return path.lower().endswith('.nfo')

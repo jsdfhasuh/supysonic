@@ -15,6 +15,7 @@ from .server import Daemon
 
 from ..config import IniConfig
 from ..db import init_database, release_database
+import os
 
 __all__ = ["Daemon", "DaemonClient"]
 
@@ -32,6 +33,7 @@ def setup_logging(config):
     # 如果配置了日志文件，也添加文件日志处理器
     if config["log_file"]:
         if config["log_rotate"]:
+            os.makedirs(os.path.dirname(config["log_file"]), exist_ok=True)
             file_handler = TimedRotatingFileHandler(config["log_file"], when="midnight")
         else:
             file_handler = logging.FileHandler(config["log_file"])

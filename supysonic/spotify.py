@@ -15,6 +15,7 @@ class MySpotify:
         auth_manager = SpotifyClientCredentials(client_id=self.SPOTIPY_CLIENT_ID, client_secret=self.SPOTIPY_CLIENT_SECRET)
         sp = spotipy.Spotify(auth_manager=auth_manager)
         self.sp = sp
+        
     def get_artist_info(self, name):
         retry_count = 0
         while retry_count < 3:
@@ -32,6 +33,7 @@ class MySpotify:
             except requests.exceptions.ReadTimeout:
                 print("Read timeout occurred. Retrying...")
                 retry_count += 1
+                
     def get_album_info(self, name):
         retry_count = 0
         while retry_count < 3:

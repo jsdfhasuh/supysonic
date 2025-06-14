@@ -16,12 +16,14 @@ from watchdog.events import PatternMatchingEventHandler
 from . import covers
 from .db import Folder, open_connection, close_connection
 from .scanner import Scanner
+from .nfo.nfo import NfoHandler
 
 OP_SCAN = 1
 OP_REMOVE = 2
 OP_MOVE = 4
 FLAG_CREATE = 8
 FLAG_COVER = 16
+FLAG_NFO = 32
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +49,8 @@ class SupysonicWatcherEventHandler(PatternMatchingEventHandler):
         op = OP_SCAN | FLAG_CREATE
         if covers.is_valid_cover(event.src_path):
             op |= FLAG_COVER
+        if NfoHandler.is_nfo_file(event.src_path):
+            op |= FLAG_NFO
         self.queue.put(event.src_path, op)
 
     def on_deleted(self, event):
@@ -56,6 +60,7 @@ class SupysonicWatcherEventHandler(PatternMatchingEventHandler):
         _, ext = os.path.splitext(event.src_path)
         if ext in covers.EXTENSIONS:
             op |= FLAG_COVER
+
         self.queue.put(event.src_path, op)
 
     def on_modified(self, event):
@@ -63,15 +68,18 @@ class SupysonicWatcherEventHandler(PatternMatchingEventHandler):
         op = OP_SCAN
         if covers.is_valid_cover(event.src_path):
             op |= FLAG_COVER
+        if NfoHandler.is_nfo_file(event.src_path):
+            op |= FLAG_NFO
         self.queue.put(event.src_path, op)
 
     def on_moved(self, event):
         logger.debug("File moved: '%s' -> '%s'", event.src_path, event.dest_path)
-
         op = OP_MOVE
         _, ext = os.path.splitext(event.src_path)
         if ext in covers.EXTENSIONS:
             op |= FLAG_COVER
+        if NfoHandler.is_nfo_file(event.src_path):
+            op |= FLAG_NFO
         self.queue.put(event.dest_path, op, src_path=event.src_path)
 
 
@@ -95,6 +103,8 @@ class Event:
         if operation & OP_REMOVE:
             self.__op &= ~OP_SCAN
         if operation & FLAG_CREATE:
+            self.__op &= ~OP_MOVE
+        if operation & FLAG_NFO:
             self.__op &= ~OP_MOVE
         self.__op |= operation
 
@@ -139,7 +149,6 @@ class ScannerProcessingQueue(Thread):
     def __run(self):
         while self.__running:
             time.sleep(0.1)
-
             with self.__cond:
                 # Flag might have flipped during sleep. Check it again before waiting
                 # See issue #263
@@ -154,18 +163,23 @@ class ScannerProcessingQueue(Thread):
             scanner = Scanner()
 
             item = self.__next_item()
+            find_lost_information_flag = False
             while item:
                 if item.operation & FLAG_COVER:
                     self.__process_cover_item(scanner, item)
+                elif item.operation & FLAG_NFO:
+                    self.__process_nfo_item(scanner, item)
                 else:
                     self.__process_regular_item(scanner, item)
+                    find_lost_information_flag = True
                 # 检查队列是否已空
                 with self.__cond:
-                    if not self.__queue:
+                    if not self.__queue and find_lost_information_flag:
                         logger.info("Beginging cover scan")
-                        scanner.find_all_covers()
+                        scanner.find_lost_information()
+                        logger.info("Cover scan finished")
+                        find_lost_information_flag = False
                         stats = scanner.stats()
-
                         logger.info(
                             "Cover scan completed,results: lost artists: %d, lost albums: %d",
                             stats.lost_covers.artists,
@@ -177,11 +191,11 @@ class ScannerProcessingQueue(Thread):
                             )
                         for artist in stats.lost_covers_artists:
                             logger.info(f"artist lost cover: {artist}")
-                    else:
-                        logger.info("Continuing with next item")
-
+                        for album in stats.lost_year_albums:
+                            logger.info(
+                                f"album lost year: {album} - {stats.lost_year_albums[album]}"
+                            )
                 item = self.__next_item()
-
             scanner.prune()
             close_connection()
             logger.debug("Freeing scanner")
@@ -216,6 +230,24 @@ class ScannerProcessingQueue(Thread):
             logger.info("Moving cover: '%s' -> '%s'", item.src_path, item.path)
             scanner.find_cover(os.path.dirname(item.src_path))
             scanner.add_cover(item.path)
+
+    def __process_nfo_item(self, scanner, item):
+        if item.operation & OP_SCAN:
+            if os.path.isdir(item.path):
+                logger.info("Looking for nfo: '%s'", item.path)
+                scanner.renow_album_by_nfo(item.path)
+            else:
+                logger.info("Potentially adding nfo: '%s'", item.path)
+                scanner.renow_album_by_nfo(item.path)
+
+        if item.operation & OP_REMOVE:
+            logger.info("Removing nfo: '%s'", item.path)
+            scanner.renow_album_by_nfo(os.path.dirname(item.path))
+
+        if item.operation & OP_MOVE:
+            logger.info("Moving nfo: '%s' -> '%s'", item.src_path, item.path)
+            scanner.find_cover(os.path.dirname(item.src_path))
+            scanner.renow_album_by_nfo(item.path)
 
     def stop(self):
         with self.__cond:
@@ -302,7 +334,31 @@ class SupysonicWatcher:
         del self.__folders[path]
         self.__queue.unschedule_paths(path)
 
+    def first_scanner(self):
+        logger.info("Running first scanner")
+        scanner = Scanner()
+        scanner.find_lost_information()
+        stats = scanner.stats()
+        logger.info(
+            "Cover scan completed,results: lost artists: %d, lost albums: %d",
+            stats.lost_covers.artists,
+            stats.lost_covers.albums,
+        )
+        for album in stats.lost_covers_albums:
+            logger.info(
+                f"album lost cover: {album} - {stats.lost_covers_albums[album]}"
+            )
+        for artist in stats.lost_covers_artists:
+            logger.info(f"artist lost cover: {artist}")
+        for album in stats.lost_year_albums:
+            logger.info(
+                f"album lost year: {album} - {stats.lost_year_albums[album]}"
+            )
+        logger.info("first scanner completed")
+        scanner.prune()
+
     def start(self):
+        self.first_scanner()
         self.__queue = ScannerProcessingQueue(self.__delay)
         self.__observer = Observer()
         self.__handler.queue = self.__queue

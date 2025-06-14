@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS artist (
 CREATE TABLE IF NOT EXISTS album (
     id CHAR(32) PRIMARY KEY,
     name VARCHAR(256) NOT NULL,
+    year VARCHAR(255) NULL,
     artist_id CHAR(32) NOT NULL REFERENCES artist(id)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE INDEX index_album_artist_id_fk ON album(artist_id);

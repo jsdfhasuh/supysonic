@@ -34,7 +34,7 @@ from uuid import UUID, uuid4
 from PIL import Image as PILImage
 from .tool import read_dict_from_json
 
-SCHEMA_VERSION = "20250524"
+SCHEMA_VERSION = "20250603"
 
 
 def now():
@@ -322,6 +322,7 @@ class Album(_Model):
     id = PrimaryKeyField()
     name = CharField()
     artist = ForeignKeyField(Artist, backref="albums")
+    year = CharField(default=None, null=True)  # 专辑年份
 
     # 在 Album 类中添加获取艺术家的方法
 
@@ -340,8 +341,8 @@ class Album(_Model):
         return artists
 
     def as_subsonic_album(self, user):  # "AlbumID3" type in XSD
-        duration, created, year = self.tracks.select(
-            fn.sum(Track.duration), fn.min(Track.created), fn.min(Track.year)
+        duration, created = self.tracks.select(
+            fn.sum(Track.duration), fn.min(Track.created)
         ).scalar(as_tuple=True)
         all_artists = self.get_all_artists()
         info = {
@@ -377,8 +378,8 @@ class Album(_Model):
             if track_with_cover is not None:
                 info["coverArt"] = str(track_with_cover.id)
 
-        if year:
-            info["year"] = year
+        if self.year:
+            info["year"] = self.year
 
         genre = ", ".join(
             g

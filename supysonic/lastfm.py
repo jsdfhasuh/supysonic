@@ -21,6 +21,7 @@ class LastFm:
             self.__api_key = config["api_key"]
             self.__api_secret = config["secret"].encode("utf-8")
             self.__enabled = True
+            self.__find_json = {}
         else:
             self.__enabled = False
         self.__user = user
@@ -77,6 +78,8 @@ class LastFm:
     def get_artistinfo(self, name, lang='en'):
         if not self.__enabled:
             return
+        if 'artist_{name}' in self.__find_json:
+            return self.__find_json[f'artist_{name}']
         result = self.__api_request(
             False,
             method="artist.getinfo",
@@ -84,6 +87,7 @@ class LastFm:
             lang=lang,
             autocorrect=1,
         )
+        self.__find_json[f'artist_{name}'] = result
         return result
 
     def get_albuminfo(self, artist_name, album_name, lang='en'):
@@ -100,6 +104,8 @@ class LastFm:
         )
         # 处理其他可能的变体，如 "CD N"
         album_name = re.sub(r"\s*\bCD\s*\d+\b\s*", "", album_name, flags=re.IGNORECASE)
+        if f'album_{artist_name}_{album_name}' in self.__find_json:
+            return self.__find_json[f'album_{artist_name}_{album_name}']
         result = self.__api_request(
             False,
             method="album.getInfo",
@@ -108,6 +114,7 @@ class LastFm:
             lang=lang,
             autocorrect=1,
         )
+        self.__find_json[f'album_{artist_name}_{album_name}'] = result
         return result
 
     def get_lastfm_wiki(self, url, timeout=30, retry_delay=1):
@@ -178,6 +185,24 @@ class LastFm:
                 time.sleep(retry_delay)
                 retry_delay *= 1.5  # 递增重试延迟时间
         return ""
+
+    def get_wiki_year(self, wiki):
+        """
+        从维基百科内容中提取年份信息
+
+        Args:
+            wiki: 维基百科内容字符串
+
+        Returns:
+            提取的年份字符串，如果未找到则返回 None
+        """
+        if not wiki:
+            return None
+        # 使用正则表达式匹配年份格式 released on May 31, 2023
+        match = re.search(r'released on [A-Za-z]+\s+\d{1,2},\s*(\d{4})', wiki)
+        if match:
+            return match.group(1)
+        return None
 
     def __api_request(self, write, **kwargs):
         if not self.__enabled:

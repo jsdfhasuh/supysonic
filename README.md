@@ -80,3 +80,161 @@ The last command runs a few tests that make HTTP requests to remote third-party
 services (namely Last.fm, ListenBrainz and ChartLyrics).
 
 [flask]: https://flask.palletsprojects.com/
+
+##nfo rule
+If you want to use the localinfo feature,you need to follow the rules.
+1. The nfo file must be named as album.nfo in the track folder
+2. The nfo file must be in xml format
+3. The nfo file must contain the following tags:
+   - `<album>`: The root element for the album information.
+   - `<track>`: Each track should be enclosed in this tag.
+   - `<lock_data>`: A boolean value indicating whether the data is locked (optional).
+   the following tags must be included in each `<track>` element:
+    - `<title>`: The title of the track.
+    - `<cdnum>`: The CD number (if applicable),must be a integer.
+    - `<position>`: The position of the track on the CD.
+4. The following tags are optional but recommended:
+   - `<artist>`: The artist of the track.
+   - `<albumartist>`: The album artist (optional).
+   - `<year>`: The year of the album (optional).
+sample_album.nfo:
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<album>
+  <lock_data>False</lock_data>
+  <track>
+    <title>Many Shades Of Black</title>
+    <cdnum>1</cdnum>
+    <position>10</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>Best For Last</title>
+    <cdnum>1</cdnum>
+    <position>02</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>Chasing Pavements</title>
+    <cdnum>1</cdnum>
+    <position>03</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>Cold Shoulder</title>
+    <cdnum>1</cdnum>
+    <position>04</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>Crazy For You</title>
+    <cdnum>1</cdnum>
+    <position>05</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>Melt My Heart To Stone</title>
+    <cdnum>1</cdnum>
+    <position>06</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>First Love</title>
+    <cdnum>1</cdnum>
+    <position>07</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>Right As Rain</title>
+    <cdnum>1</cdnum>
+    <position>08</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>Make You Feel My Love</title>
+    <cdnum>1</cdnum>
+    <position>09</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>My Same</title>
+    <cdnum>1</cdnum>
+    <position>10</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>Tired</title>
+    <cdnum>1</cdnum>
+    <position>11</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>Hometown Glory</title>
+    <cdnum>1</cdnum>
+    <position>12</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>Chasing Pavements</title>
+    <cdnum>1</cdnum>
+    <position>01</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>Melt My Heart To Stone</title>
+    <cdnum>1</cdnum>
+    <position>02</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>That's It, I Quit, I'm Moving On</title>
+    <cdnum>1</cdnum>
+    <position>03</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>Crazy For You</title>
+    <cdnum>1</cdnum>
+    <position>04</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>Right As Rain</title>
+    <cdnum>1</cdnum>
+    <position>05</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>My Same</title>
+    <cdnum>1</cdnum>
+    <position>06</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>Make You Feel My Love</title>
+    <cdnum>1</cdnum>
+    <position>07</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>Daydreamer</title>
+    <cdnum>1</cdnum>
+    <position>08</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>Hometown Glory</title>
+    <cdnum>1</cdnum>
+    <position>09</position>
+    <artist>Adele</artist>
+  </track>
+  <track>
+    <title>Daydreamer</title>
+    <cdnum>1</cdnum>
+    <position>01</position>
+    <artist>Adele</artist>
+  </track>
+  <artist>Adele</artist>
+  <albumartist>Adele</albumartist>
+</album>
+```

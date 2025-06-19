@@ -2,7 +2,10 @@
 
 # 启动第一个 Python 程序，并将其放入后台执行
 python /app/run_daemon.py &
-rm /tmp/supysonic/supysonic.sock
+# Check if the socket file exists and remove it
+if [ -e /tmp/supysonic/supysonic.sock ]; then
+    rm /tmp/supysonic/supysonic.sock
+fi
 pid1=$!
 
 # 启动第二个 Python 程序，并将其放入后台执行

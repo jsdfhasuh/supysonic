@@ -28,7 +28,7 @@ def debug_scan_logic():
         )
 
         # 获取要扫描的文件夹
-        folder_name = "test"  # 替换为你要扫描的文件夹名称
+        folder_name = "completed"  # 替换为你要扫描的文件夹名称
         folders = []
 
         try:

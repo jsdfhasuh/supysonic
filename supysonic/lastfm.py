@@ -115,6 +115,11 @@ class LastFm:
             autocorrect=1,
         )
         self.__find_json[f'album_{artist_name}_{album_name}'] = result
+        if 'error' in result:
+            logger.warning(
+                f"Error fetching album info for {artist_name} - {album_name}: {result['message']}"
+            )
+            return {}
         return result
 
     def get_lastfm_wiki(self, url, timeout=30, retry_delay=1):

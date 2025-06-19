@@ -221,9 +221,16 @@ class Folder(PathMixin, _Model):
 
         deleted_tracks = Track.delete().where(cond).execute()
 
+        # 修改代码，确保所有子文件夹中的 Track 都被删除
+        # 获取所有相关的 folder_id
+        folder_ids = [f.id for f in Folder.select(Folder.id).where(path_cond)]
+
+        # 确保删除这些文件夹中的所有 Track
+        Track.delete().where(Track.folder_id.in_(folder_ids)).execute()
+
+        # 然后再删除文件夹
         query = Folder.delete().where(path_cond)
         if isinstance(db.obj, MySQLDatabase):
-            # MySQL can't propery resolve deletion order when it has several to handle
             query = query.order_by(Folder.path.desc())
         query.execute()
 

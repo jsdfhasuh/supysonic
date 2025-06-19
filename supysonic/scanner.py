@@ -502,9 +502,7 @@ class Scanner(Thread):
         lost_year_albums = []
         for album in Album.select():
             track = Track.select().where(Track.album == album.id).first()
-            if album.year:
-                continue
-            else:
+            if not album.year:
                 lost_year_albums.append(album)
                 self.__stats.lost_year_albums[album.name] = (
                     os.path.dirname(track.path) if track else ""
@@ -514,28 +512,25 @@ class Scanner(Thread):
             if track and track.year:
                 year = extract_year(str(track.year))
                 album.year = year
+            else:
+                # try to find year from musicBrainz
+                album_artist_name = album.artist.name
+                musicbrainz_album = search_musicbrainz_album(
+                    artist_name=album_artist_name, album_name=album.name
+                )
+                if musicbrainz_album and musicbrainz_album.get('id'):
+                    result = get_musicbrainz_album(mb_album_id=musicbrainz_album['id'])
+                    year = extract_year(result.get('date'))
+                    if year:
+                        print(f"find year {year} for album {album.name}")
+                        album.year = year
+            if album.year:
                 album.save()
-                lost_year_albums.remove(album)
                 self.__stats.lost_year_albums.pop(album.name, None)
-        for album in lost_year_albums:
-            # try to find year from musicBrainz
-            album_artist_name = album.artist.name
-            musicbrainz_album = search_musicbrainz_album(
-                artist_name=album_artist_name, album_name=album.name
-            )
-            if musicbrainz_album and musicbrainz_album.get('id'):
-                result = get_musicbrainz_album(mb_album_id=musicbrainz_album['id'])
-                year = extract_year(result.get('date'))
-                if year:
-                    print(f"find year {year} for album {album.name}")
-                    album.year = year
-                    album.save()
-                    self.__stats.lost_year_albums.pop(album.name, None)
-                    lost_year_albums.remove(album)
-            pass
-        pass
-        if lfm and sp:
-            for album in lost_year_albums:
+                lost_year_albums.remove(album)
+                continue
+
+            if lfm and sp:
                 album_artist_name = album.artist.name
                 lastfm_album = lfm.get_albuminfo(
                     artist_name=album_artist_name, album_name=album.name
@@ -555,7 +550,6 @@ class Scanner(Thread):
                     album.save()
                     self.__stats.lost_year_albums.pop(album.name, None)
                     lost_year_albums.remove(album)
-                pass
         # find lost cover
         lost_cover_album = []
         for album in Album.select():

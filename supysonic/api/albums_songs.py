@@ -20,6 +20,7 @@ from ..db import (
     StarredTrack,
     RatingFolder,
     User,
+    User_Play_Activity,
 )
 from ..db import now, random
 
@@ -136,16 +137,15 @@ def album_list():
 @api_routing("/getAlbumList2")
 def album_list_id3():
     ltype = request.values["type"]
-
     size, offset, mfid = map(request.values.get, ("size", "offset", "musicFolderId"))
     size = int(size) if size else 10
     offset = int(offset) if offset else 0
     root = get_root_folder(mfid)
-
     query = Album.select().join(Track).group_by(Album.id)
     if root is not None:
         query = query.where(Track.root_folder == root)
-
+    result_albums = []
+    added_albums = set()
     if ltype == "random":
         return request.formatter(
             "albumList2",
@@ -159,11 +159,61 @@ def album_list_id3():
     elif ltype == "newest":
         query = query.order_by(fn.min(Track.created).desc())
     elif ltype == "frequent":
-        query = query.order_by(fn.avg(Track.play_count).desc())
-    elif ltype == "recent":
-        query = query.where(Track.last_play.is_null(False)).order_by(
-            fn.max(Track.last_play).desc()
+        frequent_albums = []
+        frequent_albums_ids = {}
+        play_activity_query = User_Play_Activity.select().where(
+            User_Play_Activity.user == request.user
         )
+        for activity in play_activity_query:
+            album = activity.track.album
+            frequent_albums.append(album)
+            if album.id not in frequent_albums_ids:
+                frequent_albums_ids[album.id] = 1
+            else:
+                frequent_albums_ids[album.id] += 1
+        sorted_albums = sorted(
+            frequent_albums, key=lambda a: frequent_albums_ids[a.id], reverse=True
+        )
+
+        for a in sorted_albums[:size]:
+            if a.id not in added_albums:
+                result_albums.append(a.as_subsonic_album(request.user))
+                added_albums.add(a.id)
+
+        if len(result_albums) >= size:
+            query = []
+        else:
+            query = query.where(Track.last_play.is_null(False)).order_by(
+                fn.avg(Track.play_count).desc()
+            )
+    elif ltype == "recent":
+        # 收集最近播放的专辑
+        recent_albums = []
+        seen_album_ids = set()
+        play_activity_query = (
+            User_Play_Activity.select()
+            .where(User_Play_Activity.user == request.user)
+            .order_by(User_Play_Activity.time.desc())
+        )
+        for activity in play_activity_query:  # 获取更多记录以应对重复
+            album = activity.track.album
+            if album.id not in seen_album_ids:
+                recent_albums.append(album)
+                seen_album_ids.add(album.id)
+            if len(recent_albums) >= size:
+                break
+        print(f"Found {len(recent_albums)} recent albums")
+
+        if len(result_albums) >= size:
+            query = []
+        else:
+            query = query.where(Track.last_play.is_null(False)).order_by(
+                fn.max(Track.last_play).desc()
+            )
+        for a in recent_albums:
+            if a.id not in added_albums:
+                result_albums.append(a.as_subsonic_album(request.user))
+                added_albums.add(a.id)
     elif ltype == "starred":
         query = (
             query.switch().join(StarredAlbum).where(StarredAlbum.user == request.user)
@@ -192,15 +242,16 @@ def album_list_id3():
         query = query.where(Track.genre == genre)
     else:
         raise GenericError("Unknown search type")
-
+    if len(result_albums) < size:
+        for a in query.limit(size).offset(offset):
+            if a.id not in added_albums:
+                result_albums.append(a.as_subsonic_album(request.user))
+                added_albums.add(a.id)
+    else:
+        result_albums = result_albums[:size]
     return request.formatter(
         "albumList2",
-        {
-            "album": [
-                a.as_subsonic_album(request.user)
-                for a in query.limit(size).offset(offset)
-            ]
-        },
+        {"album": result_albums},
     )
 
 
@@ -271,6 +322,7 @@ def get_starred():
         StarredTrack.select(StarredTrack.starred)
         .join(Track)
         .where(StarredTrack.user == request.user)
+        .order_by(StarredTrack.date)
     )
 
     if root is not None:

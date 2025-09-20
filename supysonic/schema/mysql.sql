@@ -14,6 +14,7 @@ CREATE INDEX index_folder_parent_id_fk ON folder(parent_id);
 CREATE TABLE IF NOT EXISTS artist (
     id CHAR(32) PRIMARY KEY,
     name VARCHAR(256) NOT NULL,
+    display_name VARCHAR(256) NOT NULL,
     artist_info_json VARCHAR(4096) NULL
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -182,7 +183,17 @@ CREATE TABLE image (
     created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE user_play_activity (
+    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+    track_id CHAR(32) NOT NULL, 
+    user_id CHAR(32) NOT NULL,
+    time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, 
+    CONSTRAINT fk_track FOREIGN KEY (track_id) REFERENCES track(id) ON DELETE CASCADE,
+    CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
+);DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+CREATE INDEX index_activity_user_id_fk ON user_play_activity(user_id);
+CREATE INDEX index_activity_track_id_fk ON user_play_activity(track_id);
 CREATE INDEX index_album_artist_album_id_fk ON album_artist(album_id);
 CREATE INDEX index_album_artist_artist_id_fk ON album_artist(artist_id);
 CREATE INDEX index_track_artist_track_id_fk ON track_artist(track_id);

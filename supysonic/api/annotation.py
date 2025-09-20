@@ -9,7 +9,7 @@ import time
 
 from flask import current_app, request
 
-from ..db import Track, Album, Artist, Folder
+from ..db import Track, Album, Artist, Folder, User_Play_Activity
 from ..db import StarredTrack, StarredAlbum, StarredArtist, StarredFolder
 from ..db import RatingTrack, RatingFolder
 from ..lastfm import LastFm
@@ -179,6 +179,8 @@ def scrobble():
     lbz = ListenBrainz(current_app.config["LISTENBRAINZ"], request.user)
 
     if submission in (None, "", True, "true", "True", 1, "1"):
+        # record the user's play activity
+        User_Play_Activity.create(user=request.user, track=res)
         lfm.scrobble(res, t)
         lbz.scrobble(res, t)
     elif submission in (False, "false", "False", 0, "0"):

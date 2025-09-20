@@ -34,7 +34,7 @@ from uuid import UUID, uuid4
 from PIL import Image as PILImage
 from .tool import read_dict_from_json
 
-SCHEMA_VERSION = "20250603"
+SCHEMA_VERSION = "20250622"
 
 
 def now():
@@ -241,6 +241,7 @@ class Artist(_Model):
     id = PrimaryKeyField()
     name = CharField()
     artist_info_json = CharField(4096, null=True)
+    display_name = CharField(256, null=True)  # 用于显示的名称
 
     # 更精确的 as_subsonic_artist 方法
     def as_subsonic_artist(self, user):
@@ -603,6 +604,17 @@ class User(_Model):
             "jukeboxRole": self.admin or self.jukebox,
             "shareRole": False,
         }
+
+
+class User_Play_Activity(_Model):
+    # record user play activity,every record is a play activity
+    id = PrimaryKeyField()
+    track = ForeignKeyField(Track, backref="play_activity_track")
+    user = ForeignKeyField(User, backref="play_activity_user")
+    time = DateTimeField(default=now)
+
+    class Meta:
+        table_name = "user_play_activity"
 
 
 class ClientPrefs(_Model):

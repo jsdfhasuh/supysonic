@@ -1,0 +1,2 @@
+ALTER TABLE artist
+ADD COLUMN display_name VARCHAR(256) NULL;

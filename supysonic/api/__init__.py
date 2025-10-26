@@ -12,6 +12,7 @@ import logging
 import uuid
 from flask import request
 from flask import Blueprint
+from flask import session
 from peewee import IntegrityError
 
 from ..db import ClientPrefs, Folder
@@ -66,17 +67,24 @@ def authorize():
         if user is not None:
             request.user = user
             return
-
+        logger.warn("Failed login attempt for '%s'", username)
         logger.error(
             "Failed login attempt for user %s (IP: %s)", username, request.remote_addr
         )
         raise Unauthorized()
     
     # 必需参数检查
-    if 'u' not in request.values:
-        raise Unauthorized("Required parameter 'u' is missing")
     
-    username = request.values['u']
+    if 'u' in request.values:
+        username = request.values['u']
+    elif session.get("userid"):
+        try:
+            user = UserManager.get(session.get("userid"))
+            request.user = user
+            return
+        except (ValueError, User.DoesNotExist):
+            session.clear()
+            raise Unauthorized("Please login")
     
     # 方法 1: 明文密码
     if 'p' in request.values:
@@ -111,9 +119,7 @@ def authorize():
                 user = None
         except:
             user = None
-    
     else:
-        # 缺少认证参数
         raise Unauthorized("Missing authentication parameters")
     
     # 检查认证结果

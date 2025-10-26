@@ -1,0 +1,220 @@
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Metadata Page</title>
+</head>
+
+<body>
+<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/metadata.css') }}">
+
+
+
+
+<div id="artist-wall" class="artist-wall">
+    <div class="loading">正在加载艺术家数据...</div>
+</div>
+
+<!-- 模态框 -->
+<div id="editModal" class="modal">
+    <div class="modal-content">
+        <h2>编辑艺术家信息</h2>
+        <form id="editForm">
+            <input type="hidden" id="artistId">
+            <div class="form-group">
+                <label for="artistName">艺术家名称:</label>
+                <input type="text" id="artistName" required>
+            </div>
+            <div class="form-group">
+                <label for="realArtist">主艺术家名称:</label>
+                <input type="text" id="realArtist" placeholder="留空表示这是主艺术家">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">保存</button>
+                <button type="button" class="btn-secondary" onclick="closeModal()">取消</button>
+            </div>
+        </form>
+    </div>
+</div>
+<script>
+async function loadData() {
+    try {
+        // 第一步：获取艺术家
+        const artistsDict = await getArtists();
+        console.log('Artists loaded:', artistsDict);
+        image_base_url = {{ url_for('api.cover_art')|tojson }} ;
+        console.log('Image base URL:', image_base_url);
+        password = "&v=1.15.0&c=web"
+        // 第二步获取艺术家图片的链接
+        for (const artistid in artistsDict) {
+            const image_url = `${image_base_url}?id=ar-${artistid}${password}`;
+            artistsDict[artistid] = {
+                name: artistsDict[artistid],
+                image: image_url
+            };
+        }
+        console.log('Artists with images:', artistsDict);
+        
+        // 第三步：渲染页面
+        renderPage(artistsDict);
+
+    } catch (error) {
+        console.error('Error loading data:', error);
+        document.getElementById('artist-wall').innerHTML = 
+            '<div style="text-align:center;color:red;padding:30px;">加载数据时出错：' + error.message + '</div>';
+    }
+}
+
+async function getArtists() {
+    const artistApiUrl = {{ url_for('api.list_artists')|tojson }};
+    password = "v=1.15.0&c=web";
+    const response  = await fetch(artistApiUrl + '?f=json&' + password);
+    if (!response.ok) {
+        throw new Error('Network response was not ok');
+    }
+    
+    const data = await response.json();
+    const artists = {};
+    
+    for (const group of data['subsonic-response'].artists.index) {
+        for (const artist of group.artist) {
+            artists[artist.id] = artist.name;
+        }
+    }
+    
+    return artists;
+}
+
+function renderPage(artistsDict) {
+    const container = document.getElementById('artist-wall');
+    container.innerHTML = ''; // 清空加载提示
+    
+    // 将字典转换为数组以便排序
+    const artistsArray = Object.entries(artistsDict).map(([id, info]) => ({
+        id,
+        name: info.name || '未知艺术家', // 添加默认值，防止name为undefined
+        image: info.image
+    }));
+    
+    // 按艺术家名称排序
+    artistsArray.sort((a, b) => a.name.localeCompare(b.name));
+    
+    // 创建艺术家卡片
+    for (const artist of artistsArray) {
+        const card = document.createElement('div');
+        card.className = 'artist-card';
+        // 添加点击事件
+        card.onclick = () => openEditModal(artist);
+        
+        // 创建一个包装容器
+        const imgContainer = document.createElement('div');
+        imgContainer.className = 'image-container';
+        
+        // 创建默认显示
+        const placeholder = document.createElement('div');
+        placeholder.className = 'placeholder';
+        const firstChar = (artist.name && artist.name.length > 0) ? 
+                          artist.name[0].toUpperCase() : '?';
+        placeholder.textContent = firstChar;
+        imgContainer.appendChild(placeholder);
+        
+        // 创建实际图片元素
+        const img = document.createElement('img');
+        img.className = 'artist-image';
+        img.src = artist.image;
+        img.alt = artist.name;
+        img.onload = () => {
+            // 图片加载成功时，隐藏占位符
+            placeholder.style.display = 'none';
+        };
+        img.onerror = () => {
+            // 图片加载失败时，保持显示占位符
+            img.style.display = 'none';
+        };
+        imgContainer.appendChild(img);
+        
+        const name = document.createElement('div');
+        name.className = 'artist-name';
+        name.textContent = artist.name;
+        
+        card.appendChild(imgContainer);
+        card.appendChild(name);
+        container.appendChild(card);
+    }
+}
+
+// 添加模态框相关函数
+function openEditModal(artist) {
+    const modal = document.getElementById('editModal');
+    const artistIdInput = document.getElementById('artistId');
+    const artistNameInput = document.getElementById('artistName');
+    const realArtistInput = document.getElementById('realArtist');
+    
+    // 填充表单数据
+    artistIdInput.value = artist.id;
+    artistNameInput.value = artist.name;
+    realArtistInput.value = ''; // 可以从后端获取实际值
+    
+    modal.style.display = 'block';
+}
+
+
+// 添加表单提交处理
+document.getElementById('editForm').onsubmit = async function(e) {
+    e.preventDefault();
+    
+    const artistId = document.getElementById('artistId').value;
+    const artistName = document.getElementById('artistName').value;
+    const realArtist = document.getElementById('realArtist').value.trim();
+    
+    try {
+        // 构建请求数据
+        const requestData = {
+            action: 'change_real_artist',
+            id: artistId,
+            name: artistName,
+            real_name: realArtist || null  // 如果为空字符串则设为 null
+        };
+        const response = await fetch('/artists', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || '保存失败');
+        }
+
+
+        // 保存成功
+        closeModal();
+        // 重新加载数据以显示更新后的结果
+        loadData();
+        
+    } catch (error) {
+        console.error('保存失败:', error);
+        alert('保存失败: ' + error.message);
+    }
+};
+
+function closeModal() {
+    const modal = document.getElementById('editModal');
+    modal.style.display = 'none';
+}
+
+// 点击模态框外部关闭
+window.onclick = function(event) {
+    const modal = document.getElementById('editModal');
+    if (event.target === modal) {
+        closeModal();
+    }
+};
+
+// 调用主函数开始顺序执行
+loadData();
+</script>
+</body>
+</html>

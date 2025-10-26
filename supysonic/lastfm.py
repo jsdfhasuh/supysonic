@@ -53,7 +53,7 @@ class LastFm:
         self.__api_request(
             True,
             method="track.updateNowPlaying",
-            artist=track.album.artist.name,
+            artist=track.album.artist.get_artist_name(),
             track=track.title,
             album=track.album.name,
             trackNumber=track.number,
@@ -67,7 +67,7 @@ class LastFm:
         self.__api_request(
             True,
             method="track.scrobble",
-            artist=track.album.artist.name,
+            artist=track.album.artist.get_artist_name(),
             track=track.title,
             album=track.album.name,
             timestamp=ts,

@@ -34,7 +34,7 @@ def inject_metadata():
 
 @frontend.before_request
 def login_check():
-    request.user = None
+    request.user = None 
     should_login = True
     if session.get("userid"):
         try:
@@ -93,3 +93,4 @@ def admin_only(f):
 from .user import *
 from .folder import *
 from .playlist import *
+from .metadata import *

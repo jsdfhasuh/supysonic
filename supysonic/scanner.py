@@ -514,7 +514,7 @@ class Scanner(Thread):
                 album.year = year
             else:
                 # try to find year from musicBrainz
-                album_artist_name = album.artist.name
+                album_artist_name = album.artist.get_artist_name()
                 musicbrainz_album = search_musicbrainz_album(
                     artist_name=album_artist_name, album_name=album.name
                 )
@@ -531,7 +531,7 @@ class Scanner(Thread):
                 continue
 
             if lfm and sp:
-                album_artist_name = album.artist.name
+                album_artist_name = album.artist.get_artist_name()
                 lastfm_album = lfm.get_albuminfo(
                     artist_name=album_artist_name, album_name=album.name
                 )
@@ -606,7 +606,7 @@ class Scanner(Thread):
                 # get information from musicBrainz
                 dl_status = False
                 # get information from lastfm cover
-                album_artist_name = album.artist.name
+                album_artist_name = album.artist.get_artist_name()
                 musicbrainz_album = search_musicbrainz_album(
                     artist_name=album_artist_name, album_name=album.name
                 )
@@ -683,7 +683,7 @@ class Scanner(Thread):
             else:
                 lost_cover_artist.append(artist)
                 self.__stats.lost_covers.artists += 1
-                self.__stats.lost_covers_artists.append(artist.name)
+                self.__stats.lost_covers_artists.append(artist.get_artist_name())
         # check if the root user in
 
         if get_cover_interner:
@@ -691,10 +691,10 @@ class Scanner(Thread):
                 sp = MySpotify(self.__config.SPOTIFY, user)
                 lfm = LastFm(self.__config.LASTFM, user)
                 for artist in lost_cover_artist:
-                    if artist.name == "Various Artists" or len(artist.name) < 2:
+                    if artist.get_artist_name() == "Various Artists" or len(artist.get_artist_name()) < 2:
                         continue
                     result = lfm.get_artistinfo(
-                        name=artist.name, lang=self.__config.LASTFM['display_lang']
+                        name=artist.get_artist_name(), lang=self.__config.LASTFM['display_lang']
                     )
                     if (
                         not result
@@ -930,7 +930,10 @@ class Scanner(Thread):
 
     def __find_artist(self, artist):
         try:
-            return Artist.get(name=artist)
+            artist = Artist.get(name=artist)
+            if artist.real_artist:
+                return artist.real_artist
+            return artist
         except Artist.DoesNotExist:
             self.__stats.added.artists += 1
             return Artist.create(name=artist)

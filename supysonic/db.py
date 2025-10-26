@@ -34,7 +34,7 @@ from uuid import UUID, uuid4
 from PIL import Image as PILImage
 from .tool import read_dict_from_json
 
-SCHEMA_VERSION = "20250622"
+SCHEMA_VERSION = "20251026"
 
 
 def now():
@@ -241,9 +241,13 @@ class Artist(_Model):
     id = PrimaryKeyField()
     name = CharField()
     artist_info_json = CharField(4096, null=True)
-    display_name = CharField(256, null=True)  # 用于显示的名称
-
-    # 更精确的 as_subsonic_artist 方法
+    # 指向一个整理好的艺术家名字（例如别名指向主艺术家）
+    real_artist = ForeignKeyField("self", null=True, backref="aliases", on_delete="SET NULL")
+    def get_artist_name(self):
+        if self.real_artist:
+            return self.real_artist.name
+        return self.name
+    # 更精确的 as_subsonic_artist 方法 返回艺术家信息字典
     def as_subsonic_artist(self, user):
         # 使用去重查询获取艺术家参与的所有专辑
         album_count = (
@@ -318,6 +322,9 @@ class Artist(_Model):
         return (
             cls.delete()
             .where(
+                cls.real_artist.is_null()
+            )
+            .where(
                 cls.id.not_in(album_artists),
                 cls.id.not_in(track_artists),
                 cls.id.not_in(album_multi_artists),
@@ -356,11 +363,11 @@ class Album(_Model):
         info = {
             "id": str(self.id),
             "name": str(self.name),
-            "artist": str(self.artist.name),
+            "artist": str(self.artist.get_artist_name()),
             "artistId": str(self.artist.id),
             "songCount": self.tracks.count(),
             "duration": duration,
-            "albumArtist": str(self.artist.name),
+            "albumArtist": str(self.artist.get_artist_name()),
             "albumArtistId": str(self.artist.id),
             "created": created.isoformat(),
         }
@@ -373,7 +380,7 @@ class Album(_Model):
             #     {"id": str(artist.id), "name": str(artist.name)}
             # )
             participants["artist"].append(
-                {"id": str(artist.id), "name": str(artist.name)}
+                {"id": str(artist.id), "name": str(artist.get_artist_name())}
             )
         info["participants"] = participants
         track_with_cover = (
@@ -471,7 +478,7 @@ class Track(PathMixin, _Model):
             "isDir": False,
             "title": self.title,
             "album": self.album.name,
-            "artist": self.artist.name,
+            "artist": self.artist.get_artist_name(),
             "track": self.number,
             "size": os.path.getsize(self.path) if os.path.isfile(self.path) else -1,
             "contentType": self.mimetype,
@@ -545,7 +552,7 @@ class Track(PathMixin, _Model):
         return os.path.splitext(self.path)[1][1:].lower()
 
     def sort_key(self):
-        return f"{self.album.artist.name}{self.album.name}{self.disc:02}{self.number:02}{self.title}".lower()
+        return f"{self.album.artist.get_artist_name()}{self.album.name}{self.disc:02}{self.number:02}{self.title}".lower()
 
 
 class TrackArtist(_Model):

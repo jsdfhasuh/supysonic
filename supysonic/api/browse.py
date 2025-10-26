@@ -167,7 +167,8 @@ def top_songs():
 def list_artists():
     mfid = request.values.get("musicFolderId")
 
-    query = Artist.select()
+    query = Artist.select().where(Artist.real_artist.is_null())
+    #query = Artist.select()# # 只选择主艺人
     if mfid is not None:
         folder = get_root_folder(mfid)
         query = Artist.select().join(Track).where(Track.root_folder == folder)

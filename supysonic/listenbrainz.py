@@ -57,7 +57,7 @@ class ListenBrainz:
             payload=[
                 {
                     "track_metadata": {
-                        "artist_name": track.album.artist.name,
+                        "artist_name": track.album.artist.get_artist_name(),
                         "track_name": track.title,
                         "release_name": track.album.name,
                         "additional_info": {
@@ -82,7 +82,7 @@ class ListenBrainz:
                 {
                     "listened_at": ts,
                     "track_metadata": {
-                        "artist_name": track.album.artist.name,
+                        "artist_name": track.album.artist.get_artist_name(),
                         "track_name": track.title,
                         "release_name": track.album.name,
                         "additional_info": {

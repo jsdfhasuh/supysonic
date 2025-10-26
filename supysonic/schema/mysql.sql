@@ -14,7 +14,6 @@ CREATE INDEX index_folder_parent_id_fk ON folder(parent_id);
 CREATE TABLE IF NOT EXISTS artist (
     id CHAR(32) PRIMARY KEY,
     name VARCHAR(256) NOT NULL,
-    display_name VARCHAR(256) NOT NULL,
     artist_info_json VARCHAR(4096) NULL
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 

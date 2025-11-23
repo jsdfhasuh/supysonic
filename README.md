@@ -27,9 +27,9 @@ Supysonic 是基于 Flask 的音乐流媒体服务器,脱胎于[spl0k/supysonic]
 
 ## 快速开始
 * 当前项目建议通过 Docker 进行部署
- cd supysonic  （进入到项目地址）
- 改名config.sample 为 supysonic.conf，并填入到自己的配置
- docker build -t supysonic .
+* cd supysonic  （进入到项目地址）
+* 改名config.sample 为 supysonic.conf，并填入到自己的配置
+* docker build -t supysonic .
  挂载音乐文件夹运行容器
  docker run -d -p 4040:4040 -v /path/to/your/music:/music -v /path/to/your/config/supysonic.conf:/app/supysonic.conf supysonic
  

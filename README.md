@@ -1,102 +1,55 @@
 # Supysonic
+# ===========
 
-Supysonic is a Python implementation of the [Subsonic][] server API.
+Supysonic 是基于 Flask 的音乐流媒体服务器,脱胎于[spl0k/supysonic](https://github.com/spl0k/supysonic)。
 
-![Build Status](https://github.com/spl0k/supysonic/workflows/Tests/badge.svg)
-[![codecov](https://codecov.io/gh/spl0k/supysonic/branch/master/graph/badge.svg)](https://codecov.io/gh/spl0k/supysonic)
-![Python](https://img.shields.io/badge/python-3.7+-blue.svg)
-
-Current supported features are:
-* browsing (by folders or tags)
-* streaming of various audio file formats
-* transcoding
-* user or random playlists
-* cover art
-* starred tracks/albums and ratings
-* [Last.fm][lastfm] scrobbling
+## 项目支持以下功能:
+* 浏览 (通过文件夹或标签)
+* 流式播放各种音频文件格式
+* 转码
+* 用户或随机播放列表
+* 封面图片
+* 收藏曲目/专辑和评分
+* [Last.fm][lastfm] scrobbling 
 * [ListenBrainz][listenbrainz] scrobbling
-* Jukebox mode
-* Get artists cover art and album cover art from Spotify (NEW)
-* Get Artists information from localnfo (NEW)
-* add some New API (NEW)
+* Jukebox 模式
+* 从 Spotify,lastfm等渠道 获取缺少的艺术家封面和专辑封面 (NEW) (保证每一张专辑和艺术家都有封面)
+* 从 Spotify，lastfm等渠道 获取缺少的专辑的年份 (NEW) 
+* 通过 localnfo 获取艺术家信息和专辑信息并组织专辑 (NEW) (个性化编辑艺术家信息和专辑信息，保证媒体库的整洁)
+* WEB端改变并组织艺术家
+* 添加一些新的 API (NEW)
 
-Supysonic currently targets the version 1.12.0 of the Subsonic API. For more
-details, go check the [API implementation status][docs-api].
+## 待实现功能:
+* WEB端对音乐库的管理
+* WEB端分享页面的实现
+* 专属播放软件 (PC端/移动端)
 
-[subsonic]: http://www.subsonic.org/
-[lastfm]: https://www.last.fm/
-[listenbrainz]: https://listenbrainz.org/
-[docs-api]: https://supysonic.readthedocs.io/en/latest/api.html
 
-## Documentation
+## 快速开始
+* 当前项目建议通过 Docker 进行部署
+ cd supysonic  （进入到项目地址）
+ 改名config.sample 为 supysonic.conf，并填入到自己的配置
+ docker build -t supysonic .
+ 挂载音乐文件夹运行容器
+ docker run -d -p 4040:4040 -v /path/to/your/music:/music -v /path/to/your/config/supysonic.conf:/app/supysonic.conf supysonic
+ 
 
-Full documentation is available at https://supysonic.readthedocs.io/
+## NFO 文件格式如下
 
-## Quickstart
-
-Use the following commands to install Supysonic, create an admin user, define a
-library folder, scan it and start serving on port 5722 using [Gunicorn][].
-
-    $ pip install supysonic
-    $ pip install gunicorn
-    $ supysonic-cli user add MyUserName
-    $ supysonic-cli user setroles --admin MyUserName
-    $ supysonic-cli folder add MyLibrary /home/username/Music
-    $ supysonic-cli folder scan MyLibrary
-    $ supysonic-server
-
-You should now be able to enjoy your music with the client of your choice!
-
-But using only the above commands will use a default configuration and
-especially storing the database in a temporary directory. Head over to the
-documentaiton for [full setup instructions][docs-setup], plus other options if
-you don't want to use Gunicorn.
-
-Note that there's also an optional [daemon][docs-daemon] that watches for
-library changes and provides support for other features such as the
-jukebox mode.
-
-[gunicorn]: https://gunicorn.org/
-[docs-setup]: https://supysonic.readthedocs.io/en/latest/setup/index.html
-[docs-daemon]: https://supysonic.readthedocs.io/en/latest/setup/daemon.html
-
-## Development stuff
-
-For those wishing to collaborate on the project, since Supysonic uses [Flask][]
-you can use its development server which provides automatic reloading and
-in-browser debugging among other things. To start said server:
-
-    $ export FLASK_APP="supysonic.web:create_application()"
-    $ export FLASK_ENV=development
-    $ flask run
-
-And there's also the tests (which require `lxml` to run):
-
-    $ pip install lxml
-    $ python -m unittest
-    $ python -m unittest tests.net.suite
-
-The last command runs a few tests that make HTTP requests to remote third-party
-services (namely Last.fm, ListenBrainz and ChartLyrics).
-
-[flask]: https://flask.palletsprojects.com/
-
-##nfo rule
-If you want to use the localinfo feature,you need to follow the rules.
-1. The nfo file must be named as album.nfo in the track folder
-2. The nfo file must be in xml format
-3. The nfo file must contain the following tags:
-   - `<album>`: The root element for the album information.
-   - `<track>`: Each track should be enclosed in this tag.
-   - `<lock_data>`: A boolean value indicating whether the data is locked (optional).
-   the following tags must be included in each `<track>` element:
-    - `<title>`: The title of the track.
-    - `<cdnum>`: The CD number (if applicable),must be a integer.
-    - `<position>`: The position of the track on the CD.
-4. The following tags are optional but recommended:
-   - `<artist>`: The artist of the track.
-   - `<albumartist>`: The album artist (optional).
-   - `<year>`: The year of the album (optional).
+1. nfo 文件必须命名为 album.nfo 并放置在曲目文件夹中
+2. nfo 文件必须是 xml 格式
+3. nfo 文件必须包含以下标签:
+   - `<album>`: 专辑信息的根元素。
+   - `<track>`: 每个曲目都应包含在此标签中。
+   - `<lock_data>`: 布尔值,表示数据是否被锁定(可选)。
+   每个 `<track>` 元素中必须包含以下标签:
+    - `<title>`: 曲目标题。
+    - `<cdnum>`: CD 编号(如适用),必须是整数。
+    - `<position>`: 曲目在 CD 中的位置。
+4. 以下标签为可选但建议添加:
+   - `<artist>`: 曲目艺术家。
+   - `<albumartist>`: 专辑艺术家(可选)。
+   - `<year>`: 专辑年份(可选)。
 sample_album.nfo:
 ```xml
 <?xml version="1.0" encoding="utf-8"?>

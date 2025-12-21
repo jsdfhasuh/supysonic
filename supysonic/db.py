@@ -242,11 +242,15 @@ class Artist(_Model):
     name = CharField()
     artist_info_json = CharField(4096, null=True)
     # 指向一个整理好的艺术家名字（例如别名指向主艺术家）
-    real_artist = ForeignKeyField("self", null=True, backref="aliases", on_delete="SET NULL")
+    real_artist = ForeignKeyField(
+        "self", null=True, backref="aliases", on_delete="SET NULL"
+    )
+
     def get_artist_name(self):
         if self.real_artist:
             return self.real_artist.name
         return self.name
+
     # 更精确的 as_subsonic_artist 方法 返回艺术家信息字典
     def as_subsonic_artist(self, user):
         # 使用去重查询获取艺术家参与的所有专辑
@@ -321,9 +325,7 @@ class Artist(_Model):
         # 删除不再被引用的艺术家记录
         return (
             cls.delete()
-            .where(
-                cls.real_artist.is_null()
-            )
+            .where(cls.real_artist.is_null())
             .where(
                 cls.id.not_in(album_artists),
                 cls.id.not_in(track_artists),
@@ -743,7 +745,9 @@ class Playlist(_Model):
             tid = track.id
         elif isinstance(track, str):
             tid = UUID(track)
-
+        orinal_tracks = self.tracks.split(",") if self.tracks else []
+        if str(tid) in orinal_tracks:
+            return
         if self.tracks and len(self.tracks) > 0:
             self.tracks = f"{self.tracks},{tid}"
         else:

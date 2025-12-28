@@ -9,25 +9,36 @@
 <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/metadata.css') }}">
 
 
-
 <script src="{{ url_for('static', filename='js/get_api.js') }}"></script>
+
 <div id="artist-wall" class="artist-wall">
-    <div class="loading">正在加载数据...</div>
+    <div class="loading">正在加载专辑数据...</div>
 </div>
 
 <!-- 模态框 -->
 <div id="editModal" class="modal">
     <div class="modal-content">
-        <h2>编辑艺术家信息</h2>
+        <h2>编辑专辑信息</h2>
         <form id="editForm">
             <input type="hidden" id="artistId">
             <div class="form-group">
-                <label for="artistName">艺术家名称:</label>
-                <input type="text" id="artistName" required>
+                <label for="albumname">专辑名称:</label>
+                <input type="text" id="albumname" required>
             </div>
             <div class="form-group">
-                <label for="realArtist">新艺术家名称:</label>
-                <input type="text" id="realArtist" placeholder="新艺术家名称">
+                <label for="artistname">艺术家名称:</label>
+                <input type="text" id="artistname" required>
+            </div>
+            <div class="form-group">
+                <label for="year">专辑发行日期:</label>
+                <input type="text" id="year" required>
+            </div>
+            <div class="form-group">
+                <label>曲目列表:</label>
+                <div id="trackList" style="max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 10px;">
+                    <!-- 曲目将动态添加到这里 -->
+                     <div>正在加载曲目...</div>
+                </div>
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn-primary">保存</button>
@@ -44,28 +55,31 @@
     </div>
 </div>
 <script>
+all_album = []
+let isLoading = false;
+let offset = 0;
+const pageSize = 100;
 password = "&v=1.15.0&c=web";
+albumurl = {{ url_for('api.album_list_id3')|tojson }};
+albumidurl = {{ url_for('api.album_info')|tojson }};
 async function loadData() {
     try {
-        //  第一步：获取艺术家
-        artistsurl = {{ url_for('api.list_artists')|tojson }};
-        const artistsDict = await getArtists(artistsurl, password);
-        console.log('Artists loaded:', artistsDict);
+        //  第一步：获取专辑
+        const new_rawalbum = await getAlbum(albumurl, pageSize, offset, password);
+        all_album = all_album.concat(new_rawalbum);
+        console.log('Total albums loaded:', all_album.length);
         image_base_url = {{ url_for('api.cover_art')|tojson }} ;
         console.log('Image base URL:', image_base_url);
         
-        // 第二步获取艺术家图片的链接
-        for (const artistid in artistsDict) {
-            const image_url = `${image_base_url}?id=ar-${artistid}${password}`;
-            artistsDict[artistid] = {
-                name: artistsDict[artistid],
-                image: image_url
-            };
+        // 第二步获取专辑图片的链接，添加到专辑数组里面
+        for (const album of all_album) {
+            const image_url = `${image_base_url}?id=al-${album.id}${password}`;
+            album.image = image_url;
         }
-        console.log('Artists with images:', artistsDict);
+
         
         // 第三步：渲染页面
-        renderPage(artistsDict);
+        renderPage(all_album);
 
     } catch (error) {
         console.error('Error loading data:', error);
@@ -74,29 +88,70 @@ async function loadData() {
     }
 }
 
-
-
-function renderPage(artistsDict) {
+// 检测是否滚动到底部
+function isScrolledToBottom() {
     const container = document.getElementById('artist-wall');
-    container.innerHTML = ''; // 清空加载提示
+    const cards = container.querySelectorAll('.album-card');
     
-    // 将字典转换为数组以便排序
-    const artistsArray = Object.entries(artistsDict).map(([id, info]) => ({
-        id,
-        name: info.name || '未知艺术家', // 添加默认值，防止name为undefined
-        image: info.image
-    }));
+    if (cards.length === 0) return false;
     
-    // 按艺术家名称排序
-    artistsArray.sort((a, b) => a.name.localeCompare(b.name));
+    // 计算平均卡片高度
+    const firstCard = cards[0];
+    const cardHeight = firstCard.offsetHeight;
+    
+    // 当剩余少于 20 张卡片的高度时触发
+    const triggerThreshold = cardHeight * 20;
+    
+    const scrollTop = window.scrollY || document.documentElement.scrollTop;
+    const windowHeight = window.innerHeight;
+    const documentHeight = document.documentElement.scrollHeight;
+    
+    return scrollTop + windowHeight >= documentHeight - triggerThreshold;
+}
+
+// 滚动事件处理
+window.addEventListener('scroll', async () => {
+    if (isScrolledToBottom() && !isLoading) {
+        isLoading = true;
+        offset += pageSize;
+        try {
+            const new_rawalbum = await getAlbum(albumurl, pageSize, offset, password);
+            if (new_rawalbum && new_rawalbum.length > 0) {
+                // 添加图片链接
+                for (const album of new_rawalbum) {
+                    const image_url = `${image_base_url}?id=al-${album.id}${password}`;
+                    album.image = image_url;
+                }
+                all_album = all_album.concat(new_rawalbum);
+                renderPage(all_album);
+            }
+        } catch (error) {
+            console.error('加载更多数据失败:', error);
+        } finally {
+            isLoading = false;
+        }
+    }
+});
+
+
+
+function renderPage(album_array) {
+    const container = document.getElementById('artist-wall');
+    if (container.querySelector('.loading')) {
+        container.innerHTML = ''; // 清空加载提示
+    }
     
     // 创建艺术家卡片
-    for (const artist of artistsArray) {
+    for (const album of album_array) {
+        if (album.hasrendered) {
+            continue; // 跳过已经渲染过的专辑
+        }
         const card = document.createElement('div');
-        card.className = 'artist-card';
+        card.className = 'album-card';
         // 添加点击事件
-        card.onclick = () => openEditModal(artist);
-        
+        card.onclick = () => openEditModal(album);
+
+
         // 创建一个包装容器
         const imgContainer = document.createElement('div');
         imgContainer.className = 'image-container';
@@ -104,16 +159,17 @@ function renderPage(artistsDict) {
         // 创建默认显示
         const placeholder = document.createElement('div');
         placeholder.className = 'placeholder';
-        const firstChar = (artist.name && artist.name.length > 0) ? 
-                          artist.name[0].toUpperCase() : '?';
+        const firstChar = (album.name && album.name.length > 0) ? 
+                          album.name[0].toUpperCase() : '?';
         placeholder.textContent = firstChar;
         imgContainer.appendChild(placeholder);
         
         // 创建实际图片元素
         const img = document.createElement('img');
-        img.className = 'artist-image';
-        img.src = artist.image;
-        img.alt = artist.name;
+        img.className = 'artist-image'; // 使用相同的类名以应用相同的样式
+        album.hasrendered = true;
+        img.src = album.image;
+        img.alt = album.name;
         img.onload = () => {
             // 图片加载成功时，隐藏占位符
             placeholder.style.display = 'none';
@@ -125,8 +181,8 @@ function renderPage(artistsDict) {
         imgContainer.appendChild(img);
         
         const name = document.createElement('div');
-        name.className = 'artist-name';
-        name.textContent = artist.name;
+        name.className = 'artist-name'; // 使用相同的类名以应用相同的样式
+        name.textContent = album.name;
         
         card.appendChild(imgContainer);
         card.appendChild(name);
@@ -135,18 +191,33 @@ function renderPage(artistsDict) {
 }
 
 // 添加模态框相关函数
-function openEditModal(artist) {
+function openEditModal(album) {
     const modal = document.getElementById('editModal');
-    const artistIdInput = document.getElementById('artistId');
-    const artistNameInput = document.getElementById('artistName');
-    const realArtistInput = document.getElementById('realArtist');
-    
+    const albumname = document.getElementById('albumname');
+    const artistname = document.getElementById('artistname');
+    const year = document.getElementById('year');
+    const trackList = document.getElementById('trackList');
     // 填充表单数据
-    artistIdInput.value = artist.id;
-    artistNameInput.value = artist.name;
-    realArtistInput.value = ''; // 可以从后端获取实际值
-    
+    albumname.value = album.name;
+    albumid = album.id;
+    artistname.value = album.artist;
+    year.value = album.year || '';
     modal.style.display = 'block';
+    trackList.innerHTML = ''; // 清空之前的曲目列表
+    album_info = getAlbumByid(albumid,password, albumidurl);
+    album_info.then(data => {
+        raw_data = data;
+        const tracks = data.song || [];
+        if (tracks.length === 0) {
+            trackList.innerHTML = '<div>无曲目数据</div>';
+        } else {
+            for (const track of tracks) {
+                const trackItem = document.createElement('div');
+                trackItem.textContent = `${track.track}. ${track.title}`;
+                trackList.appendChild(trackItem);
+            }
+        }
+    });
 }
 
 function showSuccessToast(message = '保存成功！') {

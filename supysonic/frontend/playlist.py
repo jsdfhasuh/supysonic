@@ -93,3 +93,11 @@ def playlist_delete(uid, playlist):
         flash("Playlist deleted", "success")
 
     return redirect(url_for("frontend.playlist_index"))
+
+
+@frontend.route("/playlist/import", methods=["POST", "GET"])
+def playlist_import():
+    if request.method == "POST":
+        # Handle the import logic here
+        pass
+    return render_template("Playlist_import.html")

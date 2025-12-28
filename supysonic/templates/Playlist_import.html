@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Playlist Page</title>
+    <style>
+        .display-container {
+            max-width: 100%;
+            margin: 20px auto;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            gap: 40px;
+            box-sizing: border-box;
+        }
+        
+        .display-group {
+            margin-bottom: 15px;
+            display: inline-block;
+            width: 48%;
+        }
+        
+        .display-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #666;
+        }
+        
+        .display-box {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+            color: #333;
+            min-height: 20px;
+            box-sizing: border-box;
+            cursor: default;
+            user-select: text;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="display-container">
+        <div class="display-group">
+            <label class="display-label">要导入的播放列表内容:</label>
+            <div class="display-box">test</div>
+            <input type="file" id="fileInput" />
+            <button id="importButton">导入播放列表</button>
+        </div>
+        <div class="display-group">
+            <label class="display-label">在服务器找到的音乐:</label>
+            <div class="display-box">test</div>
+            <button id="playButton">导入播放列表</button>
+        </div>
+    </div>
+            
+</body>
+</html>

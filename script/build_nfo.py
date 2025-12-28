@@ -3,8 +3,11 @@ import re
 import subprocess
 import spotify_main
 from nfo import NfoHandler
+
 final_file_dict = {}
-history_points =[]
+history_points = []
+
+
 def extract_year(s):
     """提取形如20151201这种字符串的前4位数字作为年份"""
     if not s:
@@ -23,6 +26,7 @@ def extract_year(s):
     if match:
         return match.group(1)
     return None
+
 
 def extract_artist_name(artist):
     """提取所有括号内的内容并拼接"""
@@ -44,6 +48,7 @@ def extract_artist_name(artist):
                 return ",".join(cleaned_results)
     return artist.strip()
 
+
 def get_real_artist(raw_artists):
     new_artists = {}
     for artist in raw_artists:
@@ -58,7 +63,6 @@ def get_real_artist(raw_artists):
         sorted(new_artists.items(), key=lambda item: item[1], reverse=True)
     )
     return list(new_artists.keys())
-
 
 
 def get_flac_tags(flac):
@@ -103,7 +107,7 @@ def get_flac_tags(flac):
                     temp = stdout_bytes.decode('utf-8', errors='replace').rstrip()
 
                 temp = re.sub(f'{tag}=', '', temp, flags=re.IGNORECASE)
-                    
+
                 if "ARTIST" in tag:
                     temp = extract_artist_name(temp.replace('\n', ','))
 
@@ -120,7 +124,7 @@ def get_flac_tags(flac):
         except Exception as e:
             print(f"处理标签 {tag} 时出错: {str(e)}")
             tags[tag] = ""
-        # 
+        #
     else:
         Tracknumber = tags.get('TRACKNUMBER', '')
         if not Tracknumber.isdigit():
@@ -219,7 +223,9 @@ def reform_flac_to_flac_dict(flac_files, input_folder):
     return flac_dict
 
 
-def get_flac_file_point(flac_dict,):
+def get_flac_file_point(
+    flac_dict,
+):
     global final_file_dict
     global history_points
     last_point = ""
@@ -228,7 +234,12 @@ def get_flac_file_point(flac_dict,):
             history_points.append(key)
             get_flac_file_point(value)
         elif isinstance(value, list):
-            final_file_dict[key] = {"files": value, "path": os.path.join(*history_points,)}
+            final_file_dict[key] = {
+                "files": value,
+                "path": os.path.join(
+                    *history_points,
+                ),
+            }
             history_points.clear()
     return final_file_dict
 
@@ -273,7 +284,7 @@ if __name__ == "__main__":
         nfo_data['album'] = {"lock_data": False}
         nfo_data['album']['track'] = []
         files = items['files']
-        path  = items['path']
+        path = items['path']
         for file_info in files:
             flac_path = file_info['full_path']
             flac_name = file_info['file_name']
@@ -293,7 +304,9 @@ if __name__ == "__main__":
                 pass
             else:
                 cd_nums.append(cd_num)
-            real_artists = get_real_artist(raw_artists=artists)  # 这两个都是数组 # 这两个都是数组
+            real_artists = get_real_artist(
+                raw_artists=artists
+            )  # 这两个都是数组 # 这两个都是数组
             temp_artists = tags.get('ARTIST', '').split(',')
             if not temp_artists:
                 raw_artists = real_artists
@@ -303,8 +316,8 @@ if __name__ == "__main__":
                 'cdnum': tags.get('DISCNUMBER', '1'),
                 'position': tags.get('TRACKNUMBER', ''),
             }
-            
-            if path in raw_artists: # 上一级路径是艺术家的名字
+
+            if path in raw_artists:  # 上一级路径是艺术家的名字
                 track_info['albumartist'] = path
             track_info['artist'] = final_artist
             nfo_data['album']['track'].append(track_info)
@@ -315,18 +328,21 @@ if __name__ == "__main__":
         nfo_data['album']['albumartist'] = real_artists[0]
         final_folder = os.path.dirname(flac_path)
         nfo_file = os.path.join(final_folder, 'album.nfo')
-        NfoHandler.show(nfo_data)
         if os.path.exists(nfo_file):
             local_data = NfoHandler.read(nfo_file)
             lock_data_status = local_data['album'].get("lock_data", False)
             if not lock_data_status:
                 NfoHandler.write(
-                    data=nfo_data, output_path=nfo_file, pretty=True,
+                    data=nfo_data,
+                    output_path=nfo_file,
+                    pretty=True,
                 )
         else:
             NfoHandler.write(
-                data=nfo_data, output_path=nfo_file, pretty=True,
+                data=nfo_data,
+                output_path=nfo_file,
+                pretty=True,
             )
-           
-            
-
+        NfoHandler.show(nfo_data)
+        if input("是否继续处理下一个文件夹？(y/n)：").lower() != 'y':
+            break

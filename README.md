@@ -34,6 +34,9 @@ Supysonic 是基于 Flask 的音乐流媒体服务器,脱胎于[spl0k/supysonic]
  docker run -d -p 4040:4040 -v /path/to/your/music:/music -v /path/to/your/config/supysonic.conf:/app/supysonic.conf supysonic
  
 
+## script
+build_nfo.py 可以用于组织本地存放音乐文件的nfo文件
+
 ## NFO 文件格式如下
 
 1. nfo 文件必须命名为 album.nfo 并放置在曲目文件夹中

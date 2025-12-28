@@ -248,7 +248,7 @@ def album_list_id3():
                 result_albums.append(a.as_subsonic_album(request.user))
                 added_albums.add(a.id)
     else:
-        result_albums = result_albums[:size]
+        result_albums = result_albums[offset:size]
     return request.formatter(
         "albumList2",
         {"album": result_albums},
@@ -322,7 +322,7 @@ def get_starred():
         StarredTrack.select(StarredTrack.starred)
         .join(Track)
         .where(StarredTrack.user == request.user)
-        .order_by(StarredTrack.date)
+        .order_by(-StarredTrack.date)
     )
 
     if root is not None:

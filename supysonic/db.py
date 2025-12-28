@@ -747,7 +747,7 @@ class Playlist(_Model):
             tid = UUID(track)
         orinal_tracks = self.tracks.split(",") if self.tracks else []
         if str(tid) in orinal_tracks:
-            return
+            return # already in playlist
         if self.tracks and len(self.tracks) > 0:
             self.tracks = f"{self.tracks},{tid}"
         else:

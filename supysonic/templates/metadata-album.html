@@ -20,26 +20,55 @@
     <div class="modal-content">
         <h2>编辑专辑信息</h2>
         <form id="editForm">
-            <input type="hidden" id="artistId">
-            <div class="form-group">
-                <label for="albumname">专辑名称:</label>
-                <input type="text" id="albumname" required>
+            <input type="hidden" id="albumId">
+
+            <!-- 选项卡按钮 -->
+            <div class="tabs">
+                <button type="button" id="tab-album" class="tab-btn active">专辑</button>
+                <button type="button" id="tab-tracks" class="tab-btn">曲目</button>
             </div>
-            <div class="form-group">
-                <label for="artistname">艺术家名称:</label>
-                <input type="text" id="artistname" required>
-            </div>
-            <div class="form-group">
-                <label for="year">专辑发行日期:</label>
-                <input type="text" id="year" required>
-            </div>
-            <div class="form-group">
-                <label>曲目列表:</label>
-                <div id="trackList" style="max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 10px;">
-                    <!-- 曲目将动态添加到这里 -->
-                     <div>正在加载曲目...</div>
+
+            <!-- 专辑面板 -->
+            <div id="pane-album" class="tab-pane active">
+                <div class="form-group">
+                    <label for="albumname">专辑名称:</label>
+                    <input type="text" id="albumname" required>
+                </div>
+                <div class="form-group">
+                    <label for="artistname">艺术家名称:</label>
+                    <input type="text" id="artistname" required>
+                </div>
+                <div class="form-group">
+                    <label for="year">专辑发行日期:</label>
+                    <input type="text" id="year" required>
                 </div>
             </div>
+
+            <!-- 曲目面板 -->
+            <div id="pane-tracks" class="tab-pane">
+                <div class="form-group">
+                    <label>曲目列表:</label>
+                    <div id="trackList" style="max-height: 240px; overflow-y: auto; border: 1px solid #ccc; padding: 10px;">
+                        <table class="tracks-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:80px;">序号</th>
+                                    <th>曲目标题</th>
+                                    <th>艺术家</th>
+                                    <th class="actions">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="trackTbody">
+                                <tr><td colspan="4" style="text-align:center;color:#888;">正在加载曲目...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="margin-top:8px;">
+                        <button type="button" id="addTrackBtn">新增曲目</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="form-actions">
                 <button type="submit" class="btn-primary">保存</button>
                 <button type="button" class="btn-secondary" onclick="closeModal()">取消</button>
@@ -190,35 +219,137 @@ function renderPage(album_array) {
     }
 }
 
+
+function addTrackRow(container, track = {}) {
+    // 使用表格 tbody
+    let tbody = document.getElementById('trackTbody');
+    if (!tbody) {
+        // 如果没有表格骨架，兜底创建
+        const table = document.createElement('table');
+        table.className = 'tracks-table';
+        table.innerHTML = '<thead><tr><th style="width:80px;">序号</th><th>曲目标题</th><th>艺术家</th><th class="actions">操作</th></tr></thead><tbody id="trackTbody"></tbody>';
+        container.innerHTML = '';
+        container.appendChild(table);
+        tbody = document.getElementById('trackTbody');
+    }
+
+    const row = document.createElement('tr');
+    row.className = 'track-item';
+    row.dataset.id = track.id || '';
+
+    // 序号
+    const tdIdx = document.createElement('td');
+    const idx = document.createElement('input');
+    idx.type = 'number';
+    idx.className = 'track-index';
+    idx.min = '1';
+    idx.value = track.track || '';
+    tdIdx.appendChild(idx);
+
+    // 标题
+    const tdTitle = document.createElement('td');
+    const title = document.createElement('input');
+    title.type = 'text';
+    title.className = 'track-title';
+    title.value = track.title || '';
+    title.placeholder = '曲目标题';
+    tdTitle.appendChild(title);
+
+    // 艺术家
+    const tdArtist = document.createElement('td');
+    const tartist = document.createElement('input');
+    tartist.type = 'text';
+    tartist.className = 'track-artist';
+    tartist.value = track.artist || '';
+    tartist.placeholder = '曲目艺术家';
+    tdArtist.appendChild(tartist);
+
+    // 操作
+    const tdActions = document.createElement('td');
+    tdActions.className = 'actions';
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.textContent = '删除';
+    del.onclick = () => row.remove();
+    tdActions.appendChild(del);
+
+    row.appendChild(tdIdx);
+    row.appendChild(tdTitle);
+    row.appendChild(tdArtist);
+    row.appendChild(tdActions);
+    tbody.appendChild(row);
+}
+
 // 添加模态框相关函数
 function openEditModal(album) {
+    const albumIdInput = document.getElementById('albumId');
+    albumIdInput.value = album.id;
     const modal = document.getElementById('editModal');
     const albumname = document.getElementById('albumname');
     const artistname = document.getElementById('artistname');
     const year = document.getElementById('year');
     const trackList = document.getElementById('trackList');
     // 填充表单数据
+    // 打开时默认显示“专辑”面
+    switchTab('album');
     albumname.value = album.name;
     albumid = album.id;
     artistname.value = album.artist;
     year.value = album.year || '';
-    modal.style.display = 'block';
-    trackList.innerHTML = ''; // 清空之前的曲目列表
+    modal.classList.add('show');
+    // 清空表格内容（保留表头）
+    const tbody = document.getElementById('trackTbody');
+    if (tbody) {
+        tbody.innerHTML = '';
+    } else {
+        trackList.innerHTML = '';
+    }
     album_info = getAlbumByid(albumid,password, albumidurl);
     album_info.then(data => {
         raw_data = data;
         const tracks = data.song || [];
         if (tracks.length === 0) {
-            trackList.innerHTML = '<div>无曲目数据</div>';
+            const tb = document.getElementById('trackTbody');
+            if (tb) {
+                tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#888;">无曲目数据</td></tr>';
+            } else {
+                trackList.innerHTML = '<div>无曲目数据</div>';
+            }
         } else {
             for (const track of tracks) {
-                const trackItem = document.createElement('div');
-                trackItem.textContent = `${track.track}. ${track.title}`;
-                trackList.appendChild(trackItem);
+
+                addTrackRow(trackList, track);
             }
         }
+        const addBtn = document.getElementById('addTrackBtn');
+        addBtn.onclick = () => addTrackRow(trackList);
     });
 }
+
+// 选项卡切换
+function switchTab(name) {
+    const isAlbum = name === 'album';
+    const tabAlbum = document.getElementById('tab-album');
+    const tabTracks = document.getElementById('tab-tracks');
+    const paneAlbum = document.getElementById('pane-album');
+    const paneTracks = document.getElementById('pane-tracks');
+    if (tabAlbum && tabTracks && paneAlbum && paneTracks) {
+        tabAlbum.classList.toggle('active', isAlbum);
+        tabTracks.classList.toggle('active', !isAlbum);
+        paneAlbum.classList.toggle('active', isAlbum);
+        paneTracks.classList.toggle('active', !isAlbum);
+    }
+}
+
+// 初始化选项卡事件
+document.addEventListener('DOMContentLoaded', () => {
+    const tabAlbum = document.getElementById('tab-album');
+    const tabTracks = document.getElementById('tab-tracks');
+    if (tabAlbum && tabTracks) {
+        tabAlbum.onclick = () => switchTab('album');
+        tabTracks.onclick = () => switchTab('tracks');
+    }
+});
 
 function showSuccessToast(message = '保存成功！') {
     const toast = document.getElementById('successToast');
@@ -239,41 +370,51 @@ function showSuccessToast(message = '保存成功！') {
 }
 
 
-// 添加表单提交处理
 document.getElementById('editForm').onsubmit = async function(e) {
     e.preventDefault();
-    
-    const artistId = document.getElementById('artistId').value;
-    const artistName = document.getElementById('artistName').value;
-    const realArtist = document.getElementById('realArtist').value.trim();
-    
-    try {
-        // 构建请求数据
-        const requestData = {
-            action: 'change_real_artist',
-            id: artistId,
-            name: artistName,
-            real_name: realArtist || null  // 如果为空字符串则设为 null
+    const albumId = document.getElementById('albumId').value;
+    const albumName = document.getElementById('albumname').value.trim();
+    const artistName = document.getElementById('artistname').value.trim();
+    const yearVal = document.getElementById('year').value.trim();
+    const trackList = document.getElementById('trackList');
+
+    const trackItems = Array.from(trackList.querySelectorAll('.track-item'));
+    const tracksPayload = trackItems.map((el, idx) => {
+        const tIdx = parseInt(el.querySelector('.track-index').value, 10);
+        const tTitle = el.querySelector('.track-title').value.trim();
+        return {
+            id: el.dataset.id || null,
+            track: Number.isFinite(tIdx) ? tIdx : (idx + 1),
+            title: tTitle
         };
-        const response = await fetch('/artists', {
+    }).filter(t => t.title); // 过滤空标题
+
+    try {
+        const requestData = {
+            action: 'update_album',
+            id: albumId,
+            album_name: albumName,
+            artist_name: artistName,
+            year: yearVal || null,
+            tracks: tracksPayload
+        };
+        const response = await fetch('/albums', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestData)
         });
-
         if (!response.ok) {
-            const errorData = await response.json();
+            const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.message || '保存失败');
         }
-        const successData = await response.json();
-        // 保存成功
+        const successData = await response.json().catch(() => ({ message: '保存成功！' }));
         closeModal();
-        // 重新加载数据以显示更新后的结果
-        showSuccessToast(successData.message);
+        showSuccessToast(successData.message || '保存成功！');
+        // 重新加载，避免重复渲染与旧数据残留
+        all_album = [];
+        offset = 0;
+        document.getElementById('artist-wall').innerHTML = '<div class="loading">正在加载专辑数据...</div>';
         loadData();
-        
     } catch (error) {
         console.error('保存失败:', error);
         alert('保存失败: ' + error.message);
@@ -282,9 +423,8 @@ document.getElementById('editForm').onsubmit = async function(e) {
 
 function closeModal() {
     const modal = document.getElementById('editModal');
-    modal.style.display = 'none';
+    modal.classList.remove('show');
 }
-
 
 
 

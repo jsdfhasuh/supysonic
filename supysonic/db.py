@@ -385,16 +385,22 @@ class Album(_Model):
                 {"id": str(artist.id), "name": str(artist.get_artist_name())}
             )
         info["participants"] = participants
-        track_with_cover = (
-            self.tracks.join(Folder).where(Folder.cover_art.is_null(False)).first()
+        # track_with_cover = (
+        #     self.tracks.join(Folder).where(Folder.cover_art.is_null(False)).first()
+        # )
+        # if track_with_cover is not None:
+        #     info["coverArt"] = str(track_with_cover.folder.id)
+        # else:
+        #     track_with_cover = self.tracks.where(Track.has_art).first()
+        #     if track_with_cover is not None:
+        #         info["coverArt"] = str(track_with_cover.id)
+        al_image = (
+            Image.select()
+            .where((Image.image_type == "album") & (Image.related_id == str(self.id)))
+            .first()
         )
-        if track_with_cover is not None:
-            info["coverArt"] = str(track_with_cover.folder.id)
-        else:
-            track_with_cover = self.tracks.where(Track.has_art).first()
-            if track_with_cover is not None:
-                info["coverArt"] = str(track_with_cover.id)
-
+        if al_image:
+            info["coverArt"] =  str(al_image.id)
         if self.year:
             info["year"] = self.year
 
@@ -747,7 +753,7 @@ class Playlist(_Model):
             tid = UUID(track)
         orinal_tracks = self.tracks.split(",") if self.tracks else []
         if str(tid) in orinal_tracks:
-            return # already in playlist
+            return  # already in playlist
         if self.tracks and len(self.tracks) > 0:
             self.tracks = f"{self.tracks},{tid}"
         else:

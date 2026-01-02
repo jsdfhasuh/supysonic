@@ -168,7 +168,7 @@ def list_artists():
     mfid = request.values.get("musicFolderId")
 
     query = Artist.select().where(Artist.real_artist.is_null())
-    #query = Artist.select()# # 只选择主艺人
+    # query = Artist.select()# # 只选择主艺人
     if mfid is not None:
         folder = get_root_folder(mfid)
         query = Artist.select().join(Track).where(Track.root_folder == folder)
@@ -257,4 +257,58 @@ def track_info():
     res = get_entity(Track)
     return request.formatter(
         "song", res.as_subsonic_child(request.user, request.client)
+    )
+
+
+# getSimilarSongs
+@api_routing("/getSimilarSongs")
+def similar_songs():
+    res = get_entity(Track)
+    genre = res.genre
+    if not genre:
+        # 返回相同歌手的歌曲
+        all_tracks = Track.select().where(Track.id != res.id, Track.artist == res.artist)
+        similar_songs = [t for t in all_tracks][:10]
+        return request.formatter(
+            "similarSongs",
+            {
+                "song": [
+                    t.as_subsonic_child(request.user, request.client) for t in similar_songs
+                ]
+            },
+        )
+
+    all_tracks = Track.select().where(Track.id != res.id)
+    similar_songs_num = 10
+    similar_songs = []
+    similar_songs_genre = []
+    similar_songs_partial_genre = []
+    similar_songs_artist = []
+    for t in all_tracks:
+        if t.genre and genre:
+            if t.genre == genre:
+                similar_songs_genre.append(t)
+            if genre.lower() in ((t.genre.lower())):
+                similar_songs_partial_genre.append(t)
+        if t.artist == res.artist:
+            similar_songs_artist.append(t)
+    #  优先选择相同流派的歌曲
+    for song in similar_songs_genre:
+        if len(similar_songs) < similar_songs_num:
+            similar_songs.append(song)
+    # 如果不够，再选择部分匹配流派的歌曲
+    for song in similar_songs_partial_genre:
+        if len(similar_songs) < similar_songs_num and song not in similar_songs:
+            similar_songs.append(song)
+    # 如果还不够，再选择相同艺人的歌曲
+    for song in similar_songs_artist:
+        if len(similar_songs) < similar_songs_num and song not in similar_songs:
+            similar_songs.append(song)
+    return request.formatter(
+        "similarSongs",
+        {
+            "song": [
+                t.as_subsonic_child(request.user, request.client) for t in similar_songs
+            ]
+        },
     )

@@ -18,12 +18,12 @@ from .db import Folder, open_connection, close_connection
 from .scanner import Scanner
 from .nfo.nfo import NfoHandler
 
-OP_SCAN = 1
-OP_REMOVE = 2
-OP_MOVE = 4
-FLAG_CREATE = 8
-FLAG_COVER = 16
-FLAG_NFO = 32
+OP_SCAN = 1 # 1
+OP_REMOVE = 2 # 10
+OP_MOVE = 4 # 100
+FLAG_CREATE = 8 # 1000
+FLAG_COVER = 16 # 10000
+FLAG_NFO = 32 # 100000
 
 logger = logging.getLogger(__name__)
 

@@ -126,21 +126,24 @@ class NfoHandler:
         data: Dict[str, Any],
         output_path: Optional[str] = None,
         pretty: bool = True,
+        logger: Optional[logging.Logger] = None
     ) -> Optional[str]:
         """
-        将字典数据写入 NFO 文件
+        将字典数据写入 NFO 文件，支持中文字符
 
         Args:
             data: 要写入的字典数据，顶层键应为根元素名称
             output_path: 输出文件路径，如果不提供则返回 XML 字符串
             pretty: 是否格式化 XML（美化输出）
+            logger: 日志记录器
 
         Returns:
             如果 output_path 为 None，则返回 XML 字符串；否则返回 None
         """
         try:
             if not data:
-                logger.error("没有可写入的数据")
+                if logger:
+                    logger.error("没有可写入的数据")
                 return None
 
             # 获取根元素名称和数据
@@ -150,20 +153,25 @@ class NfoHandler:
             # 转换为 XML
             root = cls._dict_to_element(root_data, root_name)
 
+            # 添加XML声明
+            declaration = '<?xml version="1.0" encoding="utf-8" standalone="yes"?>\n'
+            
             # 创建 XML 字符串
-            xml_str = ET.tostring(root, encoding='utf-8').decode('utf-8')
+            xml_str = ET.tostring(root, encoding='utf-8', method='xml').decode('utf-8')
 
             # 美化 XML
             if pretty:
-                xml_str = (
-                    minidom.parseString(xml_str)
-                    .toprettyxml(indent="  ", encoding="utf-8")
-                    .decode('utf-8')
-                )
+                dom = minidom.parseString(xml_str)
+                # 使用encoding='utf-8'确保中文字符被正确处理
+                pretty_xml = dom.toprettyxml(indent="  ", encoding='utf-8')
+                # 将字节转换回字符串
+                xml_str = pretty_xml.decode('utf-8')
                 # 移除额外的空行
-                xml_str = "\n".join(
-                    line for line in xml_str.split("\n") if line.strip()
-                )
+                xml_str = "\n".join(line for line in xml_str.split("\n") if line.strip())
+            
+            # 确保添加XML声明
+            if '<?xml' not in xml_str:
+                xml_str = declaration + xml_str
 
             # 写入文件或返回字符串
             if output_path:
@@ -172,8 +180,10 @@ class NfoHandler:
                 return None
             else:
                 return xml_str
+                
         except Exception as e:
-            logger.error(f"写入 NFO 失败: {str(e)}")
+            if logger:
+                logger.error(f"写入NFO文件时出错: {str(e)}")
             return None
 
     @classmethod
@@ -214,7 +224,21 @@ class NfoHandler:
                 result[key] = value
 
         return result
-
     @classmethod
-    def is_nfo_file(cls, path: str) -> bool:
-        return path.lower().endswith('.nfo')
+    def show(cls, data: Dict[str, Any], indent: int = 0) -> None:
+        """打印 NFO 数据的层次结构，便于调试"""
+        for key, value in data.items():
+            print(' ' * indent + str(key) + ':', end=' ')
+            if isinstance(value, dict):
+                print()
+                NfoHandler.show(value, indent + 2)
+            elif isinstance(value, list):
+                print('[')
+                for item in value:
+                    if isinstance(item, dict):
+                        cls.show(item, indent + 2)
+                    else:
+                        print(' ' * (indent + 2) + str(item))
+                print(' ' * indent + ']')
+            else:
+                print(str(value))

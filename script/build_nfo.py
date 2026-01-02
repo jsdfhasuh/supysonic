@@ -207,7 +207,10 @@ def reform_flac_to_flac_dict(flac_files, input_folder):
             folder_name = paths[index]
             if index == len(paths) - 2:
                 if folder_name not in last_point:
-                    last_point[folder_name] = []
+                    try:
+                        last_point[folder_name] = []
+                    except Exception as e:
+                        print(f"Error adding folder {folder_name} to last_point: {e}")
                 last_point = last_point[folder_name]
                 break
             if folder_name not in flac_dict:
@@ -234,13 +237,16 @@ def get_flac_file_point(
             history_points.append(key)
             get_flac_file_point(value)
         elif isinstance(value, list):
+            history_points.append(key)
             final_file_dict[key] = {
                 "files": value,
                 "path": os.path.join(
                     *history_points,
                 ),
             }
-            history_points.clear()
+            history_points.pop()
+    else:
+        history_points.clear()
     return final_file_dict
 
 
@@ -328,6 +334,7 @@ if __name__ == "__main__":
         nfo_data['album']['albumartist'] = real_artists[0]
         final_folder = os.path.dirname(flac_path)
         nfo_file = os.path.join(final_folder, 'album.nfo')
+        NfoHandler.show(nfo_data)
         if os.path.exists(nfo_file):
             local_data = NfoHandler.read(nfo_file)
             lock_data_status = local_data['album'].get("lock_data", False)
@@ -343,6 +350,3 @@ if __name__ == "__main__":
                 output_path=nfo_file,
                 pretty=True,
             )
-        NfoHandler.show(nfo_data)
-        if input("是否继续处理下一个文件夹？(y/n)：").lower() != 'y':
-            break

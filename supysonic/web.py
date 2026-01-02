@@ -44,6 +44,12 @@ def create_application(config=None):
             logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
         )
         logger.addHandler(handler)
+    # add console handler too
+    console = logging.StreamHandler()
+    console.setFormatter(
+        logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    )
+    logger.addHandler(console)
     loglevel = app.config["WEBAPP"]["log_level"]
     if loglevel:
         logger.setLevel(getattr(logging, loglevel.upper(), logging.NOTSET))

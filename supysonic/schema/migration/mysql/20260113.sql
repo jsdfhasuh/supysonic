@@ -1,0 +1,3 @@
+ALTER TABLE track
+    ADD COLUMN play_count_web INTEGER NOT NULL DEFAULT 0;
+

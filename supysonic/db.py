@@ -34,7 +34,7 @@ from uuid import UUID, uuid4
 from PIL import Image as PILImage
 from .tool import read_dict_from_json
 
-SCHEMA_VERSION = "20251026"
+SCHEMA_VERSION = "20260113"
 
 
 def now():
@@ -474,6 +474,7 @@ class Track(PathMixin, _Model):
     last_modification = IntegerField()
 
     play_count = IntegerField(default=0)
+    play_count_web = IntegerField(default=0)
     last_play = DateTimeField(null=True)
 
     root_folder = ForeignKeyField(Folder, backref="+")

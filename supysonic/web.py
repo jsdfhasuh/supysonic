@@ -28,7 +28,6 @@ def create_application(config=None):
     # Flask!
     app = Flask(__name__)
     app.config.from_object("supysonic.config.DefaultConfig")
-
     if not config:  # pragma: nocover
         config = IniConfig.from_common_locations()
     app.config.from_object(config)

@@ -25,6 +25,9 @@ class LastFm:
         else:
             self.__enabled = False
         self.__user = user
+    
+    def get_enabled(self):
+        return self.__enabled
 
     def link_account(self, token):
         if not self.__enabled:
@@ -88,6 +91,64 @@ class LastFm:
             autocorrect=1,
         )
         self.__find_json[f'artist_{name}'] = result
+        return result
+    
+    def get_artisttopalbums(self, name, lang='en', limit=5, page=1,mbid=None):
+        if not self.__enabled:
+            return
+        if f'artist_topalbums_{name}' in self.__find_json:
+            return self.__find_json[f'artist_topalbums_{name}']
+        if mbid:
+            result = self.__api_request(
+                False,
+                method="artist.gettopalbums",
+                artist=name,
+                lang=lang,
+                autocorrect=1,
+                limit=limit,
+                page = page,
+                mbid = mbid,
+            )
+        else:
+            result = self.__api_request(
+                False,
+                method="artist.gettopalbums",
+                artist=name,
+                lang=lang,
+                autocorrect=1,
+                limit=limit,
+                page = page,
+            )
+        self.__find_json[f'artist_topalbums_{name}'] = result
+        return result
+    
+    def get_top_tracks(self, name, lang='en', limit=5, page=1, mbid=None):
+        if not self.__enabled:
+            return
+        if f'artist_toptracks_{name}' in self.__find_json:
+            return self.__find_json[f'artist_toptracks_{name}']
+        if mbid:
+            result = self.__api_request(
+                False,
+                method="artist.gettoptracks",
+                artist=name,
+                lang=lang,
+                autocorrect=1,
+                limit=limit,
+                page = page,
+                mbid = mbid,
+            )
+        else:
+            result = self.__api_request(
+                False,
+                method="artist.gettoptracks",
+                artist=name,
+                lang=lang,
+                autocorrect=1,
+                limit=limit,
+                page = page,
+            )
+        self.__find_json[f'artist_toptracks_{name}'] = result
         return result
 
     def get_albuminfo(self, artist_name, album_name, lang='en'):
@@ -251,3 +312,15 @@ class LastFm:
             logger.warning("LastFM error %i: %s", json["error"], json["message"])
 
         return json
+
+if __name__ == "__main__":
+    # Example usage
+    # api_key = 2687c7f40e7eed7e49775d0798e0f27 secret = 60b3ec3eaf59b00c853af4e74f01d58b
+    pass
+    config = {"api_key": "2687c7f40e7eed7e49775d0798e0f275", "secret": "60b3ec3eaf59b00c853af4e74f01d58b"}
+    user = type('User', (object,), {})()  # 创建一个简单的用户对象
+    user.lastfm_session = None
+    LastFm_instance = LastFm(config, user)
+    top_album = LastFm_instance.get_artisttopalbums("Coldplay",limit=10)
+    top_track = LastFm_instance.get_top_tracks("Coldplay",limit=10)
+    pass

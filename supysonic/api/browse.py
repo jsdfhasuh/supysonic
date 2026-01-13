@@ -10,7 +10,7 @@ import string
 
 from flask import current_app, request
 from peewee import fn
-
+from ..lastfm import LastFm
 from ..db import Folder, Artist, Album, Track
 
 from . import get_entity, get_root_folder, api_routing, get_entity_by_name
@@ -155,8 +155,47 @@ def list_genres():
 @api_routing("/getTopSongs")
 def top_songs():
     res = get_entity_by_name(Artist, param='artist')
+    lfm = LastFm(current_app.config["LASTFM"], request.user)
+    # find top songs by play_count_web
+    all_tracks = Track.select().where(Track.artist == res)
+    tracks_web_played = [t for t in all_tracks if t.play_count_web and t.play_count_web > 0]
+    if tracks_web_played:
+        tracks = sorted(tracks_web_played, key=lambda x: x.play_count_web, reverse=True)
+        remain_tracks = [t for t in all_tracks if t not in tracks]
+        tracks += sorted(remain_tracks, key=lambda x: x.play_count, reverse=True)
+        return request.formatter(
+            "topSongs",
+            {
+                "song": [
+                    track.as_subsonic_child(request.user, request.client) for track in tracks
+                ]
+            },
+        )
     # 获取该艺人下按播放次数排序的前 10 首歌曲
-    tracks = res.tracks.select().order_by(Track.play_count.desc())
+    if not lfm.get_enabled():
+        tracks = (
+            Track.select()
+            .where(Track.artist == res)
+            .order_by(Track.play_count.desc())
+        )
+    else:
+        # 通过lastfm查找播放次数
+        pass
+        real_track = []
+        remain_tracks = []
+        lfm_tracks = lfm.get_top_tracks(res.name, limit=30)
+        for lt in lfm_tracks['toptracks']['track']:
+            for t in all_tracks:
+                name = t.title
+                if name.lower() == lt['name'].lower():
+                    real_track.append(t)
+                    t.play_count_web = lt['playcount']
+                    t.save()
+                else:
+                    remain_tracks.append(t)
+        tracks = sorted(real_track, key=lambda x: x.play_count_web, reverse=True)
+        remain_tracks = sorted(remain_tracks, key=lambda x: x.play_count, reverse=True)
+        tracks += remain_tracks
     topSongs = [
         track.as_subsonic_child(request.user, request.client) for track in tracks
     ]

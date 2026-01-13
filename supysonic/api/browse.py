@@ -188,6 +188,8 @@ def top_songs():
             for t in all_tracks:
                 name = t.title
                 if name.lower() == lt['name'].lower():
+                    if t in real_track:
+                        continue
                     real_track.append(t)
                     t.play_count_web = lt['playcount']
                     t.save()

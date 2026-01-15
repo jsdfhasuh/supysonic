@@ -322,5 +322,5 @@ if __name__ == "__main__":
     user.lastfm_session = None
     LastFm_instance = LastFm(config, user)
     top_album = LastFm_instance.get_artisttopalbums("Coldplay",limit=10)
-    top_track = LastFm_instance.get_top_tracks("Coldplay",limit=10)
+    top_track = LastFm_instance.get_top_tracks("TWICE",limit=10)
     pass

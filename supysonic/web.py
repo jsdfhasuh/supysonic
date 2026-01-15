@@ -13,7 +13,7 @@ import mimetypes
 from flask import Flask
 from logging.handlers import TimedRotatingFileHandler
 from os import makedirs, path
-
+from .    import TaskManger 
 from .config import IniConfig
 from .cache import Cache
 from .db import init_database, open_connection, close_connection, Folder
@@ -97,5 +97,10 @@ def create_application(config=None):
 
     if not app.testing:
         close_connection()
+        
+    # init TaskManger 
+
+    TaskManger_instance =TaskManger.get_task_manager()
+    logger.info("Task Manager initialized: %s", TaskManger_instance)
 
     return app

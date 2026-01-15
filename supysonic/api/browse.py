@@ -12,7 +12,7 @@ from flask import current_app, request
 from peewee import fn
 from ..lastfm import LastFm
 from ..db import Folder, Artist, Album, Track
-
+from ..TaskManger import get_task_manager,TaskManager
 from . import get_entity, get_root_folder, api_routing, get_entity_by_name
 
 
@@ -154,6 +154,20 @@ def list_genres():
 
 @api_routing("/getTopSongs")
 def top_songs():
+    def get_web_play_count(lfm:LastFm, artist_name: str,all_tracks: list[Track]):
+        # 通过lastfm查找播放次数
+        real_track = []
+        lfm_tracks = lfm.get_top_tracks(artist_name, limit=30)
+        for lt in lfm_tracks['toptracks']['track']:
+            for t in all_tracks:
+                name = t.title
+                if name.lower() == lt['name'].lower():
+                    if t in real_track:
+                        continue
+                    real_track.append(t)
+                    t.play_count_web = lt['playcount']
+                    t.save()
+
     res = get_entity_by_name(Artist, param='artist')
     lfm = LastFm(current_app.config["LASTFM"], request.user)
     # find top songs by play_count_web
@@ -171,7 +185,6 @@ def top_songs():
                 ]
             },
         )
-    # 获取该艺人下按播放次数排序的前 10 首歌曲
     if not lfm.get_enabled():
         tracks = (
             Track.select()
@@ -180,24 +193,11 @@ def top_songs():
         )
     else:
         # 通过lastfm查找播放次数
-        pass
-        real_track = []
-        remain_tracks = []
-        lfm_tracks = lfm.get_top_tracks(res.name, limit=30)
-        for lt in lfm_tracks['toptracks']['track']:
-            for t in all_tracks:
-                name = t.title
-                if name.lower() == lt['name'].lower():
-                    if t in real_track:
-                        continue
-                    real_track.append(t)
-                    t.play_count_web = lt['playcount']
-                    t.save()
-                else:
-                    remain_tracks.append(t)
-        tracks = sorted(real_track, key=lambda x: x.play_count_web, reverse=True)
-        remain_tracks = sorted(remain_tracks, key=lambda x: x.play_count, reverse=True)
-        tracks += remain_tracks
+        TaskManager_instance = get_task_manager()
+        task_id = f"top_songs_{res.id}_{request.user.id}"
+        TaskManager_instance.submit_task(task_id=task_id,func=get_web_play_count,lfm=lfm,artist_name=res.name,all_tracks=all_tracks)
+    # 获取该艺人下按播放次数排序的前 10 首歌曲
+    tracks = all_tracks.order_by(Track.play_count.desc())
     topSongs = [
         track.as_subsonic_child(request.user, request.client) for track in tracks
     ]

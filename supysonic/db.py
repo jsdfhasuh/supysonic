@@ -34,7 +34,7 @@ from uuid import UUID, uuid4
 from PIL import Image as PILImage
 from .tool import read_dict_from_json
 
-SCHEMA_VERSION = "20260115"
+SCHEMA_VERSION = "20260113"
 
 
 def now():
@@ -273,6 +273,7 @@ class Artist(_Model):
             "id": str(self.id),
             "name": self.name,
             # coverArt
+            "coverArt": "ar-" + str(self.id),
             "albumCount": album_count,
         }
 
@@ -304,6 +305,7 @@ class Artist(_Model):
                 return info
             except ValueError:
                 return info
+        info['cover_art'] = "ar-" + str(self.id)
         return info
 
     # 更新 Artist 类的 prune 方法
@@ -405,6 +407,8 @@ class Album(_Model):
             )
             if al_image:
                 info["coverArt"] = str(al_image.id)
+        else:
+            info["coverArt"] = "al-" + str(self.id)
         if self.year:
             info["year"] = self.year
 

@@ -12,7 +12,7 @@ from flask import current_app, request
 from peewee import fn
 from ..lastfm import LastFm
 from ..db import Folder, Artist, Album, Track
-from ..TaskManger import get_task_manager,TaskManager
+from ..TaskManger import get_task_manager, TaskManager
 from . import get_entity, get_root_folder, api_routing, get_entity_by_name
 
 
@@ -154,7 +154,7 @@ def list_genres():
 
 @api_routing("/getTopSongs")
 def top_songs():
-    def get_web_play_count(lfm:LastFm, artist_name: str,all_tracks: list[Track]):
+    def get_web_play_count(lfm: LastFm, artist_name: str, all_tracks: list[Track]):
         # 通过lastfm查找播放次数
         real_track = []
         lfm_tracks = lfm.get_top_tracks(artist_name, limit=30)
@@ -172,7 +172,9 @@ def top_songs():
     lfm = LastFm(current_app.config["LASTFM"], request.user)
     # find top songs by play_count_web
     all_tracks = Track.select().where(Track.artist == res)
-    tracks_web_played = [t for t in all_tracks if t.play_count_web and t.play_count_web > 0]
+    tracks_web_played = [
+        t for t in all_tracks if t.play_count_web and t.play_count_web > 0
+    ]
     if tracks_web_played:
         tracks = sorted(tracks_web_played, key=lambda x: x.play_count_web, reverse=True)
         remain_tracks = [t for t in all_tracks if t not in tracks]
@@ -181,21 +183,26 @@ def top_songs():
             "topSongs",
             {
                 "song": [
-                    track.as_subsonic_child(request.user, request.client) for track in tracks
+                    track.as_subsonic_child(request.user, request.client)
+                    for track in tracks
                 ]
             },
         )
     if not lfm.get_enabled():
         tracks = (
-            Track.select()
-            .where(Track.artist == res)
-            .order_by(Track.play_count.desc())
+            Track.select().where(Track.artist == res).order_by(Track.play_count.desc())
         )
     else:
         # 通过lastfm查找播放次数
         TaskManager_instance = get_task_manager()
         task_id = f"top_songs_{res.id}_{request.user.id}"
-        TaskManager_instance.submit_task(task_id=task_id,func=get_web_play_count,lfm=lfm,artist_name=res.name,all_tracks=all_tracks)
+        TaskManager_instance.submit_task(
+            task_id=task_id,
+            func=get_web_play_count,
+            lfm=lfm,
+            artist_name=res.name,
+            all_tracks=all_tracks,
+        )
     # 获取该艺人下按播放次数排序的前 10 首歌曲
     tracks = all_tracks.order_by(Track.play_count.desc())
     topSongs = [
@@ -241,7 +248,7 @@ def artist_info():
     albums |= {t.album for t in res.tracks}
     albums |= {rel.album_id for rel in res.artist_albums}
     info["album"] = [
-        a.as_subsonic_album(request.user,request.client.client_name)
+        a.as_subsonic_album(request.user, request.client.client_name)
         for a in sorted(albums, key=lambda a: a.sort_key())
     ]
 
@@ -253,13 +260,13 @@ def artist_info2():
     id = request.values.get("id")
     image_base_url = request.url.replace("/getArtistInfo2", "/getCoverArt")
     image_base_url = image_base_url.replace(f"{id}", f"ar-{id}")
-
+    client = request.client.client_name
     res = get_entity(Artist)
     info = res.get_info()
-    info['smallImageUrl'] = f"{image_base_url}&input_size=small"
-    info['mediumImageUrl'] = f"{image_base_url}&input_size=medium"
-    info['largeImageUrl'] = f"{image_base_url}&input_size=large"
-
+    info['artist_image_url'] = f"{image_base_url}?id=ar-{id}&c={client}"
+    info['smallImageUrl'] = f"{image_base_url}?id=ar-{id}&input_size=small&c={client}"
+    info['mediumImageUrl'] = f"{image_base_url}?id=ar-{id}&input_size=medium&c={client}"
+    info['largeImageUrl'] = f"{image_base_url}?id=ar-{id}&input_size=large&c={client}"
     # Add similar artists if available
     similar_artists = []
     # for artist in Artist.select().order_by(fn.random()).limit(8):
@@ -284,7 +291,7 @@ def artist_info2():
 @api_routing("/getAlbum")
 def album_info():
     res = get_entity(Album)
-    info = res.as_subsonic_album(request.user,request.client.client_name)
+    info = res.as_subsonic_album(request.user, request.client.client_name)
     info["song"] = [
         t.as_subsonic_child(request.user, request.client)
         for t in sorted(res.tracks, key=lambda t: t.sort_key())
@@ -294,21 +301,19 @@ def album_info():
     info['cover_art'] = f'{image_base_url}&input_size=large'
     return request.formatter("album", info)
 
+
 @api_routing("/getAlbumInfo2")
 def album_info2():
     res = get_entity(Album)
-    info = res.as_subsonic_album(request.user,request.client.client_name)
-    client = request.client
-    name = client.client_name
+    client = request.client.client_name
+    info = res.as_subsonic_album(request.user, request.client.client_name)
     image_base_url = request.url.replace("/getAlbumInfo2", "/getCoverArt")
     image_base_url = image_base_url.replace(f"{res.id}", f"al-{res.id}")
-    image_base_url = f"{image_base_url}?&id=al-{res.id}"
-    info['smallImageUrl'] = f"{image_base_url}&input_size=small"
-    info['mediumImageUrl'] = f"{image_base_url}&input_size=medium"
-    info['largeImageUrl'] = f"{image_base_url}&input_size=large"
-    info['cover_art'] = f'{image_base_url}&input_size=large'
+    info['smallImageUrl'] = f"{image_base_url}?id=ar-{id}&input_size=small&c={client}"
+    info['mediumImageUrl'] = f"{image_base_url}?id=ar-{id}&input_size=medium&c={client}"
+    info['largeImageUrl'] = f"{image_base_url}?id=ar-{id}&input_size=large&c={client}"
     return request.formatter("albumInfo", info)
-    
+
 
 @api_routing("/getSong")
 def track_info():
@@ -325,13 +330,16 @@ def similar_songs():
     genre = res.genre
     if not genre:
         # 返回相同歌手的歌曲
-        all_tracks = Track.select().where(Track.id != res.id, Track.artist == res.artist)
+        all_tracks = Track.select().where(
+            Track.id != res.id, Track.artist == res.artist
+        )
         similar_songs = [t for t in all_tracks][:10]
         return request.formatter(
             "similarSongs",
             {
                 "song": [
-                    t.as_subsonic_child(request.user, request.client) for t in similar_songs
+                    t.as_subsonic_child(request.user, request.client)
+                    for t in similar_songs
                 ]
             },
         )

@@ -20,3 +20,55 @@ def ping():
 @api_routing("/getLicense")
 def license():
     return request.formatter("license", {"valid": True})
+
+
+@api_routing("/getOpenSubsonicExtensions")
+def open_subsonic_extensions():
+    pass
+    response_data = {}
+    response_data["subsonic-response"] = {}
+    response_data["subsonic-response"]["status"] = "ok"
+    response_data["subsonic-response"]["version"] = "1.16.1"
+    response_data["subsonic-response"]["type"] = "AwesomeServerName"
+    response_data["subsonic-response"]["serverVersion"] = "0.1.3 (tag)"
+    response_data["subsonic-response"]["openSubsonic"] = True
+    response_data["subsonic-response"]["openSubsonicExtensions"] = [
+        {
+            "name": "template",
+            "versions": [1, 2],
+        },
+        {           "name": "transcodeOffset",           
+            "versions": [1],      
+        },
+    ]
+    return response_data
+        
+
+
+
+
+    """{
+    "subsonic-response": {
+        "status": "ok",
+        "version": "1.16.1",
+        "type": "AwesomeServerName",
+        "serverVersion": "0.1.3 (tag)",
+        "openSubsonic": true,
+        "openSubsonicExtensions": [
+            {
+                "name": "template",
+                "versions": [
+                    1,
+                    2
+                ]
+            },
+            {
+                "name": "transcodeOffset",
+                "versions": [
+                    1
+                ]
+            }
+        ]
+    }
+}
+    """

@@ -102,5 +102,11 @@ def create_application(config=None):
 
     TaskManger_instance =TaskManger.get_task_manager()
     logger.info("Task Manager initialized: %s", TaskManger_instance)
+    
+    
+    # match mode setting
+    match_mode = app.config["BASE"].get("match_mode","strict").lower()
+    if match_mode not in ["strict","relaxed"]:
+        match_mode = "strict"
 
     return app

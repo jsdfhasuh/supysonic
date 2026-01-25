@@ -6,7 +6,7 @@
 # Distributed under terms of the GNU AGPLv3 license.
 
 API_VERSION = "1.12.0"
-
+from functools import wraps
 import binascii
 import logging
 import uuid

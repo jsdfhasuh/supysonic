@@ -36,7 +36,7 @@ from .db import (
     Image,
     TrackArtist,
 )
-from .tool import download_image, read_dict_from_json, write_dict_to_json, extract_year
+from .tool import download_image, read_dict_from_json, write_dict_to_json, extract_year,get_file_md5
 from .nfo.nfo import NfoHandler
 
 logger = logging.getLogger(__name__)
@@ -1018,3 +1018,14 @@ class Scanner(Thread):
 
     def stats(self):
         return self.__stats
+
+def renow_track_hash():
+    all_tracks = Track.select().all()
+    for track in all_tracks:
+        path = track.path
+        if track.content_hash == "NULL":
+            hash_value = get_file_md5(path)
+            track.content_hash = hash_value
+            track.save()
+            logger.info(f"renow track {track.title} hash to {hash_value}")
+        

@@ -34,7 +34,7 @@ from uuid import UUID, uuid4
 from PIL import Image as PILImage
 from .tool import read_dict_from_json
 
-SCHEMA_VERSION = "20260113"
+SCHEMA_VERSION = "20260115"
 
 
 def now():
@@ -357,7 +357,7 @@ class Album(_Model):
 
         return artists
 
-    def as_subsonic_album(self, user):  # "AlbumID3" type in XSD
+    def as_subsonic_album(self, user,server_type=None):  # "AlbumID3" type in XSD
         duration, created = self.tracks.select(
             fn.sum(Track.duration), fn.min(Track.created)
         ).scalar(as_tuple=True)
@@ -372,6 +372,9 @@ class Album(_Model):
             "albumArtist": str(self.artist.get_artist_name()),
             "albumArtistId": str(self.artist.id),
             "created": created.isoformat(),
+            "smallImageUrl": "",
+            "mediumImageUrl": "",
+            "largeImageUrl": "",
         }
 
         #     # 添加参与者信息
@@ -394,13 +397,14 @@ class Album(_Model):
         #     track_with_cover = self.tracks.where(Track.has_art).first()
         #     if track_with_cover is not None:
         #         info["coverArt"] = str(track_with_cover.id)
-        al_image = (
-            Image.select()
-            .where((Image.image_type == "album") & (Image.related_id == str(self.id)))
-            .first()
-        )
-        if al_image:
-            info["coverArt"] =  str(al_image.id)
+        if "music"  not in server_type.lower():
+            al_image = (
+                Image.select()
+                .where((Image.image_type == "album") & (Image.related_id == str(self.id)))
+                .first()
+            )
+            if al_image:
+                info["coverArt"] = str(al_image.id)
         if self.year:
             info["year"] = self.year
 

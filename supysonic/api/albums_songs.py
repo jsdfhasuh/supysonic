@@ -151,7 +151,7 @@ def album_list_id3():
             "albumList2",
             {
                 "album": [
-                    a.as_subsonic_album(request.user)
+                    a.as_subsonic_albumas_subsonic_album(request.user,request.client.client_name)
                     for a in query.order_by(random()).limit(size)
                 ]
             },
@@ -177,7 +177,7 @@ def album_list_id3():
 
         for a in sorted_albums[:size]:
             if a.id not in added_albums:
-                result_albums.append(a.as_subsonic_album(request.user))
+                result_albums.append(a.as_subsonic_album(request.user,request.client.client_name))
                 added_albums.add(a.id)
 
         if len(result_albums) >= size:
@@ -212,7 +212,7 @@ def album_list_id3():
             )
         for a in recent_albums:
             if a.id not in added_albums:
-                result_albums.append(a.as_subsonic_album(request.user))
+                result_albums.append(a.as_subsonic_album(request.user,request.client.client_name))
                 added_albums.add(a.id)
     elif ltype == "starred":
         query = (
@@ -245,7 +245,7 @@ def album_list_id3():
     if len(result_albums) < size:
         for a in query.limit(size).offset(offset):
             if a.id not in added_albums:
-                result_albums.append(a.as_subsonic_album(request.user))
+                result_albums.append(a.as_subsonic_album(request.user,request.client.client_name))
                 added_albums.add(a.id)
     else:
         result_albums = result_albums[offset:size]
@@ -370,7 +370,7 @@ def get_starred_id3():
         "starred2",
         {
             "artist": [sa.starred.as_subsonic_artist(request.user) for sa in arq],
-            "album": [sa.starred.as_subsonic_album(request.user) for sa in alq],
+            "album": [sa.starred.as_subsonic_album(request.user,request.client.client_name) for sa in alq],
             "song": [
                 st.starred.as_subsonic_child(request.user, request.client) for st in trq
             ],

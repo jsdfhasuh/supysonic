@@ -91,11 +91,26 @@ def read_dict_from_json(filename):
     except FileNotFoundError:
         write_dict_to_json(data={}, filename=filename)
         return {}
-
-
+    
 def remove_dict_from_json(filename, key):
     with open(filename, "r") as json_file:
         data = json.load(json_file)
     if key in data:
         del data[key]
     write_dict_to_json(data=data, filename=filename)
+    
+def get_file_hash(filepath, hash_func):
+    import hashlib
+
+    hash_obj = hash_func()
+    with open(filepath, 'rb') as f:
+        while True:
+            data = f.read(8192)
+            if not data:
+                break
+            hash_obj.update(data)
+    return hash_obj.hexdigest()
+
+def get_file_md5(filepath):
+    import hashlib
+    return get_file_hash(filepath, hashlib.md5)

@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS track (
     play_count_web INTEGER NOT NULL,
     last_play DATETIME,
     root_folder_id INTEGER NOT NULL REFERENCES folder(id),
+    content_hash CHAR(40) NOT NULL,
     folder_id INTEGER NOT NULL REFERENCES folder(id)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE INDEX index_track_album_id_fk ON track(album_id);

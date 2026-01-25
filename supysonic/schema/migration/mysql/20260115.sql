@@ -1,0 +1,3 @@
+ALTER TABLE track
+    ADD COLUMN content_hash CHAR(40) NOT NULL DEFAULT 'NULL';
+

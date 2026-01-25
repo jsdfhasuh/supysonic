@@ -241,7 +241,7 @@ def artist_info():
     albums |= {t.album for t in res.tracks}
     albums |= {rel.album_id for rel in res.artist_albums}
     info["album"] = [
-        a.as_subsonic_album(request.user)
+        a.as_subsonic_album(request.user,request.client.client_name)
         for a in sorted(albums, key=lambda a: a.sort_key())
     ]
 
@@ -284,14 +284,31 @@ def artist_info2():
 @api_routing("/getAlbum")
 def album_info():
     res = get_entity(Album)
-    info = res.as_subsonic_album(request.user)
+    info = res.as_subsonic_album(request.user,request.client.client_name)
     info["song"] = [
         t.as_subsonic_child(request.user, request.client)
         for t in sorted(res.tracks, key=lambda t: t.sort_key())
     ]
-
+    image_base_url = request.url.replace("/getAlbumInfo2", "/getCoverArt")
+    image_base_url = image_base_url.replace(f"{res.id}", f"al-{res.id}")
+    info['cover_art'] = f'{image_base_url}&input_size=large'
     return request.formatter("album", info)
 
+@api_routing("/getAlbumInfo2")
+def album_info2():
+    res = get_entity(Album)
+    info = res.as_subsonic_album(request.user,request.client.client_name)
+    client = request.client
+    name = client.client_name
+    image_base_url = request.url.replace("/getAlbumInfo2", "/getCoverArt")
+    image_base_url = image_base_url.replace(f"{res.id}", f"al-{res.id}")
+    image_base_url = f"{image_base_url}?&id=al-{res.id}"
+    info['smallImageUrl'] = f"{image_base_url}&input_size=small"
+    info['mediumImageUrl'] = f"{image_base_url}&input_size=medium"
+    info['largeImageUrl'] = f"{image_base_url}&input_size=large"
+    info['cover_art'] = f'{image_base_url}&input_size=large'
+    return request.formatter("albumInfo", info)
+    
 
 @api_routing("/getSong")
 def track_info():

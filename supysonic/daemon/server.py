@@ -64,6 +64,8 @@ class Daemon:
         Thread(target=self.__listen).start()
         while not self.__stopped.is_set():
             time.sleep(1)
+            
+    
 
     def __listen(self):
         while not self.__stopped.is_set():

@@ -228,7 +228,7 @@ def search_id3():
         OrderedDict(
             (
                 ("artist", [a.as_subsonic_artist(request.user) for a in artists]),
-                ("album", [a.as_subsonic_album(request.user) for a in albums]),
+                ("album", [a.as_subsonic_album(request.user,request.client.client_name) for a in albums]),
                 (
                     "song",
                     [t.as_subsonic_child(request.user, request.client) for t in songs],

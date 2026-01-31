@@ -66,7 +66,7 @@ def prepare_transcoding_cmdline(
 @api_routing("/stream")
 def stream_media():
     res = get_entity(Track)
-
+    timeoffset = request.values.get("timeOffset")
     # if "timeOffset" in request.values:
     #     raise UnsupportedParameter("timeOffset")
     if "size" in request.values:

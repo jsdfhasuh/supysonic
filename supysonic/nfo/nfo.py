@@ -242,3 +242,8 @@ class NfoHandler:
                 print(' ' * indent + ']')
             else:
                 print(str(value))
+    
+    @classmethod
+    def is_nfo_file(cls, file_path: str) -> bool:
+        """检查给定文件是否为 NFO 文件（基于扩展名）"""
+        return file_path.lower().endswith('.nfo')

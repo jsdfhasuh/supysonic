@@ -47,7 +47,8 @@ class MissingParameter(SubsonicAPIException):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.message = "A required parameter is missing."
+
+        self.message = f"A required parameter is missing.args: {args}, kwargs: {kwargs}"
 
 
 class ClientMustUpgrade(SubsonicAPIException):

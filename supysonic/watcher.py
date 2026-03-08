@@ -358,7 +358,7 @@ class SupysonicWatcher:
         scanner.prune()
 
     def start(self):
-        self.first_scanner()
+        # self.first_scanner()
         self.__queue = ScannerProcessingQueue(self.__delay)
         self.__observer = Observer()
         self.__handler.queue = self.__queue

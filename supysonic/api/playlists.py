@@ -9,11 +9,12 @@ import uuid
 
 from flask import request
 
-from ..db import Playlist, User, Track, db
+from ..db import Playlist, User, Track, db,StarredTrack
+
 
 from . import get_entity, api_routing
 from .exceptions import Forbidden, MissingParameter
-
+import time
 
 @api_routing("/getPlaylists")
 def list_playlists():
@@ -23,7 +24,7 @@ def list_playlists():
         .order_by(Playlist.name)
     )
 
-    username = request.values.get("username")
+    username = request.values.get("username") or request.values.get("u")
     if username:
         if not request.user.admin:
             raise Forbidden()
@@ -32,19 +33,51 @@ def list_playlists():
         # requested user doesn't exist
         user = User.get(name=username)
         query = Playlist.select().where(Playlist.user == user).order_by(Playlist.name)
+        # add star to indicate 
+        trq = (StarredTrack.select(StarredTrack.starred).join(Track).where(StarredTrack.user == request.user).order_by(-StarredTrack.date))
+        first_track = trq[0].starred if trq else None
+        first_album = first_track.album if first_track else None
 
+        favourite_playlist  = {'id': 'default',
+                              'name': 'my Starred Tracks',
+                              'owner': user.name,
+                              'public': False,
+                              'comment': 'Tracks you have starred',
+                              'songCount': len(trq),
+                              'duration': sum(t.starred.duration for t in trq),
+                              'created': time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime()),
+                              'changed': time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime()),
+                              "coverArt": str(first_album.id) if first_album else None
+                              }
+    temp = [p.as_subsonic_playlist(request.user) for p in query]
+    temp.insert(0,favourite_playlist)
     return request.formatter(
         "playlists",
-        {"playlist": [p.as_subsonic_playlist(request.user) for p in query]},
+        {"playlist": temp},
     )
 
 
 @api_routing("/getPlaylist")
 def show_playlist():
     res = get_entity(Playlist)
-    if res.user != request.user and not res.public and not request.user.admin:
+    if  isinstance(res, Playlist) and res.user != request.user and not res.public and not request.user.admin:
         raise Forbidden()
-
+    if res == "default" and request.user:
+        trq = (StarredTrack.select(StarredTrack.starred).join(Track).where(StarredTrack.user == request.user).order_by(-StarredTrack.date))
+        info = {
+            "id": "default",
+            "name": "my Starred Tracks",
+            "owner": request.user.name,
+            "public": False,
+            "comment": "Tracks you have starred",
+            "songCount": len(trq),
+            "duration": sum(t.starred.duration for t in trq),
+            "created": time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime()),
+            "changed": time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime()),
+            }
+        entry = [st.starred.as_subsonic_child(request.user, request.client) for st in trq]
+        info["entry"] = entry
+        return request.formatter("playlist", info)
     info = res.as_subsonic_playlist(request.user)
     info["entry"] = [
         t.as_subsonic_child(request.user, request.client) for t in res.get_tracks()
@@ -79,8 +112,10 @@ def create_playlist():
         track = Track[sid]
         playlist.add(track)
     playlist.save()
+    info = playlist.as_subsonic_playlist(request.user)
+    info["entry"] = [t.as_subsonic_child(request.user, request.client) for t in playlist.get_tracks()]
 
-    return request.formatter.empty
+    return request.formatter("playlist", info)
 
 
 @api_routing("/deletePlaylist")

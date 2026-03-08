@@ -712,6 +712,8 @@ class Playlist(_Model):
 
     def as_subsonic_playlist(self, user):
         tracks = self.get_tracks()
+        first_track = tracks[0] if tracks else None
+        first_album = first_track.album if first_track else None
         info = {
             "id": str(self.id),
             "name": (
@@ -724,6 +726,8 @@ class Playlist(_Model):
             "songCount": len(tracks),
             "duration": sum(t.duration for t in tracks),
             "created": self.created.isoformat(),
+            "changed": self.created.isoformat(),
+            "coverArt": str(first_album.id) if first_album else None,
         }
         if self.comment:
             info["comment"] = self.comment

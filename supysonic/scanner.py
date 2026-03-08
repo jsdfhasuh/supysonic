@@ -10,6 +10,7 @@ import os
 import os.path
 import mediafile
 import time
+from peewee import IntegrityError
 
 from datetime import datetime
 from queue import Queue, Empty as QueueEmpty
@@ -36,7 +37,13 @@ from .db import (
     Image,
     TrackArtist,
 )
-from .tool import download_image, read_dict_from_json, write_dict_to_json, extract_year,get_file_md5
+from .tool import (
+    download_image,
+    read_dict_from_json,
+    write_dict_to_json,
+    extract_year,
+    get_file_md5,
+)
 from .nfo.nfo import NfoHandler
 
 logger = logging.getLogger(__name__)
@@ -691,10 +698,14 @@ class Scanner(Thread):
                 sp = MySpotify(self.__config.SPOTIFY, user)
                 lfm = LastFm(self.__config.LASTFM, user)
                 for artist in lost_cover_artist:
-                    if artist.get_artist_name() == "Various Artists" or len(artist.get_artist_name()) < 2:
+                    if (
+                        artist.get_artist_name() == "Various Artists"
+                        or len(artist.get_artist_name()) < 2
+                    ):
                         continue
                     result = lfm.get_artistinfo(
-                        name=artist.get_artist_name(), lang=self.__config.LASTFM['display_lang']
+                        name=artist.get_artist_name(),
+                        lang=self.__config.LASTFM['display_lang'],
                     )
                     if (
                         not result
@@ -808,37 +819,58 @@ class Scanner(Thread):
                                                 ),
                                             )
 
-    def _record_album_artists(self, artists, album):
-        # find all artists in the database
-        al = None
-        ars = []
-        res = []
-        for artist in artists:
-            ar = self.__find_artist(artist)
-            if ar is None:
-                ar = Artist.create(name=artist)
-            ars.append(ar)
-            if not al:
-                al = self.__find_album(artist, album)
-        else:
-            if al is None:
-                al = Album.create(name=album, artist=ars[0])
-        for ar in ars:
-            relation = AlbumArtist.get_or_create(album_id=al, artist_id=ar)
-            res.append(relation)
+    def _record_album_artists(self, artists, album, main_artist=None):
+        artist_names = [self.__sanitize_str(a) for a in artists]
+        artist_names = [name for name in artist_names if name]
+        if not artist_names:
+            artist_names = ["unknown"]
+        with Artist._meta.database.atomic():
+            ars = [self.__find_artist(name) for name in artist_names]
+
+            if main_artist is None:
+                main = ars[0]
+            elif isinstance(main_artist, Artist):
+                main = main_artist
+            else:
+                main = self.__find_artist(main_artist)
+
+            al, created = Album.get_or_create(name=album, artist=main)
+            if created:
+                self.__stats.added.albums += 1
+
+            res = []
+            for ar in ars:
+                try:
+                    relation, _ = AlbumArtist.get_or_create(album_id=al, artist_id=ar)
+                except IntegrityError:
+                    refreshed_artist = Artist.get_or_none(Artist.id == ar.id)
+                    if refreshed_artist is None:
+                        refreshed_artist = self.__find_artist(ar.name)
+                    relation, _ = AlbumArtist.get_or_create(
+                        album_id=al, artist_id=refreshed_artist
+                    )
+                res.append(relation)
         return res, al, ars[0]
 
     def _record_track_artists(self, artists, track):
         tr = track
-        ars = []
+        artist_names = [self.__sanitize_str(a) for a in artists]
+        artist_names = [name for name in artist_names if name]
+        if not artist_names:
+            artist_names = ["unknown"]
+
+        ars = [self.__find_artist(name) for name in artist_names]
         res = []
-        for artist in artists:
-            ar = self.__find_artist(artist)
-            if ar is None:
-                ar = Artist.create(name=artist)
-            ars.append(ar)
         for ar in ars:
-            relation = TrackArtist.get_or_create(track_id=tr, artist_id=ar)
+            try:
+                relation, _ = TrackArtist.get_or_create(track_id=tr, artist_id=ar)
+            except IntegrityError:
+                refreshed_artist = Artist.get_or_none(Artist.id == ar.id)
+                if refreshed_artist is None:
+                    refreshed_artist = self.__find_artist(ar.name)
+                relation, _ = TrackArtist.get_or_create(
+                    track_id=tr, artist_id=refreshed_artist
+                )
             res.append(relation)
         return res, ars[0]
 
@@ -994,6 +1026,7 @@ class Scanner(Thread):
             if not folder_element:
                 return
             track_element = folder_element.tracks.select().first()
+            all_tracks = list(folder_element.tracks)
             if not track_element:
                 return
             album_element = track_element.album
@@ -1003,7 +1036,56 @@ class Scanner(Thread):
                 album_element.year = nfo_year
                 logger.info(f"renow album {album_element.name} year to {nfo_year}")
                 album_element.save()
-            pass
+            # renow album artist
+            albumartist = nfo_data.get('album', {}).get('albumartist', None)[0]
+            if albumartist:
+                album_element.artist = self.__find_artist(albumartist)
+                album_element.save()
+                logger.info(f"renow album {album_element.name} artist to {albumartist}")
+            # renow album_artist relation
+            nfo_artists = nfo_data.get('album', {}).get('artist', None)
+            if nfo_artists:
+                AlbumArtist.delete().where(
+                    AlbumArtist.album_id == album_element
+                ).execute()
+                self._record_album_artists(
+                    nfo_artists, album_element.name, main_artist=album_element.artist
+                )
+                album_element.save()
+            # renow track artist by albumartist
+            # check all tracks cdnum and tracknum right
+            exist_nums = []
+            for db_track in all_tracks:
+
+                if db_track.disc is None or db_track.number is None:
+                    logger.warning(
+                        f"Track {db_track.path} has no disc or track number, skip renow artist"
+                    )
+                    return
+                if db_track.number not in exist_nums:
+                    exist_nums.append((db_track.disc, db_track.number))
+                else:
+                    logger.warning(
+                        f"Track {db_track.path} has duplicate disc and track number, skip renow artist"
+                    )
+                    return
+            # begin renow track artist
+            nfo_tracks = nfo_data.get('album', {}).get('track', [])
+            db_tracks = Track.select().where(Track.album == album_element.id)
+            for nfo_track in nfo_tracks:
+                db_track = db_tracks.where(
+                    (Track.disc == nfo_track.get("cdnum"))
+                    & (Track.number == nfo_track.get("position"))
+                ).first()
+                if db_track:
+                    track = db_track
+                    track.artist = album_element.artist
+                    TrackArtist.delete().where(TrackArtist.track_id == track).execute()
+                    self._record_track_artists(nfo_track.get("artist"), track)
+                    track.save()
+                    logger.info(
+                        f"renow track {track.title} artist to {nfo_track.get('artist')}"
+                    )
 
     def __try_load_tag(self, path):
         try:
@@ -1019,8 +1101,9 @@ class Scanner(Thread):
     def stats(self):
         return self.__stats
 
+
 def renow_track_hash():
-    all_tracks = Track.select().all()
+    all_tracks = Track.select()
     for track in all_tracks:
         path = track.path
         if track.content_hash == "NULL":
@@ -1028,4 +1111,3 @@ def renow_track_hash():
             track.content_hash = hash_value
             track.save()
             logger.info(f"renow track {track.title} hash to {hash_value}")
-        

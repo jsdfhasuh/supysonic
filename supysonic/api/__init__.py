@@ -147,6 +147,8 @@ def get_entity(cls, param="id"):
     eid = request.values[param]
     if cls == Folder:
         eid = int(eid)
+    elif cls == Playlist and eid == "default":
+        return "default"
     else:
         eid = uuid.UUID(eid)
     return cls[eid]

@@ -412,6 +412,7 @@ def cover_art():
     cache = current_app.cache
 
     eid = request.values["id"]
+    print(f"eid: {eid}")
     input_size = request.values.get("input_size", "")
     cover_path = __new_get_cover_path(eid, input_size)
 
@@ -457,14 +458,21 @@ def lyrics_response_for_track(track, lyrics):
 
 @api_routing("/getLyrics")
 def lyrics():
-    artist = request.values["artist"]
-    title = request.values["title"]
 
-    query = (
-        Track.select()
-        .join(Artist)
-        .where(Track.title.contains(title), Artist.name.contains(artist))
-    )
+    id = request.values.get("id","")
+    if id:
+        try:
+            query = Track.select().where(Track.id == id)
+        except Track.DoesNotExist:
+            pass
+    else:
+        artist = request.values["artist"]
+        title = request.values["title"]
+        query = (
+            Track.select()
+            .join(Artist)
+            .where(Track.title.contains(title), Artist.name.contains(artist))
+        )
     for track in query:
         # Read from track metadata
         lyrics = mediafile.MediaFile(track.path).lyrics

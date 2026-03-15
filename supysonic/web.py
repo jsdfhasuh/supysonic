@@ -94,6 +94,11 @@ def create_application(config=None):
         from .api import api
 
         app.register_blueprint(api, url_prefix="/rest")
+        
+    # import emosonic API
+    if app.config["WEBAPP"]["mount_emosonic"]:
+        from .emo import api as emo_api
+        app.register_blueprint(emo_api, url_prefix="/emo")
 
     if not app.testing:
         close_connection()

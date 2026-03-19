@@ -9,7 +9,7 @@ import uuid
 
 from flask import request
 
-from ..db import Playlist, User, Track, db,StarredTrack
+from ..db import Playlist, User, Track, db,StarredTrack,random
 
 
 from . import get_entity, api_routing
@@ -158,3 +158,31 @@ def update_playlist():
     playlist.save()
 
     return request.formatter.empty
+
+@api_routing("/getRecommendedPlaylists")
+def get_recommended_playlists():
+    user = request.user
+    if not user:
+        raise Forbidden()
+    recommended_playlist = Playlist.select().where((Playlist.user == user)).order_by(Playlist.created.desc()).first()
+    if recommended_playlist:
+        info = recommended_playlist.as_subsonic_playlist(request.user)
+        info["entry"] = [t.as_subsonic_child(request.user, request.client) for t in recommended_playlist.get_tracks()]
+        return request.formatter("playlist", info)
+    else:
+        # temp return a random playlist for the user if not exist
+        trs = Track.select().order_by(random()).limit(50)
+        info = {
+            "id": "Recommended",
+            "name": "Recommended Playlist",
+            "owner": request.user.name,
+            "public": False,
+            "comment": "recommended playlist for you",
+            "songCount": len(trs),
+            "duration": sum(t.starred.duration for t in trs),
+            "created": time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime()),
+            "changed": time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime()),
+            }
+        entry = [st.starred.as_subsonic_child(request.user, request.client) for st in trs]
+        info["entry"] = entry
+        return request.formatter("playlist", info)

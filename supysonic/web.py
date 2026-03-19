@@ -18,7 +18,7 @@ from .config import IniConfig
 from .cache import Cache
 from .db import init_database, open_connection, close_connection, Folder
 from .utils import get_secret_key
-
+from .recommend import create_recommend_playlist
 logger = logging.getLogger(__package__)
 
 
@@ -81,7 +81,6 @@ def create_application(config=None):
     cache_path = app.config["WEBAPP"]["cache_dir"]
     if not path.exists(cache_path):
         makedirs(cache_path)  # pragma: nocover
-
     # Read or create secret key
     app.secret_key = get_secret_key("cookies_secret")
 
@@ -113,5 +112,7 @@ def create_application(config=None):
     match_mode = app.config["BASE"].get("match_mode","strict").lower()
     if match_mode not in ["strict","relaxed"]:
         match_mode = "strict"
-
+        
+    # create recommend music playlist
+    create_recommend_playlist()
     return app

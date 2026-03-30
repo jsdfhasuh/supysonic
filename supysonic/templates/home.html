@@ -2,87 +2,210 @@
 This file is part of Supysonic.
 Supysonic is a Python implementation of the Subsonic server API.
 
-Copyright (C) 2013-2018 Alban 'spl0k' Féron
-2017-2024 Óscar García Amor
-
 Distributed under terms of the GNU AGPLv3 license.
 -#}
 {% extends "layout.html" %}
+{% block title %}Overview · Emosonic Server{% endblock %}
 {% block navbar_index %}
-<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.index') }}">Home</a>
+<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.index') }}">Overview</a>
 {% endblock %}
+{% block page_title %}Overview{% endblock %}
+{% block page_subtitle %}Monitor your media footprint, keep an eye on live devices, and jump directly into the operational areas you use most.{% endblock %}
 {% block body %}
-<h2 class="mt-4 pb-2 border-bottom">Welcome to Supysonic!</h2>
-<p>There's nothing much to see here. If you want to listen to some music,
-  you'll have to use one of the available clients. Here's a small list of
-  clients that have been tested.</p>
-<div class="row">
-  <div class="col-md-6 mb-3">
-    <div class="card">
-      <div class="card-header">
-        Web-based
-      </div>
+<div class="row row-cols-1 row-cols-md-3 g-3 console-section-spacer">
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header">Artists indexed</div>
       <div class="card-body">
-        <ul class="mb-0">
-          <li><a href="https://github.com/peguerosdc/subplayer">Subplayer</a> (<a
-              href="https://subplayer.netlify.app">direct use</a>)</li>
-          <li><a href="https://github.com/tsquillario/Jamstash">Jamstash</a></li>
-        </ul>
+        <div class="console-metric-value">{{ stats.artists }}</div>
+        <div class="console-metric-caption">Library entities available for browsing and metadata enrichment.</div>
       </div>
     </div>
   </div>
-  <div class="col-md-6 mb-3">
-    <div class="card">
-      <div class="card-header">
-        Android apps
-      </div>
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header">Albums indexed</div>
       <div class="card-body">
-        <ul class="mb-0">
-          <li><a href="https://github.com/CappielloAntonio/tempo">Tempo</a></li>
-          <li><a href="https://github.com/daneren2005/Subsonic">DSub</a></li>
-          <li><a href="https://gitlab.com/ultrasonic/ultrasonic">Ultrasonic</a></li>
-        </ul>
+        <div class="console-metric-value">{{ stats.albums }}</div>
+        <div class="console-metric-caption">Structured release catalog tracked by the server.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header">Tracks indexed</div>
+      <div class="card-body">
+        <div class="console-metric-value">{{ stats.tracks }}</div>
+        <div class="console-metric-caption">Streamable media assets currently available to clients.</div>
       </div>
     </div>
   </div>
 </div>
-<p class="pb-2 border-bottom">For a more complete list, check the <a
-    href="http://www.subsonic.org/pages/apps.jsp">Subsonic website</a>.</p>
-<div class="row mb-3">
-  <div class="col">
-    <div class="card">
-      <div class="card-header text-center">
-        Stats
+
+<div class="row g-3 console-section-spacer">
+  <div class="col-xl-8">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Operations highlights</span>
+        <span class="console-chip">Control plane</span>
       </div>
       <div class="card-body">
-        <div class="row grid gap-3">
-          <div class="col">
-            <div class="text-center">
-              <div class="stats mb-3" id="artists">
-                <p>{{ stats.artists }}</p>
-              </div>
-              <a href="{{ url_for('frontend.metadata_artists') }}"><strong>artists</strong></a>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="p-3 rounded-4 border h-100" style="border-color: var(--console-border); background: var(--console-brand-soft);">
+              <p class="console-eyebrow mb-2">Live supervision</p>
+              <h5 class="mb-2">Track active devices and sessions</h5>
+              <p class="console-muted mb-3">Open the devices panel to review playback state, queue depth, session activity, and last update times.</p>
+              <a class="btn btn-dark btn-sm" href="{{ url_for('frontend.device_index') }}">Open device monitor</a>
             </div>
           </div>
-          <div class="col">
-            <div class="text-center">
-              <div class="stats mb-3">
-                <p>{{ stats.albums }}</p>
+          <div class="col-md-6">
+            <div class="p-3 rounded-4 border h-100" style="border-color: var(--console-border); background: rgba(222, 143, 63, 0.12);">
+              <p class="console-eyebrow mb-2">Library operations</p>
+              <h5 class="mb-2">Keep folders and metadata organized</h5>
+              <p class="console-muted mb-3">Manage source folders, trigger scans, and curate metadata from the administrative surfaces.</p>
+              <div class="d-flex flex-wrap gap-2">
+                <a class="btn btn-outline-dark btn-sm" href="{{ url_for('frontend.folder_index') }}">Manage folders</a>
+                <a class="btn btn-outline-dark btn-sm" href="{{ url_for('frontend.metadata_artists') }}">Browse artists</a>
               </div>
-              <a href="{{ url_for('frontend.metadata_album') }}"><strong>album</strong></a>
-            </div>
-          </div>
-          <div class="col">
-            <div class="text-center">
-              <div class="stats mb-3">
-                <p>{{ stats.tracks }}</p>
-              </div>
-              <strong>tracks</strong>
             </div>
           </div>
         </div>
       </div>
     </div>
   </div>
+  <div class="col-xl-4">
+    <div class="card h-100">
+      <div class="card-header">Quick actions</div>
+      <div class="card-body">
+        <ul class="console-info-list">
+          <li>
+            <span>Playlists</span>
+            <a href="{{ url_for('frontend.playlist_index') }}">Open</a>
+          </li>
+          <li>
+            <span>User administration</span>
+            <a href="{{ url_for('frontend.user_index') }}">Open</a>
+          </li>
+          <li>
+            <span>Folder management</span>
+            <a href="{{ url_for('frontend.folder_index') }}">Open</a>
+          </li>
+          <li>
+            <span>Profile settings</span>
+            <a href="{{ url_for('frontend.user_profile', uid = 'me') }}">Open</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
 </div>
+
+<div class="row g-3 console-section-spacer">
+  <div class="col-xl-7">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Library footprint</span>
+        <span class="console-density-note text-body-secondary">Content inventory</span>
+      </div>
+      <div class="card-body">
+        <div class="row g-3 text-center">
+          <div class="col-md-4">
+            <div class="stats mb-3"><p>{{ stats.artists }}</p></div>
+            <a href="{{ url_for('frontend.metadata_artists') }}"><strong>artists</strong></a>
+          </div>
+          <div class="col-md-4">
+            <div class="stats mb-3"><p>{{ stats.albums }}</p></div>
+            <a href="{{ url_for('frontend.metadata_album') }}"><strong>albums</strong></a>
+          </div>
+          <div class="col-md-4">
+            <div class="stats mb-3"><p>{{ stats.tracks }}</p></div>
+            <strong>tracks</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-5">
+    <div class="card h-100">
+      <div class="card-header">Client ecosystem</div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <h6>Web-based</h6>
+            <ul class="mb-0">
+              <li><a href="https://github.com/peguerosdc/subplayer">Subplayer</a></li>
+              <li><a href="https://github.com/tsquillario/Jamstash">Jamstash</a></li>
+            </ul>
+          </div>
+          <div class="col-md-6">
+            <h6>Android</h6>
+            <ul class="mb-0">
+              <li><a href="https://github.com/CappielloAntonio/tempo">Tempo</a></li>
+              <li><a href="https://github.com/daneren2005/Subsonic">DSub</a></li>
+              <li><a href="https://gitlab.com/ultrasonic/ultrasonic">Ultrasonic</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if request.user.admin and device_summary %}
+<div class="row g-3">
+  <div class="col-xl-5">
+    <div class="card h-100">
+      <div class="card-header">Live device health</div>
+      <div class="card-body">
+        <ul class="console-info-list">
+          <li><span>Online devices</span><strong>{{ device_summary.onlineDevices }}</strong></li>
+          <li><span>Active sessions</span><strong>{{ device_summary.activeSessions }}</strong></li>
+          <li><span>Playing sessions</span><strong>{{ device_summary.playingSessions }}</strong></li>
+          <li><span>Recently updated sessions</span><strong>{{ device_summary.recentlyUpdated }}</strong></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-7">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Recent connected devices</span>
+        <a href="{{ url_for('frontend.device_index') }}">Full monitor</a>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Device</th>
+              <th>User</th>
+              <th>Playback</th>
+              <th>Queue</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for device in recent_devices %}
+            <tr>
+              <td>
+                <div class="console-table-title">{{ device.deviceName }}</div>
+                <small class="console-muted">{{ device.clientId }}</small>
+              </td>
+              <td>{{ device.userName }}</td>
+              <td>
+                <span class="console-status status-{{ device.state or 'unknown' }}">{{ device.state or 'unknown' }}</span>
+              </td>
+              <td>{{ device.queueCount if device.queueCount is not none else '-' }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="4" class="text-center text-body-secondary">No devices online.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

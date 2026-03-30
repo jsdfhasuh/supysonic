@@ -403,6 +403,20 @@ def __new_get_cover_path(eid, input_size):
                 image_type="album", related_id=temp_album.id
             )
             return cover_image.path if cover_image else None
+    else:
+        # default try to find in album first
+        id = eid
+        cover_image = db_image.get_or_none(image_type="album", related_id=id)
+        if cover_image:
+            if os.path.exists(cover_image.path):
+                return cover_image.path
+            else:
+                db_image.delete().where(
+                    db_image.image_type == "album", db_image.related_id == id
+                ).execute()
+                return None
+        else:
+            return None
 
     return None
 
@@ -459,7 +473,7 @@ def lyrics_response_for_track(track, lyrics):
 @api_routing("/getLyrics")
 def lyrics():
 
-    id = request.values.get("id","")
+    id = request.values.get("id", "")
     if id:
         try:
             query = Track.select().where(Track.id == id)

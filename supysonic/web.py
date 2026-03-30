@@ -87,17 +87,22 @@ def create_application(config=None):
     # Import app sections
     if app.config["WEBAPP"]["mount_webui"]:
         from .frontend import frontend
+        from .frontend.share import share
 
         app.register_blueprint(frontend)
+        app.register_blueprint(share)
     if app.config["WEBAPP"]["mount_api"]:
         from .api import api
 
         app.register_blueprint(api, url_prefix="/rest")
         
     # import emosonic API
-    if app.config["WEBAPP"]["mount_emosonic"]:
+    if app.config["WEBAPP"].get("mount_emosonic", False):
         from .emo import api as emo_api
+        from .emo.ws import init_socketio
+
         app.register_blueprint(emo_api, url_prefix="/emo")
+        init_socketio(app)
 
     if not app.testing:
         close_connection()
@@ -113,6 +118,6 @@ def create_application(config=None):
     if match_mode not in ["strict","relaxed"]:
         match_mode = "strict"
         
-    # create recommend music playlist
-    create_recommend_playlist()
+    # # create recommend music playlist
+    # create_recommend_playlist()
     return app

@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ track.title }} - Emosonic Share</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b121a;
+        --surface: rgba(18, 28, 42, 0.84);
+        --surface-strong: #152131;
+        --surface-soft: rgba(82, 184, 208, 0.08);
+        --border: rgba(255, 255, 255, 0.1);
+        --text: #e9f1fb;
+        --muted: #9baec2;
+        --accent: #5ac3dc;
+        --accent-strong: #f0ab59;
+        --success: #46b578;
+        --shadow: 0 28px 72px rgba(0, 0, 0, 0.34);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top right, rgba(90, 195, 220, 0.22), transparent 26%),
+          radial-gradient(circle at top left, rgba(240, 171, 89, 0.16), transparent 22%),
+          linear-gradient(180deg, #0f1824 0%, var(--bg) 100%);
+        padding: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .share-page {
+        width: min(1120px, 100%);
+        display: grid;
+        gap: 18px;
+      }
+
+      .share-topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        padding: 12px 18px;
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.04);
+        backdrop-filter: blur(16px);
+      }
+
+      .share-brand {
+        display: flex;
+        align-items: center;
+        gap: 0.85rem;
+      }
+
+      .share-brand-mark {
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        color: #fff;
+        background: linear-gradient(135deg, var(--accent), #1d90a5);
+        box-shadow: 0 10px 24px rgba(90, 195, 220, 0.22);
+      }
+
+      .share-brand strong {
+        display: block;
+        font-size: 1rem;
+      }
+
+      .share-brand small,
+      .share-muted {
+        color: var(--muted);
+      }
+
+      .share-topbar-actions {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+
+      .share-shell {
+        display: grid;
+        grid-template-columns: minmax(280px, 400px) minmax(320px, 1fr);
+        gap: 0;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 30px;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(16px);
+      }
+
+      .share-art {
+        position: relative;
+        min-height: 420px;
+        display: flex;
+        align-items: stretch;
+        justify-content: stretch;
+        padding: 0;
+        overflow: hidden;
+      }
+
+      .share-art::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image: var(--share-cover-url);
+        background-size: cover;
+        background-position: center;
+        filter: blur(28px) saturate(1.05);
+        transform: scale(1.12);
+        opacity: 0.72;
+      }
+
+      .share-art::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(10, 16, 24, 0.1), rgba(10, 16, 24, 0.36));
+      }
+
+      .share-art-frame {
+        position: relative;
+        z-index: 1;
+        width: min(100%, 360px);
+        aspect-ratio: 1 / 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 26px;
+        background: rgba(255, 255, 255, 0.08);
+        box-shadow: 0 24px 48px rgba(0, 0, 0, 0.34);
+        overflow: hidden;
+        margin: auto;
+      }
+
+      .share-art img {
+        max-width: 100%;
+        max-height: 100%;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        object-position: center;
+        display: block;
+      }
+
+      .share-art-fallback {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 4.5rem;
+        font-weight: 700;
+        color: rgba(255, 255, 255, 0.68);
+      }
+
+      .share-panel {
+        padding: 34px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 22px;
+      }
+
+      .share-eyebrow {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.84rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .share-title {
+        margin: 0;
+        font-size: clamp(2.2rem, 4vw, 3.4rem);
+        line-height: 1.02;
+        letter-spacing: -0.04em;
+      }
+
+      .share-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.35rem 0.8rem;
+        border-radius: 999px;
+        background: rgba(90, 195, 220, 0.14);
+        color: var(--accent);
+        font-size: 0.82rem;
+        width: fit-content;
+      }
+
+      .share-meta {
+        display: grid;
+        gap: 10px;
+        padding: 16px 18px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid var(--border);
+      }
+
+      .share-meta-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        padding-bottom: 10px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .share-meta-row:last-child {
+        border-bottom: 0;
+        padding-bottom: 0;
+      }
+
+      .share-meta-row span:first-child {
+        color: var(--muted);
+      }
+
+      .share-actions {
+        display: flex;
+        gap: 0.85rem;
+        flex-wrap: wrap;
+      }
+
+      .share-button {
+        appearance: none;
+        border: 1px solid transparent;
+        border-radius: 14px;
+        padding: 0.9rem 1.15rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.18s ease, opacity 0.18s ease, background 0.18s ease;
+      }
+
+      .share-button:hover {
+        transform: translateY(-1px);
+      }
+
+      .share-button-primary {
+        background: linear-gradient(135deg, var(--accent), #2f97ae);
+        color: #05131b;
+      }
+
+      .share-button-secondary {
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--text);
+        border-color: var(--border);
+      }
+
+      .share-link-card {
+        padding: 16px 18px;
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        background: var(--surface-soft);
+      }
+
+      .share-link-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .share-link-label strong {
+        display: block;
+      }
+
+      .share-link-input {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--text);
+        padding: 0.9rem 1rem;
+        font-family: "Consolas", "SFMono-Regular", monospace;
+        font-size: 0.84rem;
+      }
+
+      .share-link-status {
+        margin-top: 0.7rem;
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+
+      .share-audio-wrap {
+        padding: 14px 16px;
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      audio {
+        width: 100%;
+      }
+
+      .share-note {
+        color: var(--muted);
+        font-size: 0.92rem;
+        margin: 0;
+      }
+
+      .share-footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        color: var(--muted);
+        font-size: 0.84rem;
+        flex-wrap: wrap;
+      }
+
+      @media (max-width: 900px) {
+        body {
+          padding: 18px;
+        }
+
+        .share-shell {
+          grid-template-columns: 1fr;
+        }
+
+        .share-art {
+          min-height: 300px;
+        }
+
+        .share-panel {
+          padding: 24px;
+        }
+
+        .share-topbar {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="share-page">
+      <section class="share-topbar">
+        <div class="share-brand">
+          <span class="share-brand-mark">ES</span>
+          <div>
+            <strong>Emosonic Share</strong>
+            <small>A public listening link from Emosonic Server</small>
+          </div>
+        </div>
+        <div class="share-topbar-actions">
+          <button type="button" class="share-button share-button-secondary" id="copy-share-link-top">Copy link</button>
+        </div>
+      </section>
+
+      <section class="share-shell">
+        <section class="share-art" style="--share-cover-url: url('{{ cover_url }}');">
+          <div class="share-art-frame">
+            <img src="{{ cover_url }}" alt="{{ track.title }} cover art" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+            <div class="share-art-fallback" style="display:none;">{{ track.title[0]|upper if track.title else '?' }}</div>
+          </div>
+        </section>
+
+        <section class="share-panel">
+          <div>
+            <p class="share-eyebrow">Shared track</p>
+            <h1 class="share-title">{{ track.title }}</h1>
+          </div>
+
+          <div class="share-chip">Public listening link</div>
+
+          <div class="share-meta">
+            <div class="share-meta-row"><span>Artist</span><strong>{{ artist_name }}</strong></div>
+            <div class="share-meta-row"><span>Album</span><strong>{{ album_name }}</strong></div>
+            <div class="share-meta-row"><span>Duration</span><strong>{{ track.duration_str() }}</strong></div>
+            <div class="share-meta-row"><span>Format</span><strong>{{ track.suffix()|upper }}</strong></div>
+          </div>
+
+          <div class="share-actions">
+            <button type="button" class="share-button share-button-primary" id="play-toggle">Play now</button>
+            <button type="button" class="share-button share-button-secondary" id="copy-share-link">Copy link</button>
+          </div>
+
+          <div class="share-audio-wrap">
+            <audio controls preload="none" id="share-audio" src="{{ stream_url }}"></audio>
+          </div>
+
+          <div class="share-link-card">
+            <div class="share-link-label">
+              <div>
+                <strong>Share URL</strong>
+                <small class="share-muted">Anyone with this exact link can stream this track.</small>
+              </div>
+            </div>
+            <input class="share-link-input" id="share-link-field" type="text" value="{{ current_url }}" readonly>
+            <div class="share-link-status" id="share-link-status">Ready to share.</div>
+          </div>
+
+          <p class="share-note">This page is designed for quick listening. No login is required while the token remains enabled.</p>
+
+          <div class="share-footer">
+            <span>Shared by {{ share_link.created_by.name }}</span>
+            <span>{{ share_link.created_at.isoformat(sep=' ') }}</span>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      const audio = document.getElementById('share-audio');
+      const playToggle = document.getElementById('play-toggle');
+      const linkField = document.getElementById('share-link-field');
+      const linkStatus = document.getElementById('share-link-status');
+
+      async function copyTextWithFallback(text, field) {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+
+        field.removeAttribute('readonly');
+        field.focus();
+        field.select();
+        field.setSelectionRange(0, field.value.length);
+        const copied = document.execCommand('copy');
+        field.setAttribute('readonly', 'readonly');
+        return copied;
+      }
+
+      function updatePlayButton() {
+        playToggle.textContent = audio.paused ? 'Play now' : 'Pause';
+      }
+
+      async function copyLink() {
+        try {
+          const copied = await copyTextWithFallback(linkField.value, linkField);
+          if (!copied) {
+            throw new Error('copy failed');
+          }
+          linkStatus.textContent = 'Share link copied to clipboard.';
+        } catch (error) {
+          linkField.select();
+          linkField.setSelectionRange(0, linkField.value.length);
+          linkStatus.textContent = 'Clipboard access unavailable. The link is selected for manual copy.';
+        }
+      }
+
+      document.getElementById('copy-share-link').addEventListener('click', copyLink);
+      document.getElementById('copy-share-link-top').addEventListener('click', copyLink);
+
+      playToggle.addEventListener('click', async function () {
+        if (audio.paused) {
+          await audio.play();
+        } else {
+          audio.pause();
+        }
+        updatePlayButton();
+      });
+
+      audio.addEventListener('play', updatePlayButton);
+      audio.addEventListener('pause', updatePlayButton);
+      updatePlayButton();
+    </script>
+  </body>
+</html>

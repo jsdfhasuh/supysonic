@@ -3,12 +3,15 @@
 from .db import User, Artist, Album, Track, User_Play_Activity,random, Playlist
 import time
 
-def create_recommend_playlist(num_songs=50):
+def create_recommend_playlist(num_songs=50,user = None):
     today = time.strftime('%Y-%m-%d', time.gmtime())
     exist_users = User.select()
     if not exist_users:
         return None  # No users in the database, cannot create a playlist
-    for user in exist_users:
+    if user and user not in exist_users:
+        return None  # Specified user is not in the database
+    users_to_process = [user] if user else exist_users
+    for user in users_to_process:
         name = user.name
         user_activities = User_Play_Activity.select().where(
             User_Play_Activity.user == user

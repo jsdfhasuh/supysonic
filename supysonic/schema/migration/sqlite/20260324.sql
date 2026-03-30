@@ -1,0 +1,1 @@
+ALTER TABLE emo_session_queue ADD COLUMN position_ms INTEGER NOT NULL DEFAULT 0;

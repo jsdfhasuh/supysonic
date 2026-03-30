@@ -2,86 +2,109 @@
  This file is part of Supysonic.
  Supysonic is a Python implementation of the Subsonic server API.
 
- Copyright (C) 2013-2018 Alban 'spl0k' Féron
-               2017-2024 Óscar García Amor
-
  Distributed under terms of the GNU AGPLv3 license.
 -#}
 {% extends "layout.html" %}
+{% block title %}Playlists · Emosonic Server{% endblock %}
 {% block navbar_playlists %}
 <a class="nav-link active" aria-current="page" href="{{ url_for('frontend.playlist_index') }}">Playlists</a>
 {% endblock %}
+{% block page_title %}Playlists{% endblock %}
+{% block page_subtitle %}Manage your own collections, inspect shared playlists, and export curated M3U sets from the Emosonic Server library.{% endblock %}
 {% block body %}
-<h2 class="mt-4 pb-2 border-bottom">My playlists</h2>
-{% if not mine.count() %}
-<p>You don't have any playlists.</p>
-{% else %}
-<div class="table-responsive">
-  <table class="table table-striped table-hover align-middle">
-    <thead>
-      <tr><th>Playlist</th><th>Tracks</th><th>Public</th><th>Export</th><th>Delete</th></tr>
-    </thead>
-    <tbody>
-      {% for p in mine %}
-      <tr>
-        <td><a href="{{ url_for('frontend.playlist_details', uid = p.id) }}">{{ p.name }}</a></td>
-        <td>{{ p.get_tracks()|length }}</td>
-        <td>{% if p.public %}<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check-square bi-va-fix" aria-label="Public playlist" viewBox="0 0 16 16">
-            <path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2z"/>
-            <path d="M10.97 4.97a.75.75 0 0 1 1.071 1.05l-3.992 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425z"/>
-          </svg>{% else %}<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-square bi-va-fix" aria-label="Private playlist" viewBox="0 0 16 16">
-            <path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2z"/>
-          </svg>{% endif %}</td>
-        <td><button class="btn btn-outline-secondary btn-sm" data-href="{{ url_for('frontend.playlist_export', uid = p.id) }}" data-bs-toggle="modal" data-bs-target="#confirm-export" aria-label="Export playlist">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-down-square-fill bi-va-fix" aria-hidden="true" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Export M3U playlist" viewBox="0 0 16 16">
-              <path fill-rule="evenodd" d="M15 2a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1zM0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm8.5 2.5a.5.5 0 0 0-1 0v5.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293z"/>
-            </svg></button></td>
-        <td><button class="btn btn-outline-danger btn-sm" data-href="{{ url_for('frontend.playlist_delete', uid = p.id) }}" data-bs-toggle="modal" data-bs-target="#confirm-delete" aria-label="Delete playlist">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-x-square bi-va-fix" aria-hidden="true" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Delete playlist" viewBox="0 0 16 16">
-              <path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2z"/>
-              <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708"/>
-            </svg></button></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="row row-cols-1 row-cols-md-3 g-3 console-section-spacer">
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header">My playlists</div>
+      <div class="card-body">
+        <div class="console-metric-value">{{ mine.count() }}</div>
+        <div class="console-metric-caption">Playlists owned by the current user.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header">Shared playlists</div>
+      <div class="card-body">
+        <div class="console-metric-value">{{ others.count() }}</div>
+        <div class="console-metric-caption">Playlists published by other users.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header">Track shares</div>
+      <div class="card-body d-flex flex-column justify-content-between gap-3">
+        <div class="console-metric-caption">Manage public listening links for individual tracks.</div>
+        <a href="{{ url_for('frontend.share_index') }}" class="btn btn-outline-dark btn-sm">Open shares</a>
+      </div>
+    </div>
+  </div>
 </div>
-{% endif %}
+
+<div class="card console-section-spacer">
+  <div class="card-header">My playlists</div>
+  <div class="card-body p-0">
+    {% if not mine.count() %}
+    <div class="p-4 text-body-secondary">You do not have any playlists yet.</div>
+    {% else %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr><th>Playlist</th><th>Tracks</th><th>Visibility</th><th>Export</th><th>Delete</th></tr>
+        </thead>
+        <tbody>
+          {% for p in mine %}
+          <tr>
+            <td><a href="{{ url_for('frontend.playlist_details', uid = p.id) }}">{{ p.name }}</a></td>
+            <td>{{ p.get_tracks()|length }}</td>
+            <td><span class="console-status status-{{ 'playing' if p.public else 'unknown' }}">{{ 'public' if p.public else 'private' }}</span></td>
+            <td><button class="btn btn-outline-dark btn-sm" data-href="{{ url_for('frontend.playlist_export', uid = p.id) }}" data-bs-toggle="modal" data-bs-target="#confirm-export">Export</button></td>
+            <td><button class="btn btn-outline-danger btn-sm" data-href="{{ url_for('frontend.playlist_delete', uid = p.id) }}" data-bs-toggle="modal" data-bs-target="#confirm-delete">Delete</button></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
 {% if others.count() %}
-<h2 class="mt-4 pb-2 border-bottom">Others' playlists</h2>
-<div class="table-responsive">
-  <table class="table table-striped table-hover align-middle">
-    <thead>
-      <tr><th>Playlist</th><th>Owner</th><th>Tracks</th></tr>
-    </thead>
-    <tbody>
-      {% for p in others %}
-      <tr>
-        <td><a href="{{ url_for('frontend.playlist_details', uid = p.id) }}">{{ p.name }}</a></td>
-        <td>{{ p.user.name }}</td>
-        <td>{{ p.get_tracks()|length }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="card console-section-spacer">
+  <div class="card-header">Shared playlists</div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr><th>Playlist</th><th>Owner</th><th>Tracks</th></tr>
+      </thead>
+      <tbody>
+        {% for p in others %}
+        <tr>
+          <td><a href="{{ url_for('frontend.playlist_details', uid = p.id) }}">{{ p.name }}</a></td>
+          <td>{{ p.user.name }}</td>
+          <td>{{ p.get_tracks()|length }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endif %}
+
 <div class="modal fade" id="confirm-export" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="confirm-export-label" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h1 class="modal-title fs-5" id="confirm-export-label">Warning</h1>
+        <h1 class="modal-title fs-5" id="confirm-export-label">Export warning</h1>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <p>The exported playlist will use the same local paths the server
-        uses itself. This means the playlist will only work on the very same
-        system the Supysonic server is running. If you were to export it
-        from another machine it won't be usable.</p>
+        <p>The exported playlist uses the local filesystem paths seen by the server, so it will only be directly usable on the same host.</p>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Oh ok. Forget it</button>
-        <a type="button" class="btn btn-primary btn-ok">Got it, export the playlist</a>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <a type="button" class="btn btn-primary btn-ok">Export playlist</a>
       </div>
     </div>
   </div>
@@ -90,15 +113,15 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h1 class="modal-title fs-5" id="confirm-delete-label">Are you sure?</h1>
+        <h1 class="modal-title fs-5" id="confirm-delete-label">Delete playlist?</h1>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <p>Are you sure that you want to delete playlist?</p>
+        <p>Are you sure that you want to delete this playlist?</p>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Nope</button>
-        <a type="button" class="btn btn-danger btn-ok">Yes, delete!</a>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <a type="button" class="btn btn-danger btn-ok">Delete playlist</a>
       </div>
     </div>
   </div>

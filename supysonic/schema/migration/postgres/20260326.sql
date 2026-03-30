@@ -1,0 +1,10 @@
+ALTER TABLE track ADD COLUMN play_count_web INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS shared_track_link (
+    id UUID PRIMARY KEY,
+    token VARCHAR(96) NOT NULL UNIQUE,
+    track_id UUID NOT NULL REFERENCES track,
+    created_by_id UUID NOT NULL REFERENCES "user",
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL
+);

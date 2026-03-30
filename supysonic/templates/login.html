@@ -8,10 +8,13 @@
  Distributed under terms of the GNU AGPLv3 license.
 -#}
 {% extends "layout.html" %}
+{% block title %}Login · Emosonic Server{% endblock %}
+{% block page_title %}Sign in{% endblock %}
+{% block page_subtitle %}Authenticate to access the Emosonic Server control surface and administrative tools.{% endblock %}
 {% block body %}
 <div class="col-md-8 offset-md-2 col-sm-10 offset-sm-1 my-5">
   <div class="card">
-    <div class="card-header">Please log in</div>
+    <div class="card-header">Sign in to Emosonic Server</div>
     <div class="card-body">
       <form method="post">
         <div class="input-group mb-3">

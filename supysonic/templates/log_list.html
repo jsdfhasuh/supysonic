@@ -1,0 +1,23 @@
+{% extends "layout.html" %}
+{% block title %}Logs · Emosonic Server{% endblock %}
+{% block page_title %}Uploaded logs{% endblock %}
+{% block page_subtitle %}Review diagnostic files uploaded through the Emo endpoints and open individual logs for inspection.{% endblock %}
+{% block body %}
+<div class="card">
+  <div class="card-header">Available log files</div>
+  <div class="card-body">
+    {% if files %}
+    <ul class="console-info-list">
+      {% for f in files %}
+      <li>
+        <span><code>{{ f }}</code></span>
+        <a href="{{ url_for('emo.view_log', filename=f) }}">Open log</a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="text-body-secondary">No uploaded logs were found.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -2,12 +2,10 @@
  This file is part of Supysonic.
  Supysonic is a Python implementation of the Subsonic server API.
 
- Copyright (C) 2013-2018 Alban 'spl0k' Féron
-               2017-2024 Óscar García Amor
-
  Distributed under terms of the GNU AGPLv3 license.
 -#}
 {% extends "layout.html" %}
+{% block title %}Change Password · Emosonic Server{% endblock %}
 {% block navbar_users %}
 {% if request.user.id != user.id %}
 <a class="nav-link active" aria-current="page" href="{{ url_for('frontend.user_index') }}">Users</a>
@@ -22,35 +20,38 @@
 {{ super() }}
 {% endif %}
 {% endblock %}
+{% block page_title %}Change password{% endblock %}
+{% block page_subtitle %}Update the password for {{ user.name }} and keep access credentials aligned with your current security policy.{% endblock %}
 {% block body %}
-<h2 class="mt-4 pb-2 border-bottom">{{ user.name }}</h2>
-<form method="post">
-  {% if request.user.id == user.id %}
-  <div class="input-group mb-3">
-    <span class="input-group-text" id="current_passwd">
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-person-lock" aria-label="Current password" viewBox="0 0 16 16">
-        <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2m3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2M5 8h6a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1"/>
-      </svg>
-    </span>
-    <input type="password" class="form-control" id="current" name="current" placeholder="Current password" aria-label="Current password" aria-describedby="current_passwd" />
+<div class="row justify-content-center">
+  <div class="col-xl-7">
+    <div class="card">
+      <div class="card-header">Credential update</div>
+      <div class="card-body">
+        <form method="post" class="d-flex flex-column gap-4">
+          {% if request.user.id == user.id %}
+          <div>
+            <label class="form-label" for="current">Current password</label>
+            <input type="password" class="form-control" id="current" name="current" placeholder="Enter the current password">
+          </div>
+          {% endif %}
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label" for="new">New password</label>
+              <input type="password" class="form-control" id="new" name="new" placeholder="Choose a new password">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="confirm">Confirm password</label>
+              <input type="password" class="form-control" id="confirm" name="confirm" placeholder="Repeat the new password">
+            </div>
+          </div>
+          <div class="d-flex gap-2 justify-content-end">
+            <a href="{{ url_for('frontend.user_profile', uid = 'me' if request.user.id == user.id else user.id) }}" class="btn btn-outline-dark">Cancel</a>
+            <button class="btn btn-dark" type="submit">Update password</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
-  {% endif %}
-  <div class="input-group mb-3">
-    <span class="input-group-text" id="passwd">
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-person-lock" aria-label="Password" viewBox="0 0 16 16">
-        <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2m3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2M5 8h6a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1"/>
-      </svg>
-    </span>
-    <input type="password" class="form-control" id="new" name="new" placeholder="New password" aria-label="New password" aria-describedby="passwd" />
-  </div>
-  <div class="input-group mb-3">
-    <span class="input-group-text" id="passwd_confirm">
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-person-lock" aria-label="Confirm password" viewBox="0 0 16 16">
-        <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2m3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2M5 8h6a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1"/>
-      </svg>
-    </span>
-    <input type="password" class="form-control" id="confirm" name="confirm" placeholder="Confirm password" aria-label="Confirm password" aria-describedby="passwd_confirm" />
-  </div>
-  <button class="btn btn-light" type="submit">Update password</button>
-</form>
+</div>
 {% endblock %}

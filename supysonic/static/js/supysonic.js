@@ -33,7 +33,10 @@ function setTheme(theme) {
 }
 
 const savedTheme = localStorage.getItem('theme') || 'light';
-document.querySelector(`input[value="${savedTheme}"]`).checked = true;
+const themeInput = document.querySelector(`input[value="${savedTheme}"]`);
+if (themeInput) {
+  themeInput.checked = true;
+}
 setTheme(savedTheme);
 
 document.querySelectorAll('input[name="theme"]').forEach(function (radio) {

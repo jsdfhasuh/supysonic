@@ -34,7 +34,7 @@ from uuid import UUID, uuid4
 from PIL import Image as PILImage
 from .tool import read_dict_from_json
 
-SCHEMA_VERSION = "20260113"
+SCHEMA_VERSION = "20260326"
 
 
 def now():
@@ -359,7 +359,7 @@ class Album(_Model):
 
         return artists
 
-    def as_subsonic_album(self, user,server_type=None):  # "AlbumID3" type in XSD
+    def as_subsonic_album(self, user, server_type=None):  # "AlbumID3" type in XSD
         duration, created = self.tracks.select(
             fn.sum(Track.duration), fn.min(Track.created)
         ).scalar(as_tuple=True)
@@ -399,10 +399,12 @@ class Album(_Model):
         #     track_with_cover = self.tracks.where(Track.has_art).first()
         #     if track_with_cover is not None:
         #         info["coverArt"] = str(track_with_cover.id)
-        if "music"  not in server_type.lower():
+        if "music" not in server_type.lower():
             al_image = (
                 Image.select()
-                .where((Image.image_type == "album") & (Image.related_id == str(self.id)))
+                .where(
+                    (Image.image_type == "album") & (Image.related_id == str(self.id))
+                )
                 .first()
             )
             if al_image:
@@ -651,6 +653,33 @@ class ClientPrefs(_Model):
         primary_key = CompositeKey("user", "client_name")
 
 
+class EmoSessionQueue(_Model):
+    id = PrimaryKeyField()
+    session_id = CharField(128, unique=True)
+    user_name = CharField(64)
+    owner_client_id = CharField(128)
+    queue_json = TextField()
+    current_index = IntegerField(default=0)
+    position_ms = IntegerField(default=0)
+    version = IntegerField(default=1)
+    created_at = DateTimeField(default=now)
+    updated_at = DateTimeField(default=now)
+
+
+class EmoPlaybackState(_Model):
+    id = PrimaryKeyField()
+    session_id = CharField(128, unique=True)
+    user_name = CharField(64)
+    owner_client_id = CharField(128)
+    state = CharField(32)
+    track_id = CharField(128, null=True)
+    position_ms = IntegerField(default=0)
+    volume = IntegerField(null=True)
+    playback_json = TextField(null=True)
+    created_at = DateTimeField(default=now)
+    updated_at = DateTimeField(default=now)
+
+
 def _make_starred_model(target_model):
     class Starred(_Model):
         user = ForeignKeyField(User, backref="+")
@@ -727,7 +756,7 @@ class Playlist(_Model):
             "duration": sum(t.duration for t in tracks),
             "created": self.created.isoformat(),
             "changed": self.created.isoformat(),
-            "coverArt": str(first_album.id) if first_album else None,
+            "coverArt": f"al-{first_album.id}" if first_album else None,
         }
         if self.comment:
             info["comment"] = self.comment
@@ -780,6 +809,15 @@ class Playlist(_Model):
             tracks[i] = None
 
         self.tracks = ",".join(t for t in tracks if t)
+
+
+class SharedTrackLink(_Model):
+    id = PrimaryKeyField()
+    token = CharField(96, unique=True)
+    track = ForeignKeyField(Track, backref="shared_links")
+    created_by = ForeignKeyField(User, backref="shared_track_links")
+    enabled = BooleanField(default=True)
+    created_at = DateTimeField(default=now)
 
 
 class RadioStation(_Model):

@@ -1,6 +1,6 @@
-# Supysonic
+# Emosonic Server
 
-Supysonic is a Python implementation of the [Subsonic][] server API.
+Emosonic Server is a self-hosted music streaming and operations platform built on the [Subsonic][] API, originally based on the upstream Supysonic project and now maintained and extended by jsdfhasuh.
 
 ![Build Status](https://github.com/spl0k/supysonic/workflows/Tests/badge.svg)
 [![codecov](https://codecov.io/gh/spl0k/supysonic/branch/master/graph/badge.svg)](https://codecov.io/gh/spl0k/supysonic)

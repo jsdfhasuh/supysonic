@@ -2,47 +2,207 @@
  This file is part of Supysonic.
  Supysonic is a Python implementation of the Subsonic server API.
 
- Copyright (C) 2013-2018 Alban 'spl0k' Féron
-               2017-2024 Óscar García Amor
-
  Distributed under terms of the GNU AGPLv3 license.
 -#}
 {% extends "layout.html" %}
+{% block title %}Playlist · Emosonic Server{% endblock %}
 {% block navbar_playlists %}
 <a class="nav-link active" aria-current="page" href="{{ url_for('frontend.playlist_index') }}">Playlists</a>
 {% endblock %}
+{% block page_title %}{{ playlist.name }}{% endblock %}
+{% block page_subtitle %}Inspect playlist metadata, adjust publication settings, and review the ordered tracks that belong to this collection.{% endblock %}
 {% block body %}
-<h2 class="mt-4 pb-2 border-bottom">Playlist "{{ playlist.name }}"</h2>
+<div class="row row-cols-1 row-cols-md-3 g-3 console-section-spacer">
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header">Owner</div>
+      <div class="card-body">
+        <div class="console-metric-value">{{ playlist.user.name }}</div>
+        <div class="console-metric-caption">Account that owns this playlist.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header">Tracks</div>
+      <div class="card-body">
+        <div class="console-metric-value">{{ playlist.get_tracks()|length }}</div>
+        <div class="console-metric-caption">Number of entries currently stored in this playlist.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header">Visibility</div>
+      <div class="card-body">
+        <div class="console-metric-value">{{ 'PUBLIC' if playlist.public else 'PRIVATE' }}</div>
+        <div class="console-metric-caption">Publication state exposed to other users.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% if playlist.user.id == request.user.id %}
-<h3>Edit</h3>
-<form method="post">
+<div class="card console-section-spacer">
+  <div class="card-header">Edit playlist</div>
+  <div class="card-body">
+    <form method="post" class="d-flex flex-column gap-4">
+      <div>
+        <label class="form-label" for="name">Playlist name</label>
+        <input type="text" class="form-control" id="name" name="name" value="{{ playlist.name }}">
+      </div>
+      <div class="form-check form-switch border rounded-4 p-3">
+        <input type="checkbox" class="form-check-input" role="switch" id="public" name="public" {% if playlist.public %}checked="true"{% endif %}>
+        <label class="form-check-label ms-2" for="public">
+          <strong>Make playlist public</strong><br>
+          <small class="console-muted">Public playlists are visible to other users with access to the server.</small>
+        </label>
+      </div>
+      <div class="d-flex justify-content-end">
+        <button class="btn btn-dark" type="submit">Update playlist</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-header">Tracks</div>
   <div class="table-responsive">
-    <table id="playlist" class="table align-middle">
+    <table class="table table-hover align-middle mb-0">
       <thead>
-        <tr><th>Name</th><th>Public</th><th></th></tr>
+        <tr><th>Artist</th><th>Title</th><th>Album</th><th>Length</th><th>Share</th></tr>
       </thead>
       <tbody>
+        {% for t in playlist.get_tracks() %}
         <tr>
-          <td><input type="text" class="form-control" name="name" value="{{ playlist.name }}" /></td>
-          <td><div class="form-switch"><input type="checkbox" class="form-check-input" role="switch" name="public" {% if playlist.public %}checked="true"{% endif %} /></div></td>
-          <td><button class="btn btn-light" type="submit">Update</button></td>
+          <td>{{ t.album.artist.name }}</td>
+          <td>{{ t.title }}</td>
+          <td>{{ t.album.name }}</td>
+          <td>{{ t.duration_str() }}</td>
+          <td>
+            <button
+              type="button"
+              class="btn btn-outline-dark btn-sm open-share-modal"
+              data-share-url="{{ url_for('frontend.create_track_share', tid=t.id) }}"
+              data-track-title="{{ t.title }}"
+              data-track-artist="{{ t.album.artist.name }}"
+            >
+              Create share link
+            </button>
+          </td>
         </tr>
+        {% endfor %}
       </tbody>
     </table>
   </div>
-</form>
-{% endif %}
-<h3>Tracks</h3>
-<div class="table-responsive">
-  <table class="table table-striped">
-    <thead>
-      <tr><th>Artist</th><th>Title</th><th>Album</th><th>Length</th></tr>
-    </thead>
-    <tbody>
-      {% for t in playlist.get_tracks() %}
-      <tr><td>{{ t.album.artist.name }}</td><td>{{ t.title }}</td><td>{{ t.album.name }}</td><td>{{ t.duration_str() }}</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
 </div>
+
+<div class="modal fade" id="confirm-share" data-bs-backdrop="static" data-bs-keyboard="true" tabindex="-1" aria-labelledby="confirm-share-label" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h1 class="modal-title fs-5" id="confirm-share-label">Create public share link?</h1>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">You are about to create a public listening link for this track:</p>
+        <div class="border rounded-4 p-3 bg-body-tertiary">
+          <div class="console-table-title" id="share-track-title">-</div>
+          <small class="console-muted" id="share-track-artist">-</small>
+        </div>
+        <p class="console-muted mt-3 mb-0">Anyone with the generated link will be able to stream this song until you disable the share.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <a href="#" class="btn btn-dark" id="confirm-share-link">Create link</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="share-created" data-bs-backdrop="static" data-bs-keyboard="true" tabindex="-1" aria-labelledby="share-created-label" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h1 class="modal-title fs-5" id="share-created-label">Share link ready</h1>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">Use this public link to share <strong>{{ request.args.get('share_title') or 'track' }}</strong> with anyone.</p>
+        <div class="input-group">
+          <input type="text" class="form-control" id="share-link-field" value="{{ request.args.get('share_url') or '' }}" readonly>
+          <button class="btn btn-dark" type="button" id="copy-share-link">Copy link</button>
+        </div>
+        <small class="console-muted d-block mt-2" id="share-link-status">Anyone with this URL can stream the shared track.</small>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        {% if request.args.get('share_url') %}
+        <a href="{{ request.args.get('share_url') }}" target="_blank" rel="noopener noreferrer" class="btn btn-dark">Open link</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    async function copyTextWithFallback(text, field) {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+
+      field.removeAttribute('readonly');
+      field.focus();
+      field.select();
+      field.setSelectionRange(0, field.value.length);
+      const copied = document.execCommand('copy');
+      field.setAttribute('readonly', 'readonly');
+      return copied;
+    }
+
+    const shareModalElement = document.getElementById('confirm-share');
+    const shareModal = shareModalElement ? new bootstrap.Modal(shareModalElement) : null;
+    const confirmShareLink = document.getElementById('confirm-share-link');
+    const shareTrackTitle = document.getElementById('share-track-title');
+    const shareTrackArtist = document.getElementById('share-track-artist');
+    const shareCreatedElement = document.getElementById('share-created');
+    const shareCreatedModal = shareCreatedElement ? new bootstrap.Modal(shareCreatedElement) : null;
+
+    const copyShareButton = document.getElementById('copy-share-link');
+    if (copyShareButton) {
+      copyShareButton.addEventListener('click', async function() {
+        const field = document.getElementById('share-link-field');
+        const status = document.getElementById('share-link-status');
+        try {
+          const copied = await copyTextWithFallback(field.value, field);
+          if (!copied) {
+            throw new Error('copy failed');
+          }
+          status.textContent = 'Share link copied to clipboard.';
+        } catch (error) {
+          field.select();
+          field.setSelectionRange(0, field.value.length);
+          status.textContent = 'Clipboard access unavailable. The link is selected for manual copy.';
+        }
+      });
+    }
+
+    document.querySelectorAll('.open-share-modal').forEach((button) => {
+      button.addEventListener('click', function() {
+        confirmShareLink.href = this.dataset.shareUrl;
+        shareTrackTitle.textContent = this.dataset.trackTitle || '-';
+        shareTrackArtist.textContent = this.dataset.trackArtist || '-';
+        shareModal.show();
+      });
+    });
+
+    {% if request.args.get('share_url') %}
+    if (shareCreatedModal) {
+      shareCreatedModal.show();
+    }
+    {% endif %}
+  });
+</script>
 {% endblock %}

@@ -1,7 +1,7 @@
-# Supysonic
+# Emosonic Server
 # ===========
 
-Supysonic 是基于 Flask 的音乐流媒体服务器,脱胎于[spl0k/supysonic](https://github.com/spl0k/supysonic)。
+Emosonic Server 是基于 Flask 的音乐流媒体与运维平台，脱胎于 [spl0k/supysonic](https://github.com/spl0k/supysonic)，当前分支由 jsdfhasuh 持续扩展与维护。
 
 ## 项目支持以下功能:
 * 浏览 (通过文件夹或标签)

@@ -152,6 +152,42 @@ CREATE TABLE IF NOT EXISTS playlist (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE INDEX index_playlist_user_id_fk ON playlist(user_id);
 
+CREATE TABLE IF NOT EXISTS emo_session_queue (
+    id CHAR(32) PRIMARY KEY,
+    session_id VARCHAR(128) NOT NULL UNIQUE,
+    user_name VARCHAR(64) NOT NULL,
+    owner_client_id VARCHAR(128) NOT NULL,
+    queue_json TEXT NOT NULL,
+    current_index INTEGER NOT NULL DEFAULT 0,
+    position_ms INTEGER NOT NULL DEFAULT 0,
+    version INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS emo_playback_state (
+    id CHAR(32) PRIMARY KEY,
+    session_id VARCHAR(128) NOT NULL UNIQUE,
+    user_name VARCHAR(64) NOT NULL,
+    owner_client_id VARCHAR(128) NOT NULL,
+    state VARCHAR(32) NOT NULL,
+    track_id VARCHAR(128),
+    position_ms INTEGER NOT NULL DEFAULT 0,
+    volume INTEGER,
+    playback_json TEXT,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS shared_track_link (
+    id CHAR(32) PRIMARY KEY,
+    token VARCHAR(96) NOT NULL UNIQUE,
+    track_id CHAR(32) NOT NULL REFERENCES track(id),
+    created_by_id CHAR(32) NOT NULL REFERENCES user(id),
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at DATETIME NOT NULL
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 
 CREATE TABLE  album_artist (
     id INTEGER PRIMARY KEY AUTO_INCREMENT,
@@ -211,4 +247,3 @@ CREATE TABLE IF NOT EXISTS radio_station (
     homepage_url VARCHAR(256),
     created DATETIME NOT NULL
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-

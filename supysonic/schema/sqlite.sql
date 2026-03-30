@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS track (
     created DATETIME NOT NULL,
     last_modification INTEGER NOT NULL,
     play_count INTEGER NOT NULL,
+    play_count_web INTEGER NOT NULL,
     last_play DATETIME,
     root_folder_id INTEGER NOT NULL REFERENCES folder,
     folder_id INTEGER NOT NULL REFERENCES folder
@@ -150,6 +151,42 @@ CREATE TABLE IF NOT EXISTS playlist (
 );
 CREATE INDEX IF NOT EXISTS index_playlist_user_id_fk ON playlist(user_id);
 
+CREATE TABLE IF NOT EXISTS emo_session_queue (
+    id CHAR(36) PRIMARY KEY,
+    session_id VARCHAR(128) NOT NULL UNIQUE,
+    user_name VARCHAR(64) NOT NULL,
+    owner_client_id VARCHAR(128) NOT NULL,
+    queue_json TEXT NOT NULL,
+    current_index INTEGER NOT NULL DEFAULT 0,
+    position_ms INTEGER NOT NULL DEFAULT 0,
+    version INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS emo_playback_state (
+    id CHAR(36) PRIMARY KEY,
+    session_id VARCHAR(128) NOT NULL UNIQUE,
+    user_name VARCHAR(64) NOT NULL,
+    owner_client_id VARCHAR(128) NOT NULL,
+    state VARCHAR(32) NOT NULL,
+    track_id VARCHAR(128),
+    position_ms INTEGER NOT NULL DEFAULT 0,
+    volume INTEGER,
+    playback_json TEXT,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS shared_track_link (
+    id CHAR(36) PRIMARY KEY,
+    token VARCHAR(96) NOT NULL UNIQUE,
+    track_id CHAR(36) NOT NULL REFERENCES track,
+    created_by_id CHAR(36) NOT NULL REFERENCES user,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL
+);
+
 CREATE TABLE meta (
     key CHAR(32) PRIMARY KEY,
     value CHAR(256) NOT NULL
@@ -162,4 +199,3 @@ CREATE TABLE IF NOT EXISTS radio_station (
     homepage_url VARCHAR(256),
     created DATETIME NOT NULL
 );
-

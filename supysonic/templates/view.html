@@ -1,0 +1,15 @@
+{% extends "layout.html" %}
+{% block title %}Log Viewer · Emosonic Server{% endblock %}
+{% block page_title %}{{ filename }}{% endblock %}
+{% block page_subtitle %}Inspect raw diagnostic output captured from Emo clients or related upload endpoints.{% endblock %}
+{% block body %}
+<div class="card console-section-spacer">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>Log content</span>
+    <a href="{{ url_for('emo.list_logs') }}" class="btn btn-outline-dark btn-sm">Back to log list</a>
+  </div>
+  <div class="card-body">
+    <pre class="console-log-view mb-0">{{ content }}</pre>
+  </div>
+</div>
+{% endblock %}

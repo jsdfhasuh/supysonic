@@ -18,6 +18,7 @@ from . import admin_only, frontend
 @frontend.route("/folder")
 @admin_only
 def folder_index():
+    folders = list(Folder.select().where(Folder.root))
     try:
         DaemonClient(current_app.config["DAEMON"]["socket"]).get_scanning_progress()
         allow_scan = True
@@ -29,8 +30,12 @@ def folder_index():
         )
     return render_template(
         "folders.html",
-        folders=Folder.select().where(Folder.root),
+        folders=folders,
         allow_scan=allow_scan,
+        summary={
+            "total": len(folders),
+            "scanEnabled": allow_scan,
+        },
     )
 
 

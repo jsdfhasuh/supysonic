@@ -6,11 +6,11 @@
 #
 # Distributed under terms of the GNU AGPLv3 license.
 
-NAME = "Supysonic"
-VERSION = "0.7.9"
-DESCRIPTION = "Python implementation of the Subsonic server API"
-AUTHOR = "Alban Féron"
-AUTHOR_EMAIL = "alban.feron@gmail.com"
+NAME = "Emosonic Server"
+VERSION = "0.8.0"
+DESCRIPTION = "Self-hosted music streaming and operations platform forked from Supysonic"
+AUTHOR = "jsdfhasuh"
+AUTHOR_EMAIL = "maintainer@local.invalid"
 URL = "https://supysonic.readthedocs.io/"
-DOWNLOAD_URL = "https://github.com/spl0k/supysonic"
+DOWNLOAD_URL = "https://github.com/jsdfhasuh/supysonic"
 LICENSE = "GNU AGPLv3"

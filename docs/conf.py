@@ -39,7 +39,7 @@ language = "en"
 html_theme = "alabaster"
 html_theme_options = {
     "description": supysonic.DESCRIPTION,
-    "github_user": "spl0k",
+    "github_user": "jsdfhasuh",
     "github_repo": "supysonic",
     "github_type": "star",
 }
@@ -75,28 +75,28 @@ man_pages = [
     (
         "man/supysonic-cli",
         "supysonic-cli",
-        "Supysonic management command line interface",
+        "Emosonic Server management command line interface",
         _man_authors,
         1,
     ),
     (
         "man/supysonic-cli-user",
         "supysonic-cli-user",
-        "Supysonic user management commands",
+        "Emosonic Server user management commands",
         _man_authors,
         1,
     ),
     (
         "man/supysonic-cli-folder",
         "supysonic-cli-folder",
-        "Supysonic folder management commands",
+        "Emosonic Server folder management commands",
         _man_authors,
         1,
     ),
     (
         "man/supysonic-daemon",
         "supysonic-daemon",
-        "Supysonic background daemon",
+        "Emosonic Server background daemon",
         _man_authors,
         1,
     ),

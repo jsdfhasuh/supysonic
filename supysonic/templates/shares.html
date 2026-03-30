@@ -1,0 +1,95 @@
+{% extends "layout.html" %}
+{% block title %}Shares · Emosonic Server{% endblock %}
+{% block navbar_playlists %}
+<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.playlist_index') }}">Playlists</a>
+{% endblock %}
+{% block page_title %}Shared tracks{% endblock %}
+{% block page_subtitle %}Review public listening links you created, copy them again, or disable them when they are no longer needed.{% endblock %}
+{% block body %}
+<div class="card console-section-spacer">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>Share inventory</span>
+    <a href="{{ url_for('frontend.playlist_index') }}" class="btn btn-outline-dark btn-sm">Back to playlists</a>
+  </div>
+  <div class="card-body p-0">
+    {% if links %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Track</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th>Share URL</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for link in links %}
+          <tr>
+            <td>
+              <div class="console-table-title">{{ link.trackTitle }}</div>
+              <small class="console-muted">{{ link.artistName }} - {{ link.albumName }}</small>
+            </td>
+            <td><span class="console-status status-{{ 'playing' if link.enabled else 'paused' }}">{{ 'active' if link.enabled else 'disabled' }}</span></td>
+            <td>{{ link.createdAt }}</td>
+            <td>
+              <input type="text" class="form-control" value="{{ link.shareUrl }}" readonly>
+            </td>
+            <td class="text-end">
+              <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-dark btn-sm copy-share-link" data-link="{{ link.shareUrl }}">Copy</button>
+                {% if link.enabled %}
+                <a href="{{ url_for('frontend.disable_track_share', token=link.token) }}" class="btn btn-outline-danger btn-sm">Disable</a>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="p-4 text-body-secondary">You have not created any shared track links yet.</div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  async function copyTextWithFallback(text, input) {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+
+    input.removeAttribute('readonly');
+    input.focus();
+    input.select();
+    input.setSelectionRange(0, input.value.length);
+    const copied = document.execCommand('copy');
+    input.setAttribute('readonly', 'readonly');
+    return copied;
+  }
+
+  document.querySelectorAll('.copy-share-link').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const link = button.dataset.link;
+      const input = button.closest('tr').querySelector('input');
+      try {
+        const copied = await copyTextWithFallback(link, input);
+        if (!copied) {
+          throw new Error('copy failed');
+        }
+        button.textContent = 'Copied';
+        setTimeout(() => button.textContent = 'Copy', 1800);
+      } catch (error) {
+        input.focus();
+        input.select();
+        input.setSelectionRange(0, input.value.length);
+        button.textContent = 'Selected';
+        setTimeout(() => button.textContent = 'Copy', 1800);
+      }
+    });
+  });
+</script>
+{% endblock %}

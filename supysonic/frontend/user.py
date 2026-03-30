@@ -56,7 +56,13 @@ def me_or_uuid(f, arg="uid"):
 @frontend.route("/user")
 @admin_only
 def user_index():
-    return render_template("users.html", users=User.select())
+    users = list(User.select())
+    summary = {
+        "total": len(users),
+        "admins": sum(1 for user in users if user.admin),
+        "recentlyActive": sum(1 for user in users if user.last_play_date),
+    }
+    return render_template("users.html", users=users, summary=summary)
 
 
 @frontend.route("/user/<uid>")

@@ -29,13 +29,14 @@ RUN cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
 # 拷贝项目文件
 COPY . /app/
 
-# 安装 Python 依赖
+# 安装 Python 依赖和项目本身（生成 supysonic-server 等入口命令）
 RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir . && \
     # 清理缓存
     find /app -type d -name __pycache__ -exec rm -rf {} +
 
 # 暴露端口
 EXPOSE 5000
 
-# 启动命令
+# 启动命令（setup.sh 内部会使用 supysonic-server -S gevent）
 ENTRYPOINT ["sh", "/app/setup.sh"]

@@ -8,8 +8,8 @@ if [ -e /tmp/supysonic/supysonic.sock ]; then
 fi
 pid1=$!
 
-# 启动第二个 Python 程序，并将其放入后台执行
-python /app/run_supysonic.py &
+# 启动第二个程序，并将其放入后台执行
+supysonic-server -S gevent -h 0.0.0.0 -p 5000 &
 pid2=$!
 
 
@@ -24,8 +24,8 @@ while true; do
 
     # 检查第二个程序的状态
     if ! kill -0 "$pid2" 2>/dev/null; then
-        echo "run_supysonic.py is not running, restarting..."
-        python /app/run_supysonic.py &
+        echo "supysonic-server is not running, restarting..."
+        supysonic-server -S gevent -h 0.0.0.0 -p 5000 &
         pid2=$!
     fi
 

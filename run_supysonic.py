@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+import os
+
+os.environ.setdefault("EMO_SOCKETIO_ASYNC_MODE", "threading")
+
 from supysonic.web import create_application
 from supysonic.emo.ws import socketio
 

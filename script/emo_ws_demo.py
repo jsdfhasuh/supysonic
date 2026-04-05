@@ -157,7 +157,6 @@ def run_player(args):
             args.url,
             namespaces=["/emo"],
             socketio_path="/emo/ws",
-            transports=["polling"],
         )
         print("player mode started, waiting for commands")
         sio.wait()
@@ -199,7 +198,6 @@ def run_controller(args):
             args.url,
             namespaces=["/emo"],
             socketio_path="/emo/ws",
-            transports=["polling"],
         )
         if not ready_event.wait(timeout=10):
             raise RuntimeError("Controller did not become ready within 10 seconds")

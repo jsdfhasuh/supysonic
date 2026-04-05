@@ -4,8 +4,11 @@ import tempfile
 
 from supysonic import db
 from supysonic.emo.ws_store import (
+    getLocalQueueState,
     getPlaybackState,
+    getPlaybackStates,
     getQueueState,
+    saveLocalQueueState,
     savePlaybackState,
     saveQueueState,
 )
@@ -51,9 +54,27 @@ class EmoWebSocketStoreTestCase(unittest.TestCase):
             },
         )
 
-        playback_state = getPlaybackState("root:living-room")
+        playback_state = getPlaybackState("root:living-room", "player-1")
         self.assertEqual(playback_state["sessionId"], "root:living-room")
+        self.assertEqual(playback_state["sourceClientId"], "player-1")
         self.assertEqual(playback_state["state"], "playing")
         self.assertEqual(playback_state["trackId"], "track-1")
         self.assertEqual(playback_state["positionMs"], 4200)
         self.assertEqual(playback_state["volume"], 65)
+
+        all_states = getPlaybackStates("root:living-room")
+        self.assertEqual(len(all_states), 1)
+
+    def test_save_and_load_local_queue_state(self):
+        saveLocalQueueState(
+            "root:living-room",
+            "player-1",
+            ["songId3", "songId4"],
+            1,
+            0,
+        )
+
+        queue_state = getLocalQueueState("root:living-room", "player-1")
+        self.assertEqual(queue_state["sourceClientId"], "player-1")
+        self.assertEqual(queue_state["currentIndex"], 1)
+        self.assertEqual(queue_state["queueSongIds"][1], "songId4")

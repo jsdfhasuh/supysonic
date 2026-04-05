@@ -5,11 +5,20 @@ import time
 class WebSocketState:
     def __init__(self):
         self._lock = threading.RLock()
+        # sid -> session metadata for each live Socket.IO connection
         self._sessions = {}
+        # clientId -> sid lookup for command routing
         self._client_to_sid = {}
+        # clientId -> registered device metadata
         self._clients = {}
+        # sessionId -> shared room queue snapshot
         self._queues = {}
+        # (sessionId, clientId) -> device-local queue snapshot
+        self._local_queues = {}
+        # (sessionId, clientId) -> device playback snapshot
         self._playback_states = {}
+        # sid -> subscribed sessionIds for passive observers/controllers
+        self._session_subscriptions = {}
 
     def register_session(self, sid):
         with self._lock:
@@ -36,6 +45,8 @@ class WebSocketState:
             return dict(session_info) if session_info is not None else None
 
     def register_client(self, sid, client_id, info):
+        # Registered device metadata usually includes userName, deviceName,
+        # roles, sessionId, capabilities, clientId, and connectedAt.
         client_info = dict(info)
         client_info["clientId"] = client_id
         client_info["connectedAt"] = time.time()
@@ -60,6 +71,7 @@ class WebSocketState:
             session_info = self._sessions.pop(sid, None)
             if session_info is None:
                 return None, None
+            self._session_subscriptions.pop(sid, None)
             client_id = session_info.get("clientId")
             client_info = None
             if client_id:
@@ -79,6 +91,7 @@ class WebSocketState:
             return self._client_to_sid.get(client_id)
 
     def get_client_for_sid(self, sid):
+        # Resolve the current sending device from a live Socket.IO sid.
         with self._lock:
             session_info = self._sessions.get(sid)
             if session_info is None or not session_info.get("clientId"):
@@ -116,39 +129,126 @@ class WebSocketState:
                 items.append((sid, dict(client)))
             return items
 
-    def update_queue(self, session_id, queue_song_ids, current_index=0, position_ms=0):
+    def subscribe_session(self, sid, session_id):
+        if not session_id:
+            return []
+        with self._lock:
+            subscriptions = self._session_subscriptions.setdefault(sid, set())
+            subscriptions.add(session_id)
+            return list(subscriptions)
+
+    def unsubscribe_session(self, sid, session_id=None):
+        with self._lock:
+            if sid not in self._session_subscriptions:
+                return []
+            if session_id is None:
+                self._session_subscriptions[sid].clear()
+            else:
+                self._session_subscriptions[sid].discard(session_id)
+            subscriptions = self._session_subscriptions[sid]
+            if not subscriptions:
+                self._session_subscriptions.pop(sid, None)
+                return []
+            return list(subscriptions)
+
+    def list_subscribers(self, session_id, user_name=None, exclude_sid=None):
+        # Return passive observers/controllers that subscribed to a sessionId
+        # but are not necessarily registered as playback devices in that room.
+        with self._lock:
+            items = []
+            for sid, subscriptions in self._session_subscriptions.items():
+                if exclude_sid is not None and sid == exclude_sid:
+                    continue
+                if session_id not in subscriptions:
+                    continue
+                session_info = self._sessions.get(sid)
+                if session_info is None:
+                    continue
+                if user_name is not None and session_info.get("userName") != user_name:
+                    continue
+                items.append(sid)
+            return items
+
+    def update_queue(self, session_id, queue_song_ids, current_index=0, position_ms=0, source_client_id=None):
         if not session_id:
             return None
+        # Shared room queue keyed only by sessionId.
         queue_state = {
             "sessionId": session_id,
             "queueSongIds": list(queue_song_ids),
             "currentIndex": current_index,
             "positionMs": position_ms,
+            "sourceClientId": source_client_id,
             "updatedAt": time.time(),
         }
         with self._lock:
             self._queues[session_id] = queue_state
         return dict(queue_state)
 
+    def update_local_queue(self, session_id, client_id, queue_song_ids, current_index=0, position_ms=0):
+        if not session_id or not client_id:
+            return None
+        # Device-local queue keyed by (sessionId, clientId).
+        local_queue = {
+            "sessionId": session_id,
+            "sourceClientId": client_id,
+            "queueSongIds": list(queue_song_ids),
+            "currentIndex": current_index,
+            "positionMs": position_ms,
+            "updatedAt": time.time(),
+        }
+        with self._lock:
+            self._local_queues[(session_id, client_id)] = local_queue
+        return dict(local_queue)
+
+    def get_local_queue(self, session_id, client_id):
+        with self._lock:
+            queue_state = self._local_queues.get((session_id, client_id))
+            return dict(queue_state) if queue_state is not None else None
+
+    def list_local_queues(self, session_id):
+        with self._lock:
+            items = []
+            for (queue_session_id, _client_id), queue_state in self._local_queues.items():
+                if queue_session_id != session_id:
+                    continue
+                items.append(dict(queue_state))
+            return items
+
+    def clear_local_queue(self, session_id, client_id):
+        with self._lock:
+            return self._local_queues.pop((session_id, client_id), None)
+
     def get_queue(self, session_id):
         with self._lock:
             queue_state = self._queues.get(session_id)
             return dict(queue_state) if queue_state is not None else None
 
-    def update_playback_state(self, session_id, state):
-        if not session_id:
+    def update_playback_state(self, session_id, client_id, state):
+        if not session_id or not client_id:
             return None
+        # Playback state is also device-scoped, so the key is (sessionId, clientId).
         playback_state = dict(state)
         playback_state["sessionId"] = session_id
+        playback_state["sourceClientId"] = client_id
         playback_state["updatedAt"] = time.time()
         with self._lock:
-            self._playback_states[session_id] = playback_state
+            self._playback_states[(session_id, client_id)] = playback_state
         return dict(playback_state)
 
-    def get_playback_state(self, session_id):
+    def get_playback_state(self, session_id, client_id):
         with self._lock:
-            playback_state = self._playback_states.get(session_id)
+            playback_state = self._playback_states.get((session_id, client_id))
             return dict(playback_state) if playback_state is not None else None
+
+    def list_playback_states(self, session_id):
+        with self._lock:
+            items = []
+            for (state_session_id, _client_id), playback_state in self._playback_states.items():
+                if state_session_id != session_id:
+                    continue
+                items.append(dict(playback_state))
+            return items
 
 
 _state = WebSocketState()

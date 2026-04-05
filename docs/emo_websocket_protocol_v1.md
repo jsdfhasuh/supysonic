@@ -133,6 +133,8 @@ Register payload:
 - `player.next`
 - `player.prev`
 - `player.seek`
+- `player.requestState`
+- `queue.playItem`
 
 Pause example:
 
@@ -159,6 +161,54 @@ Seek example:
   }
 }
 ```
+
+Queue play example:
+
+```json
+{
+  "type": "command",
+  "action": "queue.playItem",
+  "requestId": "req-102",
+  "targetClientId": "desktop-001",
+  "payload": {
+    "sessionId": "root:living-room",
+    "queueIndex": 2
+  }
+}
+```
+
+`queue.playItem` payload rules:
+
+- `sessionId` is required
+- `queueIndex` is required and must be an integer >= 0
+- optional `clientId` switches the lookup from the shared session queue to that device's local queue
+- if `clientId` is present, it must match `targetClientId`
+- if `clientId` is omitted, the selected item is resolved from the shared session queue
+
+Player state request example:
+
+```json
+{
+  "type": "command",
+  "action": "player.requestState",
+  "requestId": "req-103",
+  "targetClientId": "desktop-001",
+  "payload": {
+    "sessionId": "root:living-room",
+    "includePlayback": true,
+    "includeSessionQueue": true,
+    "includeLocalQueue": true,
+    "includeReadyState": false
+  }
+}
+```
+
+`player.requestState` payload rules:
+
+- `sessionId` is optional, but if present it must be a non-empty string
+- `includePlayback`, `includeSessionQueue`, `includeLocalQueue`, and `includeReadyState` are optional booleans
+- when omitted, the target player may treat the missing flags as its default upload policy
+- the target player should respond by publishing the requested state updates back to the server
 
 ### Playback Events
 
@@ -191,6 +241,11 @@ Recommended payload fields:
 
 - `trackId`
 - `volume`
+- `sourceClientId`
+
+Server broadcast note:
+
+- When the server rebroadcasts `playback.update`, it includes `sourceClientId` to identify which device last reported the session state.
 
 ### Session Queue State
 
@@ -227,6 +282,54 @@ Validation rules:
 - if `queueSongIds` is non-empty, `currentIndex` must be within bounds
 - if `queueSongIds` is empty, use `currentIndex = 0` and `positionMs = 0`
 
+Server broadcast note:
+
+- When the server rebroadcasts `queue.session.sync`, it includes `sourceClientId` to identify which device last pushed the session queue.
+
+### Local Queue State
+
+- `queue.local.get`
+- `queue.local.set`
+
+These actions operate on the device-local draft queue keyed by `sessionId + clientId`.
+
+`queue.local.get` request example:
+
+```json
+{
+  "type": "state",
+  "action": "queue.local.get",
+  "requestId": "local-get-1",
+  "payload": {
+    "sessionId": "root:living-room",
+    "clientId": "player-1"
+  }
+}
+```
+
+`queue.local.set` request example:
+
+```json
+{
+  "type": "state",
+  "action": "queue.local.set",
+  "requestId": "local-set-1",
+  "payload": {
+    "sessionId": "root:living-room",
+    "clientId": "player-1",
+    "queueSongIds": ["songId1", "songId2", "songId3"],
+    "currentIndex": 1,
+    "positionMs": 0
+  }
+}
+```
+
+Server response behavior:
+
+- `system.ack` confirms the request
+- the server emits a `state / queue.local.set` snapshot to devices in the same session and active session subscribers
+- `session.subscribe` snapshots also include the current local queues for that session
+
 ### Device List State
 
 - `device.list`
@@ -238,10 +341,15 @@ This is both a requestable state snapshot and a server broadcast when device pre
 - Unauthenticated connections may only send `auth.login` and `system.ping`.
 - Commands are always routed through the server.
 - Command routing uses `targetClientId`.
-- Queue state and playback state are authoritative at the `sessionId` level.
+- Shared queue state is authoritative at the `sessionId` level.
+- Local queue state is authoritative at the `sessionId + clientId` level.
+- Playback state is authoritative at the `sessionId + sourceClientId` level.
 - Every request-style message should end with either `system.ack` or `system.error`.
 - Playback devices should send `playback.update` after they execute commands.
 - `queue.session.sync` replaces the full authoritative queue for that session.
+- `queue.local.set` replaces the full local draft queue for the specified device.
+- `queue.playItem` asks a target device to resolve an item from either the session queue or its local queue and start playback.
+- `player.requestState` asks a target device to publish some or all of its current state back to the server.
 
 ## Example Flow: Client A Pauses Client B
 

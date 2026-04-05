@@ -34,7 +34,7 @@ from uuid import UUID, uuid4
 from PIL import Image as PILImage
 from .tool import read_dict_from_json
 
-SCHEMA_VERSION = "20260326"
+SCHEMA_VERSION = "20260327"
 
 
 def now():
@@ -666,9 +666,23 @@ class EmoSessionQueue(_Model):
     updated_at = DateTimeField(default=now)
 
 
+class EmoLocalQueue(_Model):
+    id = PrimaryKeyField()
+    session_id = CharField(128)
+    owner_client_id = CharField(128)
+    queue_json = TextField()
+    current_index = IntegerField(default=0)
+    position_ms = IntegerField(default=0)
+    created_at = DateTimeField(default=now)
+    updated_at = DateTimeField(default=now)
+
+    class Meta:
+        indexes = ((('session_id', 'owner_client_id'), True),)
+
+
 class EmoPlaybackState(_Model):
     id = PrimaryKeyField()
-    session_id = CharField(128, unique=True)
+    session_id = CharField(128)
     user_name = CharField(64)
     owner_client_id = CharField(128)
     state = CharField(32)
@@ -678,6 +692,9 @@ class EmoPlaybackState(_Model):
     playback_json = TextField(null=True)
     created_at = DateTimeField(default=now)
     updated_at = DateTimeField(default=now)
+
+    class Meta:
+        indexes = ((('session_id', 'owner_client_id'), True),)
 
 
 def _make_starred_model(target_model):

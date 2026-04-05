@@ -1,6 +1,7 @@
 import json
 
 from ..db import (
+    EmoLocalQueue,
     EmoPlaybackState,
     EmoSessionQueue,
     close_connection,
@@ -20,6 +21,7 @@ def getQueueState(session_id):
             "queueSongIds": json.loads(record.queue_json),
             "currentIndex": record.current_index,
             "positionMs": record.position_ms,
+            "sourceClientId": record.owner_client_id,
             "updatedAt": record.updated_at.timestamp(),
         }
     finally:
@@ -54,11 +56,81 @@ def saveQueueState(session_id, user_name, client_id, queue_song_ids, current_ind
         close_connection()
 
 
-def getPlaybackState(session_id):
+def getLocalQueueState(session_id, client_id):
+    open_connection(reuse=True)
+    try:
+        record = EmoLocalQueue.get_or_none(
+            (EmoLocalQueue.session_id == session_id)
+            & (EmoLocalQueue.owner_client_id == client_id)
+        )
+        if record is None:
+            return None
+        return {
+            "sessionId": record.session_id,
+            "sourceClientId": record.owner_client_id,
+            "queueSongIds": json.loads(record.queue_json),
+            "currentIndex": record.current_index,
+            "positionMs": record.position_ms,
+            "updatedAt": record.updated_at.timestamp(),
+        }
+    finally:
+        close_connection()
+
+
+def getLocalQueueStates(session_id):
+    open_connection(reuse=True)
+    try:
+        payloads = []
+        query = EmoLocalQueue.select().where(EmoLocalQueue.session_id == session_id)
+        for record in query:
+            payloads.append(
+                {
+                    "sessionId": record.session_id,
+                    "sourceClientId": record.owner_client_id,
+                    "queueSongIds": json.loads(record.queue_json),
+                    "currentIndex": record.current_index,
+                    "positionMs": record.position_ms,
+                    "updatedAt": record.updated_at.timestamp(),
+                }
+            )
+        return payloads
+    finally:
+        close_connection()
+
+
+def saveLocalQueueState(session_id, client_id, queue_song_ids, current_index, position_ms):
+    payload = json.dumps(list(queue_song_ids), ensure_ascii=True)
+    open_connection(reuse=True)
+    try:
+        record = EmoLocalQueue.get_or_none(
+            (EmoLocalQueue.session_id == session_id)
+            & (EmoLocalQueue.owner_client_id == client_id)
+        )
+        if record is None:
+            EmoLocalQueue.create(
+                session_id=session_id,
+                owner_client_id=client_id,
+                queue_json=payload,
+                current_index=current_index,
+                position_ms=position_ms,
+            )
+            return
+
+        record.queue_json = payload
+        record.current_index = current_index
+        record.position_ms = position_ms
+        record.updated_at = now()
+        record.save()
+    finally:
+        close_connection()
+
+
+def getPlaybackState(session_id, client_id):
     open_connection(reuse=True)
     try:
         record = EmoPlaybackState.get_or_none(
-            EmoPlaybackState.session_id == session_id
+            (EmoPlaybackState.session_id == session_id)
+            & (EmoPlaybackState.owner_client_id == client_id)
         )
         if record is None:
             return None
@@ -67,6 +139,7 @@ def getPlaybackState(session_id):
         payload.update(
             {
                 "sessionId": record.session_id,
+                "sourceClientId": record.owner_client_id,
                 "state": record.state,
                 "trackId": record.track_id,
                 "positionMs": record.position_ms,
@@ -75,6 +148,30 @@ def getPlaybackState(session_id):
             }
         )
         return payload
+    finally:
+        close_connection()
+
+
+def getPlaybackStates(session_id):
+    open_connection(reuse=True)
+    try:
+        payloads = []
+        query = EmoPlaybackState.select().where(EmoPlaybackState.session_id == session_id)
+        for record in query:
+            payload = json.loads(record.playback_json) if record.playback_json else {}
+            payload.update(
+                {
+                    "sessionId": record.session_id,
+                    "sourceClientId": record.owner_client_id,
+                    "state": record.state,
+                    "trackId": record.track_id,
+                    "positionMs": record.position_ms,
+                    "volume": record.volume,
+                    "updatedAt": record.updated_at.timestamp(),
+                }
+            )
+            payloads.append(payload)
+        return payloads
     finally:
         close_connection()
 
@@ -91,7 +188,8 @@ def savePlaybackState(session_id, user_name, client_id, playback_state):
     open_connection(reuse=True)
     try:
         record = EmoPlaybackState.get_or_none(
-            EmoPlaybackState.session_id == session_id
+            (EmoPlaybackState.session_id == session_id)
+            & (EmoPlaybackState.owner_client_id == client_id)
         )
         if record is None:
             EmoPlaybackState.create(

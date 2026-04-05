@@ -162,9 +162,21 @@ CREATE TABLE IF NOT EXISTS emo_session_queue (
     updated_at TIMESTAMP NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS emo_local_queue (
+    id UUID PRIMARY KEY,
+    session_id VARCHAR(128) NOT NULL,
+    owner_client_id VARCHAR(128) NOT NULL,
+    queue_json TEXT NOT NULL,
+    current_index INTEGER NOT NULL DEFAULT 0,
+    position_ms INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    UNIQUE(session_id, owner_client_id)
+);
+
 CREATE TABLE IF NOT EXISTS emo_playback_state (
     id UUID PRIMARY KEY,
-    session_id VARCHAR(128) NOT NULL UNIQUE,
+    session_id VARCHAR(128) NOT NULL,
     user_name VARCHAR(64) NOT NULL,
     owner_client_id VARCHAR(128) NOT NULL,
     state VARCHAR(32) NOT NULL,
@@ -173,7 +185,8 @@ CREATE TABLE IF NOT EXISTS emo_playback_state (
     volume INTEGER,
     playback_json TEXT,
     created_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL
+    updated_at TIMESTAMP NOT NULL,
+    UNIQUE(session_id, owner_client_id)
 );
 
 CREATE TABLE IF NOT EXISTS shared_track_link (

@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 {% block title %}Shares · Emosonic Server{% endblock %}
 {% block navbar_playlists %}
-<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.playlist_index') }}">Playlists</a>
+<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.playlist_index') }}"><span data-i18n-en="Playlists" data-i18n-zh="播放列表">Playlists</span></a>
 {% endblock %}
 {% block page_title %}Shared tracks{% endblock %}
 {% block page_subtitle %}Review public listening links you created, copy them again, or disable them when they are no longer needed.{% endblock %}

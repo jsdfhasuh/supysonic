@@ -1,15 +1,72 @@
 {% extends "layout.html" %}
+{% block navbar_logs %}
+<a class="nav-link active" aria-current="page" href="{{ url_for('emo.list_logs') }}"><span data-i18n-en="Logs" data-i18n-zh="日志">Logs</span></a>
+{% endblock %}
 {% block title %}Log Viewer · Emosonic Server{% endblock %}
 {% block page_title %}{{ filename }}{% endblock %}
-{% block page_subtitle %}Inspect raw diagnostic output captured from Emo clients or related upload endpoints.{% endblock %}
+{% block page_subtitle %}<span data-i18n-en="Inspect raw diagnostic output captured from Emo clients or related upload endpoints." data-i18n-zh="查看来自 Emo 客户端或相关上传端点的原始诊断输出。">Inspect raw diagnostic output captured from Emo clients or related upload endpoints.</span>{% endblock %}
 {% block body %}
+<div class="card console-section-spacer console-download-console is-hidden" data-log-download-console>
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span data-i18n-en="Download progress" data-i18n-zh="下载进度">Download progress</span>
+    <span class="console-chip" data-download-percent>0%</span>
+  </div>
+  <div class="card-body d-flex flex-column gap-3">
+    <div>
+      <div class="console-table-title" data-download-file>-</div>
+      <div class="console-metric-caption" data-download-status data-i18n-en="Waiting to start download." data-i18n-zh="等待开始下载。">Waiting to start download.</div>
+    </div>
+    <div class="progress console-progress" role="progressbar" aria-label="Download progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="progress-bar console-progress-bar" data-download-bar style="width: 0%"></div>
+    </div>
+    <div class="d-flex justify-content-between gap-3 flex-wrap console-metric-caption">
+      <span data-download-detail data-i18n-en="No active download." data-i18n-zh="当前没有下载任务。">No active download.</span>
+      <span data-download-speed></span>
+    </div>
+  </div>
+</div>
+
+<div class="row row-cols-1 row-cols-md-3 g-3 console-section-spacer">
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header"><span data-i18n-en="Filename" data-i18n-zh="文件名">Filename</span></div>
+      <div class="card-body">
+        <div class="console-table-title text-truncate"><code>{{ filename }}</code></div>
+        <div class="console-metric-caption" data-i18n-en="Current diagnostic file opened in the log viewer." data-i18n-zh="当前在日志查看器中打开的诊断文件。">Current diagnostic file opened in the log viewer.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header"><span data-i18n-en="Line count" data-i18n-zh="行数">Line count</span></div>
+      <div class="card-body">
+        <div class="console-metric-value">{{ content.splitlines()|length }}</div>
+        <div class="console-metric-caption" data-i18n-en="Approximate number of lines in this raw output." data-i18n-zh="该原始输出的大致行数。">Approximate number of lines in this raw output.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header"><span data-i18n-en="Actions" data-i18n-zh="操作">Actions</span></div>
+      <div class="card-body d-flex flex-column gap-2">
+        <div class="console-metric-caption" data-i18n-en="Return to the uploaded log registry or keep this file open for troubleshooting." data-i18n-zh="返回上传日志列表，或继续停留在当前文件中进行排查。">Return to the uploaded log registry or keep this file open for troubleshooting.</div>
+        <a href="{{ url_for('emo.list_logs') }}" class="btn btn-outline-dark btn-sm"><span data-i18n-en="Back to log list" data-i18n-zh="返回日志列表">Back to log list</span></a>
+        <a href="{{ url_for('emo.download_log', filename=filename) }}" class="btn btn-primary btn-sm" data-log-download data-log-filename="{{ filename }}"><span data-i18n-en="Download file" data-i18n-zh="下载文件">Download file</span></a>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="card console-section-spacer">
   <div class="card-header d-flex justify-content-between align-items-center">
-    <span>Log content</span>
-    <a href="{{ url_for('emo.list_logs') }}" class="btn btn-outline-dark btn-sm">Back to log list</a>
+    <span data-i18n-en="Log content" data-i18n-zh="日志内容">Log content</span>
+    <div class="d-flex gap-2 flex-wrap justify-content-end">
+      <a href="{{ url_for('emo.download_log', filename=filename) }}" class="btn btn-primary btn-sm" data-log-download data-log-filename="{{ filename }}"><span data-i18n-en="Download file" data-i18n-zh="下载文件">Download file</span></a>
+      <a href="{{ url_for('emo.list_logs') }}" class="btn btn-outline-dark btn-sm"><span data-i18n-en="Back to log list" data-i18n-zh="返回日志列表">Back to log list</span></a>
+    </div>
   </div>
   <div class="card-body">
-    <pre class="console-log-view mb-0">{{ content }}</pre>
+    <pre class="console-log-view mb-0 console-log-view-large">{{ content }}</pre>
   </div>
 </div>
 {% endblock %}

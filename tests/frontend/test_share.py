@@ -33,8 +33,9 @@ class ShareTrackTestCase(FrontendTestBase):
 
     def test_create_and_open_share_link(self):
         self._login("alice", "Alic3")
-        rv = self.client.get(f"/track/{self.track.id}/share", follow_redirects=True)
-        self.assertIn("Share link created", rv.data)
+        rv = self.client.post(f"/track/{self.track.id}/share")
+        self.assertEqual(rv.status_code, 200)
+        self.assertEqual(rv.json["status"], "success")
         self.assertEqual(SharedTrackLink.select().count(), 1)
 
         link = SharedTrackLink.select().first()
@@ -49,7 +50,7 @@ class ShareTrackTestCase(FrontendTestBase):
 
     def test_share_index_and_disable(self):
         self._login("alice", "Alic3")
-        self.client.get(f"/track/{self.track.id}/share", follow_redirects=True)
+        self.client.post(f"/track/{self.track.id}/share")
         link = SharedTrackLink.select().first()
 
         rv = self.client.get("/share")

@@ -8,7 +8,7 @@
 {% block title %}Profile · Emosonic Server{% endblock %}
 {% block navbar_users %}
 {% if request.user.id != user.id %}
-<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.user_index') }}">Users</a>
+<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.user_index') }}"><span data-i18n-en="Users" data-i18n-zh="用户">Users</span></a>
 {% else %}
 {{ super() }}
 {% endif %}
@@ -21,24 +21,24 @@
 {% endif %}
 {% endblock %}
 {% block page_title %}{{ user.name }}{% endblock %}
-{% block page_subtitle %}Inspect account identity, service integrations, and client streaming preferences for this Emosonic Server user.{% endblock %}
+{% block page_subtitle %}<span data-i18n-en="Inspect account identity, service integrations, and client streaming preferences for this Emosonic Server user." data-i18n-zh="查看该 Emosonic 用户的账号身份、服务集成状态与客户端串流偏好。">Inspect account identity, service integrations, and client streaming preferences for this Emosonic Server user.</span>{% endblock %}
 {% block body %}
 <div class="row row-cols-1 row-cols-md-4 g-3 console-section-spacer">
   <div class="col">
     <div class="card console-metric-card">
-      <div class="card-header">Account role</div>
+      <div class="card-header"><span data-i18n-en="Account role" data-i18n-zh="账号角色">Account role</span></div>
       <div class="card-body">
         <div class="console-metric-value">{{ 'ADMIN' if user.admin else 'USER' }}</div>
-        <div class="console-metric-caption">Privilege level assigned to this account.</div>
+        <div class="console-metric-caption" data-i18n-en="Privilege level assigned to this account." data-i18n-zh="该账号当前的权限级别。">Privilege level assigned to this account.</div>
       </div>
     </div>
   </div>
   <div class="col">
     <div class="card console-metric-card">
-      <div class="card-header">Email status</div>
+      <div class="card-header"><span data-i18n-en="Email status" data-i18n-zh="邮箱状态">Email status</span></div>
       <div class="card-body">
         <div class="console-metric-value">{{ 'SET' if user.mail else 'NONE' }}</div>
-        <div class="console-metric-caption">Primary contact and notification address.</div>
+        <div class="console-metric-caption" data-i18n-en="Primary contact and notification address." data-i18n-zh="主要联系与通知邮箱。">Primary contact and notification address.</div>
       </div>
     </div>
   </div>
@@ -65,7 +65,7 @@
 <div class="row g-3 console-section-spacer">
   <div class="col-xl-6">
     <div class="card h-100">
-      <div class="card-header">Identity</div>
+      <div class="card-header"><span data-i18n-en="Identity" data-i18n-zh="身份信息">Identity</span></div>
       <div class="card-body">
         <ul class="console-info-list">
           <li><span>Username</span><strong>{{ user.name }}</strong></li>
@@ -78,15 +78,15 @@
   </div>
   <div class="col-xl-6">
     <div class="card h-100">
-      <div class="card-header">Security and account actions</div>
+      <div class="card-header"><span data-i18n-en="Security and account actions" data-i18n-zh="安全与账号操作">Security and account actions</span></div>
       <div class="card-body d-flex flex-column gap-2">
         {% if request.user.id == user.id %}
-        <a href="{{ url_for('frontend.change_mail_form', uid = 'me') }}" class="btn btn-outline-dark btn-sm">Change email</a>
-        <a href="{{ url_for('frontend.change_password_form', uid = 'me') }}" class="btn btn-dark btn-sm">Change password</a>
+        <a href="{{ url_for('frontend.change_mail_form', uid = 'me') }}" class="btn btn-outline-dark btn-sm"><span data-i18n-en="Change email" data-i18n-zh="修改邮箱">Change email</span></a>
+        <a href="{{ url_for('frontend.change_password_form', uid = 'me') }}" class="btn btn-dark btn-sm"><span data-i18n-en="Change password" data-i18n-zh="修改密码">Change password</span></a>
         {% else %}
-        <a href="{{ url_for('frontend.change_mail_form', uid = user.id) }}" class="btn btn-outline-dark btn-sm">Change email</a>
-        <a href="{{ url_for('frontend.change_username_form', uid = user.id) }}" class="btn btn-outline-dark btn-sm">Change username or admin status</a>
-        <a href="{{ url_for('frontend.change_password_form', uid = user.id) }}" class="btn btn-dark btn-sm">Change password</a>
+        <a href="{{ url_for('frontend.change_mail_form', uid = user.id) }}" class="btn btn-outline-dark btn-sm"><span data-i18n-en="Change email" data-i18n-zh="修改邮箱">Change email</span></a>
+        <a href="{{ url_for('frontend.change_username_form', uid = user.id) }}" class="btn btn-outline-dark btn-sm"><span data-i18n-en="Change username or admin status" data-i18n-zh="修改用户名或管理员状态">Change username or admin status</span></a>
+        <a href="{{ url_for('frontend.change_password_form', uid = user.id) }}" class="btn btn-dark btn-sm"><span data-i18n-en="Change password" data-i18n-zh="修改密码">Change password</span></a>
         {% endif %}
       </div>
     </div>
@@ -96,7 +96,7 @@
 <div class="row g-3 console-section-spacer">
   <div class="col-xl-6">
     <div class="card h-100">
-      <div class="card-header">Last.fm integration</div>
+      <div class="card-header"><span data-i18n-en="Last.fm integration" data-i18n-zh="Last.fm 集成">Last.fm integration</span></div>
       <div class="card-body d-flex flex-column gap-3">
         {% if api_key != None %}
           {% if user.lastfm_session %}
@@ -114,7 +114,7 @@
   </div>
   <div class="col-xl-6">
     <div class="card h-100">
-      <div class="card-header">ListenBrainz integration</div>
+      <div class="card-header"><span data-i18n-en="ListenBrainz integration" data-i18n-zh="ListenBrainz 集成">ListenBrainz integration</span></div>
       <div class="card-body d-flex flex-column gap-3">
         {% if user.listenbrainz_session %}
         <div class="console-status status-{{ 'playing' if user.listenbrainz_status else 'paused' }}">{{ 'Linked' if user.listenbrainz_status else 'Invalid token' }}</div>
@@ -135,9 +135,9 @@
 
 {% if clients.count() %}
 <div class="card console-section-spacer">
-  <div class="card-header">Client preferences</div>
+  <div class="card-header"><span data-i18n-en="Client preferences" data-i18n-zh="客户端偏好">Client preferences</span></div>
   <div class="card-body">
-    <p class="console-muted">Set fallback transcoding and bitrate rules for clients that do not explicitly request them.</p>
+    <p class="console-muted" data-i18n-en="Set fallback transcoding and bitrate rules for clients that do not explicitly request them." data-i18n-zh="为未显式声明请求参数的客户端设置默认转码与码率规则。">Set fallback transcoding and bitrate rules for clients that do not explicitly request them.</p>
     <form method="post">
       <div class="table-responsive">
         <table id="clients" class="table table-hover align-middle mb-0">
@@ -166,7 +166,7 @@
           <tbody>
         </table>
       </div>
-      <input class="btn btn-dark mt-3" type="submit" value="Save preferences" />
+      <input class="btn btn-dark mt-3" type="submit" value="Save preferences" data-i18n-en="Save preferences" data-i18n-zh="保存偏好" data-i18n-attr="value" />
     </form>
   </div>
 </div>

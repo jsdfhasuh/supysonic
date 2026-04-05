@@ -8,7 +8,7 @@ import uuid
 from os.path import abspath
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, send_file, url_for
+from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, send_file, url_for
 
 from ..api.media import _get_cover_path
 from ..db import Album, Artist, SharedTrackLink, Track
@@ -89,16 +89,20 @@ def shared_track_cover(token, eid):
     return send_file(cover_path)
 
 
-@frontend.route("/track/<tid>/share")
+@frontend.route("/track/<tid>/share", methods=["GET", "POST"])
 def create_track_share(tid):
     try:
         track_id = uuid.UUID(tid)
     except ValueError:
+        if request.method == "POST":
+            return jsonify({"status": "error", "message": "Invalid track id"}), 400
         flash("Invalid track id", "warning")
         return redirect(url_for("frontend.playlist_index"))
 
     track = Track.get_or_none(Track.id == track_id)
     if track is None:
+        if request.method == "POST":
+            return jsonify({"status": "error", "message": "Unknown track"}), 404
         flash("Unknown track", "warning")
         return redirect(url_for("frontend.playlist_index"))
 
@@ -108,6 +112,16 @@ def create_track_share(tid):
         created_by=request.user,
     )
     share_url = url_for("share.shared_track_page", token=link.token, _external=True)
+    if request.method == "POST":
+        return jsonify(
+            {
+                "status": "success",
+                "shareUrl": share_url,
+                "trackTitle": track.title,
+                "artistName": Artist.select(Artist.name).where(Artist.id == track.artist_id).scalar(),
+            }
+        )
+
     referrer = request.referrer or url_for("frontend.playlist_index", _external=True)
     parts = list(urlparse(referrer))
     query = dict(parse_qsl(parts[4], keep_blank_values=True))

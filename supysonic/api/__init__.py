@@ -153,6 +153,16 @@ def get_entity(cls, param="id"):
         eid = uuid.UUID(eid)
     return cls[eid]
 
+def get_entity_by_id(cls,id, param="id"):
+    if cls == Folder:
+        id = int(id)
+    elif cls == Playlist and id == "default":
+        return "default"
+    else:
+        id = uuid.UUID(id)
+    return cls[id]
+    
+
 def get_entity_by_name(cls, param):
     name = request.values[param]
     return cls.get(name=name) or cls.select().where(cls.name == name).first()

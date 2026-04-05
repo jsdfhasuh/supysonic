@@ -1,9 +1,22 @@
+import os
+import time
+from functools import wraps
+
+from flask import jsonify, redirect, render_template, request, send_file, url_for
+
 from . import api_routing
 from .exceptions import GenericError
-from flask import request
-from flask import Flask, request, jsonify, render_template
-import os,time
 Version = "1.0.0"
+
+
+def admin_only(f):
+    @wraps(f)
+    def decorated_func(*args, **kwargs):
+        if not getattr(request, "user", None) or not request.user.admin:
+            return redirect(url_for("frontend.index"))
+        return f(*args, **kwargs)
+
+    return decorated_func
 
 @api_routing('/getVersion')
 def get_version():
@@ -12,6 +25,18 @@ def get_version():
 
 UPLOAD_FOLDER = './logs'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+
+def get_log_path(filename):
+    if not filename:
+        raise GenericError("Missing filename")
+
+    basePath = os.path.abspath(UPLOAD_FOLDER)
+    safePath = os.path.abspath(os.path.join(basePath, filename))
+    if os.path.commonpath([basePath, safePath]) != basePath or not os.path.isfile(safePath):
+        raise GenericError("File not found")
+
+    return safePath
 
 @api_routing('/upload_log')
 def upload_log():
@@ -34,23 +59,37 @@ def upload_log():
 
 # 日志列表页面
 @api_routing('/logs')
+@admin_only
 def list_logs():
     files = sorted(os.listdir(UPLOAD_FOLDER), reverse=True)
     return render_template('log_list.html', files=files)
 
 # 查看日志页面
 @api_routing('/viewlog')
+@admin_only
 def view_log():
     filename = request.args.get('filename')
-    safe_path = os.path.join(UPLOAD_FOLDER, filename)
-    if not os.path.isfile(safe_path):
+    try:
+        safePath = get_log_path(filename)
+    except GenericError:
         return "File not found", 404
     
     try:
-        with open(safe_path, 'r', encoding='utf-8', errors='ignore') as f:
+        with open(safePath, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
     except Exception as e:
         return f"Error reading file: {e}", 500
     
     return render_template('view.html', filename=filename, content=content)
 
+
+@api_routing('/downloadlog')
+@admin_only
+def download_log():
+    filename = request.args.get('filename')
+    try:
+        safePath = get_log_path(filename)
+    except GenericError:
+        return "File not found", 404
+
+    return send_file(safePath, as_attachment=True, download_name=os.path.basename(safePath))

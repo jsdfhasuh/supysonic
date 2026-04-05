@@ -7,36 +7,36 @@
 {% extends "layout.html" %}
 {% block title %}Folders · Emosonic Server{% endblock %}
 {% block navbar_folders %}
-<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.folder_index') }}">Folders</a>
+<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.folder_index') }}"><span data-i18n-en="Folders" data-i18n-zh="文件夹">Folders</span></a>
 {% endblock %}
-{% block page_title %}Library sources{% endblock %}
-{% block page_subtitle %}Track the roots that feed your library, review daemon scan availability, and manage source paths for ingestion.{% endblock %}
+{% block page_title %}<span data-i18n-en="Library sources" data-i18n-zh="曲库来源">Library sources</span>{% endblock %}
+{% block page_subtitle %}<span data-i18n-en="Track the roots that feed your library, review daemon scan availability, and manage source paths for ingestion." data-i18n-zh="跟踪曲库来源根目录、查看守护进程扫描可用性，并管理导入路径。">Track the roots that feed your library, review daemon scan availability, and manage source paths for ingestion.</span>{% endblock %}
 {% block body %}
 <div class="row row-cols-1 row-cols-md-3 g-3 console-section-spacer">
   <div class="col">
     <div class="card console-metric-card">
-      <div class="card-header">Root folders</div>
+      <div class="card-header"><span data-i18n-en="Root folders" data-i18n-zh="根目录文件夹">Root folders</span></div>
       <div class="card-body">
         <div class="console-metric-value">{{ summary.total }}</div>
-        <div class="console-metric-caption">Library roots currently managed by the server.</div>
+        <div class="console-metric-caption" data-i18n-en="Library roots currently managed by the server." data-i18n-zh="当前由服务端管理的曲库根目录。">Library roots currently managed by the server.</div>
       </div>
     </div>
   </div>
   <div class="col">
     <div class="card console-metric-card">
-      <div class="card-header">Daemon scan</div>
+      <div class="card-header"><span data-i18n-en="Daemon scan" data-i18n-zh="守护进程扫描">Daemon scan</span></div>
       <div class="card-body">
         <div class="console-metric-value">{{ 'ON' if summary.scanEnabled else 'OFF' }}</div>
-        <div class="console-metric-caption">Web-triggered scans require the background daemon.</div>
+        <div class="console-metric-caption" data-i18n-en="Web-triggered scans require the background daemon." data-i18n-zh="网页触发扫描依赖后台守护进程。">Web-triggered scans require the background daemon.</div>
       </div>
     </div>
   </div>
   <div class="col">
     <div class="card console-metric-card">
-      <div class="card-header">Operations</div>
+      <div class="card-header"><span data-i18n-en="Operations" data-i18n-zh="操作">Operations</span></div>
       <div class="card-body d-flex flex-column gap-2">
-        <a href="{{ url_for('frontend.add_folder_form') }}" class="btn btn-dark btn-sm">Add new folder</a>
-        {% if allow_scan %}<a href="{{ url_for('frontend.scan_folder') }}" class="btn btn-outline-dark btn-sm">Scan all folders</a>{% endif %}
+        <a href="{{ url_for('frontend.add_folder_form') }}" class="btn btn-dark btn-sm"><span data-i18n-en="Add new folder" data-i18n-zh="新增文件夹">Add new folder</span></a>
+        {% if allow_scan %}<a href="{{ url_for('frontend.scan_folder') }}" class="btn btn-outline-dark btn-sm"><span data-i18n-en="Scan all folders" data-i18n-zh="扫描全部文件夹">Scan all folders</span></a>{% endif %}
       </div>
     </div>
   </div>
@@ -44,7 +44,7 @@
 
 <div class="card console-section-spacer">
   <div class="card-header d-flex justify-content-between align-items-center">
-    <span>Library roots</span>
+    <span data-i18n-en="Library roots" data-i18n-zh="曲库根目录">Library roots</span>
     <span class="console-chip">{{ 'Daemon online' if allow_scan else 'Daemon offline' }}</span>
   </div>
   <div class="table-responsive">
@@ -86,15 +86,15 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h1 class="modal-title fs-5" id="confirm-delete-label">Remove folder?</h1>
+        <h1 class="modal-title fs-5" id="confirm-delete-label"><span data-i18n-en="Remove folder?" data-i18n-zh="移除文件夹？">Remove folder?</span></h1>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <p>The selected root folder will be removed from the managed library.</p>
+        <p data-i18n-en="The selected root folder will be removed from the managed library." data-i18n-zh="所选根目录文件夹将从受管曲库中移除。">The selected root folder will be removed from the managed library.</p>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <a type="button" class="btn btn-danger btn-ok">Delete folder</a>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><span data-i18n-en="Cancel" data-i18n-zh="取消">Cancel</span></button>
+        <a type="button" class="btn btn-danger btn-ok"><span data-i18n-en="Delete folder" data-i18n-zh="删除文件夹">Delete folder</span></a>
       </div>
     </div>
   </div>

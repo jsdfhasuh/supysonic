@@ -13,7 +13,7 @@ from peewee import fn
 from ..lastfm import LastFm
 from ..db import Folder, Artist, Album, Track
 from ..TaskManger import get_task_manager, TaskManager
-from . import get_entity, get_root_folder, api_routing, get_entity_by_name
+from . import get_entity, get_root_folder, api_routing, get_entity_by_name,get_entity_by_id
 
 
 @api_routing("/getMusicFolders")
@@ -322,6 +322,36 @@ def track_info():
         "song", res.as_subsonic_child(request.user, request.client)
     )
 
+
+@api_routing("/getSongs")
+def list_tracks():
+    data = request.get_json(silent=True)
+    if not data:
+        raise ValueError("Request body must be JSON")
+
+    ids = data.get("ids")
+    if ids is None:
+        raise ValueError("No song IDs provided")
+    if not isinstance(ids, list):
+        raise ValueError("ids must be a list")
+    # data : {"ids": ["1", "2", "3"]} or {"ids": "1,2,3"}
+    if isinstance(ids, str):
+        ids = ids.split(",")
+    else:
+        ids = [str(i) for i in ids]
+    if not ids:
+        raise ValueError("No valid song IDs provided")
+
+    tracks = []
+    for track_id in ids:
+        try:
+            track = get_entity_by_id(Track, track_id, param="id")
+            tracks.append(track)
+        except Exception as e:
+            current_app.logger.error(f"Error retrieving track with ID {track_id}: {e}")
+
+    result_info = [t.as_subsonic_child(request.user, request.client) for t in tracks]
+    return request.formatter("songs", {"song": result_info})
 
 # getSimilarSongs
 @api_routing("/getSimilarSongs")

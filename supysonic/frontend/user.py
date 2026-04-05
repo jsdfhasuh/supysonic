@@ -7,8 +7,7 @@
 
 import logging
 
-from flask import flash, redirect, render_template, request, session, url_for
-from flask import current_app
+from flask import current_app, flash, jsonify, redirect, render_template, request, session, url_for
 from functools import wraps
 
 from ..db import ClientPrefs, User
@@ -19,6 +18,62 @@ from ..managers.user import UserManager
 from . import admin_only, frontend
 
 logger = logging.getLogger(__name__)
+
+
+def _is_registration_enabled():
+    return current_app.config["WEBAPP"].get("allow_user_registration", True)
+
+
+def _is_lastfm_link_available():
+    config = current_app.config["LASTFM"]
+    return config.get("api_key") is not None and config.get("secret") is not None
+
+
+def _build_lastfm_auth_url(uid):
+    callback_url = request.url_root[:-1] + url_for("frontend.lastfm_reg", uid=uid)
+    return (
+        "https://www.last.fm/api/auth/"
+        f"?api_key={current_app.config['LASTFM']['api_key']}&cb={callback_url}"
+    )
+
+
+def _create_registered_user(user_name, password, password_confirm, mail):
+    errors = []
+
+    if not _is_registration_enabled():
+        errors.append("User registration is disabled.")
+
+    if not user_name:
+        errors.append("The name is required.")
+    if not password:
+        errors.append("Please provide a password.")
+    elif password != password_confirm:
+        errors.append("The passwords don't match.")
+
+    if errors:
+        return None, errors
+
+    try:
+        user = UserManager.add(user_name, password, mail=mail or "")
+        return user, []
+    except ValueError as exc:
+        return None, [str(exc)]
+
+
+def _login_registered_user(user):
+    session["userid"] = str(user.id)
+
+
+def _register_form_context():
+    return {
+        "registration_enabled": _is_registration_enabled(),
+        "lastfm_link_available": _is_lastfm_link_available(),
+        "form_data": {
+            "user": request.form.get("user", ""),
+            "mail": request.form.get("mail", ""),
+            "link_lastfm": request.form.get("link_lastfm", ""),
+        },
+    }
 
 
 def me_or_uuid(f, arg="uid"):
@@ -337,7 +392,7 @@ def listenbrainz_unreg(uid, user):
 
 @frontend.route("/user/login", methods=["GET", "POST"])
 def login():
-    return_url = request.args.get("returnUrl") or url_for("frontend.index")
+    return_url = request.args.get("returnUrl") or request.form.get("returnUrl") or url_for("frontend.index")
     if request.user:
         flash("Already logged in")
         return redirect(return_url)
@@ -368,6 +423,68 @@ def login():
             flash("Wrong username or password", "danger")
 
     return render_template("login.html")
+
+
+@frontend.route("/user/register", methods=["GET", "POST"])
+def register():
+    if request.user:
+        flash("Already logged in")
+        return redirect(url_for("frontend.index"))
+
+    if not _is_registration_enabled():
+        flash("User registration is disabled.", "warning")
+        return redirect(url_for("frontend.login"))
+
+    return_url = request.args.get("returnUrl") or request.form.get("returnUrl") or url_for("frontend.index")
+    if request.method == "GET":
+        return render_template("register.html", return_url=return_url, **_register_form_context())
+
+    user_name = request.form.get("user", "")
+    password = request.form.get("passwd", "")
+    password_confirm = request.form.get("passwd_confirm", "")
+    mail = request.form.get("mail", "")
+    user, errors = _create_registered_user(user_name, password, password_confirm, mail)
+    if errors:
+        for error in errors:
+            flash(error, "danger")
+        return render_template("register.html", return_url=return_url, **_register_form_context())
+
+    _login_registered_user(user)
+    flash("Account created and logged in!", "success")
+    if request.form.get("link_lastfm") and _is_lastfm_link_available():
+        return redirect(_build_lastfm_auth_url("me"))
+    return redirect(return_url)
+
+
+@frontend.route("/user/register.json", methods=["POST"])
+def register_json():
+    if request.user:
+        return jsonify({"ok": False, "error": "Already logged in."}), 400
+    if not _is_registration_enabled():
+        return jsonify({"ok": False, "error": "User registration is disabled."}), 403
+
+    data = request.get_json(silent=True)
+    if data is None:
+        data = request.form
+
+    user_name = data.get("user", "")
+    password = data.get("password", "")
+    password_confirm = data.get("passwordConfirm", "")
+    mail = data.get("mail", "")
+    user, errors = _create_registered_user(user_name, password, password_confirm, mail)
+    if errors:
+        return jsonify({"ok": False, "error": errors[0]}), 400
+
+    _login_registered_user(user)
+    return jsonify(
+        {
+            "ok": True,
+            "user": {
+                "id": str(user.id),
+                "name": user.name,
+            },
+        }
+    )
 
 
 @frontend.route("/user/logout")

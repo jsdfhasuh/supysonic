@@ -1,0 +1,58 @@
+{% extends "layout.html" %}
+{% block title %}Register · Emosonic Server{% endblock %}
+{% block page_title %}<span data-i18n-en="Create account" data-i18n-zh="创建账号">Create account</span>{% endblock %}
+{% block page_subtitle %}<span data-i18n-en="Create your Emosonic account for app access, web playback control, and optional Last.fm linking." data-i18n-zh="注册 Emosonic 账号，解锁 App 访问、网页播放控制，还能按需关联 Last.fm。">Create your Emosonic account for app access, web playback control, and optional Last.fm linking.</span>{% endblock %}
+{% block body %}
+<div class="row justify-content-center my-5 console-auth-shell">
+  <div class="col-lg-7 col-md-9">
+    <div class="card console-auth-card">
+      <div class="card-header"><span data-i18n-en="Register a new account" data-i18n-zh="注册新账号">Register a new account</span></div>
+      <div class="card-body">
+        <div class="console-auth-note mb-4">
+          <strong data-i18n-en="Your Emosonic identity" data-i18n-zh="你的 Emosonic 身份">Your Emosonic identity</strong>
+          <div class="console-muted mt-1" data-i18n-en="Use one account across the web workspace and your Flutter app, then connect Last.fm if you want external scrobbling and profile sync." data-i18n-zh="一个账号通用于网页控制台和 Flutter App。想同步外部听歌记录？那就把 Last.fm 连上。">Use one account across the web workspace and your Flutter app, then connect Last.fm if you want external scrobbling and profile sync.</div>
+        </div>
+        <form method="post" class="d-flex flex-column gap-4">
+          <input type="hidden" name="returnUrl" value="{{ return_url }}">
+
+          <div>
+            <label class="form-label" for="user"><span data-i18n-en="Username" data-i18n-zh="用户名">Username</span></label>
+            <input type="text" class="form-control" id="user" name="user" value="{{ form_data.user }}" placeholder="Choose a username" data-i18n-en="Choose a username" data-i18n-zh="设置用户名" data-i18n-attr="placeholder">
+          </div>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label" for="passwd"><span data-i18n-en="Password" data-i18n-zh="密码">Password</span></label>
+              <input type="password" class="form-control" id="passwd" name="passwd" placeholder="Create a password" data-i18n-en="Create a password" data-i18n-zh="设置密码" data-i18n-attr="placeholder">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="passwd_confirm"><span data-i18n-en="Confirm password" data-i18n-zh="确认密码">Confirm password</span></label>
+              <input type="password" class="form-control" id="passwd_confirm" name="passwd_confirm" placeholder="Repeat the password" data-i18n-en="Repeat the password" data-i18n-zh="再次输入密码" data-i18n-attr="placeholder">
+            </div>
+          </div>
+
+          <div>
+            <label class="form-label" for="mail"><span data-i18n-en="Email" data-i18n-zh="邮箱">Email</span></label>
+            <input type="text" class="form-control" id="mail" name="mail" value="{{ form_data.mail }}" placeholder="Optional email address" data-i18n-en="Optional email address" data-i18n-zh="可选邮箱地址" data-i18n-attr="placeholder">
+          </div>
+
+          {% if lastfm_link_available %}
+          <div class="border rounded-4 p-3 d-flex align-items-start gap-3">
+            <input type="checkbox" class="form-check-input flex-shrink-0 mt-1 ms-0" role="switch" id="link_lastfm" name="link_lastfm" {{ 'checked="checked"' if form_data.link_lastfm }}>
+            <label class="form-check-label mb-0" for="link_lastfm">
+              <strong data-i18n-en="Link Last.fm after registration" data-i18n-zh="注册后关联 Last.fm">Link Last.fm after registration</strong><br>
+              <small class="console-muted" data-i18n-en="After the account is created, redirect to Last.fm authorization and complete the scrobbling link." data-i18n-zh="账号创建后，将跳转至 Last.fm 授权，完成听歌记录的关联。">After the account is created, redirect to Last.fm authorization and complete the scrobbling link.</small>
+            </label>
+          </div>
+          {% endif %}
+
+          <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+            <a href="{{ url_for('frontend.login', returnUrl=return_url) }}" class="btn btn-outline-dark"><span data-i18n-en="Back to login" data-i18n-zh="返回登录">Back to login</span></a>
+            <button class="btn btn-dark" type="submit"><span data-i18n-en="Create account" data-i18n-zh="注册账号">Create account</span></button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

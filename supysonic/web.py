@@ -34,6 +34,9 @@ def create_application(config=None):
 
     # Set loglevel
     logfile = app.config["WEBAPP"]["log_file"]
+    logfile_dir = path.dirname(logfile)
+    if logfile and not path.exists(logfile_dir):
+        makedirs(logfile_dir,exist_ok=True)  # pragma: nocover
     if logfile:  # pragma: nocover
         if app.config["WEBAPP"]["log_rotate"]:
             handler = TimedRotatingFileHandler(logfile, when="midnight")

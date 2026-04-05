@@ -39,6 +39,7 @@ class DefaultConfig:
         "mount_api": True,
         "mount_emosonic": False,
         "emo_ws_enabled": True,
+        "allow_user_registration": True,
         "index_ignored_prefixes": "El La Le Las Les Los The",
         "online_lyrics": False,
     }

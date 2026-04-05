@@ -58,6 +58,8 @@ class MockResponse:
         self.__status_code = response.status_code
         self.__data = response.get_data(as_text=True)
         self.__mimetype = response.mimetype
+        self.__json = response.get_json(silent=True)
+        self.__headers = response.headers
 
     @property
     def status_code(self):
@@ -70,6 +72,18 @@ class MockResponse:
     @property
     def mimetype(self):
         return self.__mimetype
+
+    @property
+    def json(self):
+        return self.__json
+
+    @property
+    def headers(self):
+        return self.__headers
+
+    @property
+    def location(self):
+        return self.__headers.get("Location")
 
 
 def patch_method(f):

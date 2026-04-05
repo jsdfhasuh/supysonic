@@ -7,36 +7,36 @@
 {% extends "layout.html" %}
 {% block title %}Playlist · Emosonic Server{% endblock %}
 {% block navbar_playlists %}
-<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.playlist_index') }}">Playlists</a>
+<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.playlist_index') }}"><span data-i18n-en="Playlists" data-i18n-zh="播放列表">Playlists</span></a>
 {% endblock %}
 {% block page_title %}{{ playlist.name }}{% endblock %}
-{% block page_subtitle %}Inspect playlist metadata, adjust publication settings, and review the ordered tracks that belong to this collection.{% endblock %}
+{% block page_subtitle %}<span data-i18n-en="Inspect playlist metadata, adjust publication settings, and review the ordered tracks that belong to this collection." data-i18n-zh="查看播放列表元数据、调整公开设置，并检查这个集合中的有序曲目。">Inspect playlist metadata, adjust publication settings, and review the ordered tracks that belong to this collection.</span>{% endblock %}
 {% block body %}
 <div class="row row-cols-1 row-cols-md-3 g-3 console-section-spacer">
   <div class="col">
     <div class="card console-metric-card">
-      <div class="card-header">Owner</div>
+      <div class="card-header"><span data-i18n-en="Owner" data-i18n-zh="拥有者">Owner</span></div>
       <div class="card-body">
         <div class="console-metric-value">{{ playlist.user.name }}</div>
-        <div class="console-metric-caption">Account that owns this playlist.</div>
+        <div class="console-metric-caption" data-i18n-en="Account that owns this playlist." data-i18n-zh="拥有这个播放列表的账号。">Account that owns this playlist.</div>
       </div>
     </div>
   </div>
   <div class="col">
     <div class="card console-metric-card">
-      <div class="card-header">Tracks</div>
+      <div class="card-header"><span data-i18n-en="Tracks" data-i18n-zh="曲目数">Tracks</span></div>
       <div class="card-body">
         <div class="console-metric-value">{{ playlist.get_tracks()|length }}</div>
-        <div class="console-metric-caption">Number of entries currently stored in this playlist.</div>
+        <div class="console-metric-caption" data-i18n-en="Number of entries currently stored in this playlist." data-i18n-zh="当前这个播放列表中包含的条目数量。">Number of entries currently stored in this playlist.</div>
       </div>
     </div>
   </div>
   <div class="col">
     <div class="card console-metric-card">
-      <div class="card-header">Visibility</div>
+      <div class="card-header"><span data-i18n-en="Visibility" data-i18n-zh="可见性">Visibility</span></div>
       <div class="card-body">
         <div class="console-metric-value">{{ 'PUBLIC' if playlist.public else 'PRIVATE' }}</div>
-        <div class="console-metric-caption">Publication state exposed to other users.</div>
+        <div class="console-metric-caption" data-i18n-en="Publication state exposed to other users." data-i18n-zh="是否向其他用户公开。">Publication state exposed to other users.</div>
       </div>
     </div>
   </div>
@@ -44,22 +44,22 @@
 
 {% if playlist.user.id == request.user.id %}
 <div class="card console-section-spacer">
-  <div class="card-header">Edit playlist</div>
+  <div class="card-header"><span data-i18n-en="Edit playlist" data-i18n-zh="编辑播放列表">Edit playlist</span></div>
   <div class="card-body">
     <form method="post" class="d-flex flex-column gap-4">
       <div>
-        <label class="form-label" for="name">Playlist name</label>
+        <label class="form-label" for="name"><span data-i18n-en="Playlist name" data-i18n-zh="播放列表名称">Playlist name</span></label>
         <input type="text" class="form-control" id="name" name="name" value="{{ playlist.name }}">
       </div>
       <div class="form-check form-switch border rounded-4 p-3">
         <input type="checkbox" class="form-check-input" role="switch" id="public" name="public" {% if playlist.public %}checked="true"{% endif %}>
         <label class="form-check-label ms-2" for="public">
-          <strong>Make playlist public</strong><br>
-          <small class="console-muted">Public playlists are visible to other users with access to the server.</small>
+          <strong data-i18n-en="Make playlist public" data-i18n-zh="公开播放列表">Make playlist public</strong><br>
+          <small class="console-muted" data-i18n-en="Public playlists are visible to other users with access to the server." data-i18n-zh="公开播放列表会对有权限访问服务器的其他用户可见。">Public playlists are visible to other users with access to the server.</small>
         </label>
       </div>
       <div class="d-flex justify-content-end">
-        <button class="btn btn-dark" type="submit">Update playlist</button>
+        <button class="btn btn-dark" type="submit"><span data-i18n-en="Update playlist" data-i18n-zh="更新播放列表">Update playlist</span></button>
       </div>
     </form>
   </div>
@@ -67,7 +67,7 @@
 {% endif %}
 
 <div class="card">
-  <div class="card-header">Tracks</div>
+  <div class="card-header"><span data-i18n-en="Tracks" data-i18n-zh="曲目">Tracks</span></div>
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
       <thead>
@@ -88,7 +88,7 @@
               data-track-title="{{ t.title }}"
               data-track-artist="{{ t.album.artist.name }}"
             >
-              Create share link
+              <span data-i18n-en="Create share link" data-i18n-zh="创建分享链接">Create share link</span>
             </button>
           </td>
         </tr>
@@ -102,20 +102,20 @@
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
-        <h1 class="modal-title fs-5" id="confirm-share-label">Create public share link?</h1>
+        <h1 class="modal-title fs-5" id="confirm-share-label"><span data-i18n-en="Create public share link?" data-i18n-zh="创建公开分享链接？">Create public share link?</span></h1>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <p class="mb-2">You are about to create a public listening link for this track:</p>
+        <p class="mb-2" data-i18n-en="You are about to create a public listening link for this track:" data-i18n-zh="你即将为这首曲目创建公开收听链接：">You are about to create a public listening link for this track:</p>
         <div class="border rounded-4 p-3 bg-body-tertiary">
           <div class="console-table-title" id="share-track-title">-</div>
           <small class="console-muted" id="share-track-artist">-</small>
         </div>
-        <p class="console-muted mt-3 mb-0">Anyone with the generated link will be able to stream this song until you disable the share.</p>
+        <p class="console-muted mt-3 mb-0" data-i18n-en="Anyone with the generated link will be able to stream this song until you disable the share." data-i18n-zh="任何拿到该链接的人都能播放这首歌，直到你关闭分享。">Anyone with the generated link will be able to stream this song until you disable the share.</p>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <a href="#" class="btn btn-dark" id="confirm-share-link">Create link</a>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><span data-i18n-en="Cancel" data-i18n-zh="取消">Cancel</span></button>
+        <a href="#" class="btn btn-dark" id="confirm-share-link"><span data-i18n-en="Create link" data-i18n-zh="创建链接">Create link</span></a>
       </div>
     </div>
   </div>
@@ -125,22 +125,20 @@
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
-        <h1 class="modal-title fs-5" id="share-created-label">Share link ready</h1>
+        <h1 class="modal-title fs-5" id="share-created-label"><span data-i18n-en="Share link ready" data-i18n-zh="分享链接已生成">Share link ready</span></h1>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <p class="mb-2">Use this public link to share <strong>{{ request.args.get('share_title') or 'track' }}</strong> with anyone.</p>
+        <p class="mb-2"><span data-i18n-en="Use this public link to share " data-i18n-zh="使用这个公开链接分享 ">Use this public link to share </span><strong id="share-created-title">track</strong><span data-i18n-en=" with anyone." data-i18n-zh=" 给任何人。"> with anyone.</span></p>
         <div class="input-group">
-          <input type="text" class="form-control" id="share-link-field" value="{{ request.args.get('share_url') or '' }}" readonly>
-          <button class="btn btn-dark" type="button" id="copy-share-link">Copy link</button>
+          <input type="text" class="form-control" id="share-link-field" value="" readonly>
+          <button class="btn btn-dark" type="button" id="copy-share-link"><span data-i18n-en="Copy link" data-i18n-zh="复制链接">Copy link</span></button>
         </div>
-        <small class="console-muted d-block mt-2" id="share-link-status">Anyone with this URL can stream the shared track.</small>
+        <small class="console-muted d-block mt-2" id="share-link-status" data-i18n-en="Anyone with this URL can stream the shared track." data-i18n-zh="任何拥有此链接的人都可以播放这首分享曲目。">Anyone with this URL can stream the shared track.</small>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-        {% if request.args.get('share_url') %}
-        <a href="{{ request.args.get('share_url') }}" target="_blank" rel="noopener noreferrer" class="btn btn-dark">Open link</a>
-        {% endif %}
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><span data-i18n-en="Close" data-i18n-zh="关闭">Close</span></button>
+        <a href="#" target="_blank" rel="noopener noreferrer" class="btn btn-dark" id="open-share-link"><span data-i18n-en="Open link" data-i18n-zh="打开链接">Open link</span></a>
       </div>
     </div>
   </div>
@@ -169,6 +167,8 @@
     const shareTrackArtist = document.getElementById('share-track-artist');
     const shareCreatedElement = document.getElementById('share-created');
     const shareCreatedModal = shareCreatedElement ? new bootstrap.Modal(shareCreatedElement) : null;
+    const shareCreatedTitle = document.getElementById('share-created-title');
+    const openShareLink = document.getElementById('open-share-link');
 
     const copyShareButton = document.getElementById('copy-share-link');
     if (copyShareButton) {
@@ -191,18 +191,45 @@
 
     document.querySelectorAll('.open-share-modal').forEach((button) => {
       button.addEventListener('click', function() {
-        confirmShareLink.href = this.dataset.shareUrl;
+        confirmShareLink.dataset.shareUrl = this.dataset.shareUrl;
         shareTrackTitle.textContent = this.dataset.trackTitle || '-';
         shareTrackArtist.textContent = this.dataset.trackArtist || '-';
         shareModal.show();
       });
     });
 
-    {% if request.args.get('share_url') %}
-    if (shareCreatedModal) {
-      shareCreatedModal.show();
-    }
-    {% endif %}
+    confirmShareLink.addEventListener('click', async function(event) {
+      event.preventDefault();
+      const createUrl = this.dataset.shareUrl;
+      if (!createUrl) {
+        return;
+      }
+
+      this.classList.add('disabled');
+      this.textContent = 'Creating...';
+      try {
+        const response = await fetch(createUrl, {
+          method: 'POST',
+          headers: { 'X-Requested-With': 'fetch' },
+        });
+        const payload = await response.json();
+        if (!response.ok || payload.status !== 'success') {
+          throw new Error(payload.message || 'Failed to create share link');
+        }
+
+        document.getElementById('share-link-field').value = payload.shareUrl;
+        shareCreatedTitle.textContent = payload.trackTitle || 'track';
+        openShareLink.href = payload.shareUrl;
+        document.getElementById('share-link-status').textContent = 'Anyone with this URL can stream the shared track.';
+        shareModal.hide();
+        shareCreatedModal.show();
+      } catch (error) {
+        alert(error.message);
+      } finally {
+        this.classList.remove('disabled');
+        this.textContent = 'Create link';
+      }
+    });
   });
 </script>
 {% endblock %}

@@ -28,7 +28,7 @@ from ..covers import EXTENSIONS
 from .. import VERSION, DOWNLOAD_URL
 from ..daemon.client import DaemonClient
 from ..daemon.exceptions import DaemonUnavailableError
-from ..db import Artist, Album, EmoPlaybackState, EmoSessionQueue, Track
+from ..db import Artist, Album, EmoLocalQueue, EmoPlaybackState, EmoSessionQueue, Track
 from ..api.media import _get_cover_path
 from ..emo.ws_state import get_state
 from ..managers.user import UserManager
@@ -36,11 +36,22 @@ from ..api.media import __new_get_cover_path
 from ..cache import CacheMiss
 frontend = Blueprint("frontend", __name__)
 state = get_state()
+ANONYMOUS_FRONTEND_ENDPOINTS = {
+    "frontend.login",
+    "frontend.register",
+    "frontend.register_json",
+}
 
 
 @frontend.context_processor
 def inject_metadata():
-    return {"version": VERSION, "download_url": DOWNLOAD_URL}
+    return {
+        "version": VERSION,
+        "download_url": DOWNLOAD_URL,
+        "allow_user_registration": current_app.config["WEBAPP"].get(
+            "allow_user_registration", True
+        ),
+    }
 
 
 @frontend.before_request
@@ -55,7 +66,7 @@ def login_check():
         except (ValueError, User.DoesNotExist):
             session.clear()
 
-    if should_login and request.endpoint != "frontend.login":
+    if should_login and request.endpoint not in ANONYMOUS_FRONTEND_ENDPOINTS:
         flash("Please login")
         return redirect(
             url_for(
@@ -108,6 +119,16 @@ def admin_only(f):
     return decorated_func
 
 
+def login_only(f):
+    @wraps(f)
+    def decorated_func(*args, **kwargs):
+        if not request.user:
+            return redirect(url_for("frontend.login"))
+        return f(*args, **kwargs)
+
+    return decorated_func
+
+
 def getConnectedDevices(user_name=None):
     devices = state.list_clients(user_name=user_name)
     devices.sort(key=lambda item: (item.get("userName", ""), item.get("deviceName", "")))
@@ -117,25 +138,37 @@ def getConnectedDevices(user_name=None):
 def getDeviceMonitorRows(user_name=None):
     devices = getConnectedDevices(user_name=user_name)
     session_ids = sorted({d.get("sessionId") for d in devices if d.get("sessionId")})
+    device_keys = {
+        (d.get("sessionId"), d.get("clientId"))
+        for d in devices
+        if d.get("sessionId") and d.get("clientId")
+    }
 
-    playback_by_session = {}
+    playback_by_device = {}
     queue_by_session = {}
+    local_queue_by_device = {}
     song_meta = {}
 
-    if session_ids:
+    if session_ids or device_keys:
         all_song_ids = set()
 
-        for record in EmoPlaybackState.select().where(
-            EmoPlaybackState.session_id.in_(session_ids)
-        ):
+        playback_query = EmoPlaybackState.select()
+        if session_ids:
+            playback_query = playback_query.where(EmoPlaybackState.session_id.in_(session_ids))
+
+        for record in playback_query:
+            playback_key = (record.session_id, record.owner_client_id)
+            if playback_key not in device_keys:
+                continue
             if record.track_id:
                 all_song_ids.add(str(record.track_id))
-            playback_by_session[record.session_id] = {
+            playback_by_device[playback_key] = {
+                "playbackSourceClientId": record.owner_client_id,
                 "state": record.state,
                 "trackId": record.track_id,
                 "positionMs": record.position_ms,
                 "volume": record.volume,
-                "updatedAt": record.updated_at.timestamp(),
+                "playbackUpdatedAt": record.updated_at.timestamp(),
             }
 
         for record in EmoSessionQueue.select().where(
@@ -144,6 +177,7 @@ def getDeviceMonitorRows(user_name=None):
             queue_song_ids = json.loads(record.queue_json)
             all_song_ids.update(str(song_id) for song_id in queue_song_ids)
             queue_by_session[record.session_id] = {
+                "sourceClientId": record.owner_client_id,
                 "queueSongIds": queue_song_ids,
                 "queueCount": len(queue_song_ids),
                 "currentIndex": record.current_index,
@@ -156,24 +190,74 @@ def getDeviceMonitorRows(user_name=None):
                 "updatedAt": record.updated_at.timestamp(),
             }
 
+        local_queue_query = EmoLocalQueue.select()
+        if session_ids:
+            local_queue_query = local_queue_query.where(EmoLocalQueue.session_id.in_(session_ids))
+
+        for record in local_queue_query:
+            local_queue_key = (record.session_id, record.owner_client_id)
+            if local_queue_key not in device_keys:
+                continue
+            queue_song_ids = json.loads(record.queue_json)
+            all_song_ids.update(str(song_id) for song_id in queue_song_ids)
+            local_queue_by_device[local_queue_key] = {
+                "localQueueSourceClientId": record.owner_client_id,
+                "localQueueSongIds": queue_song_ids,
+                "localQueueCount": len(queue_song_ids),
+                "localCurrentIndex": record.current_index,
+                "localQueuePositionMs": record.position_ms,
+                "localCurrentQueueSongId": (
+                    queue_song_ids[record.current_index]
+                    if queue_song_ids and 0 <= record.current_index < len(queue_song_ids)
+                    else None
+                ),
+                "localQueueUpdatedAt": record.updated_at.timestamp(),
+            }
+
         if all_song_ids:
             for track in Track.select(Track, Artist).join(Artist).where(Track.id.in_(all_song_ids)):
                 song_meta[str(track.id)] = {
                     "title": track.title,
                     "artist": track.artist.get_artist_name(),
+                    "durationMs": (track.duration or 0) * 1000,
                 }
 
     rows = []
     for device in devices:
         session_id = device.get("sessionId")
-        playback = playback_by_session.get(session_id, {})
+        client_id = device.get("clientId")
+        playback = playback_by_device.get((session_id, client_id), {})
         queue = queue_by_session.get(session_id, {})
+        local_queue = local_queue_by_device.get((session_id, client_id), {})
         row = dict(device)
-        row.update(playback)
-        row.update(queue)
+        row.update(
+            {
+                "playbackSourceClientId": playback.get("playbackSourceClientId"),
+                "state": playback.get("state"),
+                "trackId": playback.get("trackId"),
+                "positionMs": playback.get("positionMs"),
+                "volume": playback.get("volume"),
+                "playbackUpdatedAt": playback.get("playbackUpdatedAt"),
+                "queueSourceClientId": queue.get("sourceClientId"),
+                "queueSongIds": queue.get("queueSongIds") or [],
+                "queueCount": queue.get("queueCount"),
+                "currentIndex": queue.get("currentIndex"),
+                "queuePositionMs": queue.get("queuePositionMs"),
+                "currentQueueSongId": queue.get("currentQueueSongId"),
+                "queueUpdatedAt": queue.get("updatedAt"),
+                "localQueueSourceClientId": local_queue.get("localQueueSourceClientId"),
+                "localQueueSongIds": local_queue.get("localQueueSongIds") or [],
+                "localQueueCount": local_queue.get("localQueueCount"),
+                "localCurrentIndex": local_queue.get("localCurrentIndex"),
+                "localQueuePositionMs": local_queue.get("localQueuePositionMs"),
+                "localCurrentQueueSongId": local_queue.get("localCurrentQueueSongId"),
+                "localQueueUpdatedAt": local_queue.get("localQueueUpdatedAt"),
+            }
+        )
         if row.get("trackId"):
             row["trackLabel"] = song_meta.get(str(row["trackId"]), {}).get("title")
             artist_name = song_meta.get(str(row["trackId"]), {}).get("artist")
+            row["durationMs"] = song_meta.get(str(row["trackId"]), {}).get("durationMs")
             if row.get("trackLabel") and artist_name:
                 row["trackLabel"] = f"{row['trackLabel']} - {artist_name}"
             row["trackCoverUrl"] = url_for("frontend.device_cover", eid=row["trackId"])
@@ -208,7 +292,43 @@ def getDeviceMonitorRows(user_name=None):
             row["currentQueueSongCoverUrl"] = url_for(
                 "frontend.device_cover", eid=row["currentQueueSongId"]
             )
-        row["lastUpdatedAt"] = playback.get("updatedAt") or queue.get("updatedAt")
+        local_queue_labels = []
+        local_queue_entries = []
+        for song_id in row.get("localQueueSongIds") or []:
+            meta = song_meta.get(str(song_id))
+            if meta is None:
+                label = str(song_id)
+            elif meta.get("artist"):
+                label = f"{meta['title']} - {meta['artist']}"
+            else:
+                label = meta["title"]
+            local_queue_labels.append(label)
+            local_queue_entries.append(
+                {
+                    "songId": str(song_id),
+                    "label": label,
+                    "isCurrent": str(song_id) == str(row.get("localCurrentQueueSongId")),
+                }
+            )
+        row["localQueueSongLabels"] = local_queue_labels
+        row["localQueueEntries"] = local_queue_entries
+        if row.get("localCurrentQueueSongId"):
+            current_meta = song_meta.get(str(row["localCurrentQueueSongId"]))
+            if current_meta is not None:
+                row["localCurrentQueueSongLabel"] = (
+                    f"{current_meta['title']} - {current_meta['artist']}"
+                    if current_meta.get("artist")
+                    else current_meta["title"]
+                )
+            row["localCurrentQueueSongCoverUrl"] = url_for(
+                "frontend.device_cover", eid=row["localCurrentQueueSongId"]
+            )
+        update_times = [
+            row.get("playbackUpdatedAt"),
+            row.get("queueUpdatedAt"),
+            row.get("localQueueUpdatedAt"),
+        ]
+        row["lastUpdatedAt"] = max((value for value in update_times if value), default=None)
         rows.append(row)
 
     rows.sort(
@@ -223,16 +343,12 @@ def getDeviceMonitorRows(user_name=None):
 
 def getDeviceMonitorSummary(rows):
     session_ids = {row.get("sessionId") for row in rows if row.get("sessionId")}
-    playing_sessions = {
-        row.get("sessionId")
-        for row in rows
-        if row.get("sessionId") and row.get("state") == "playing"
-    }
+    playing_devices = sum(1 for row in rows if row.get("state") == "playing")
     recently_updated = sum(1 for row in rows if row.get("lastUpdatedAt"))
     return {
         "onlineDevices": len(rows),
         "activeSessions": len(session_ids),
-        "playingSessions": len(playing_sessions),
+        "playingDevices": playing_devices,
         "recentlyUpdated": recently_updated,
     }
 
@@ -253,6 +369,79 @@ def device_index():
 def device_data():
     rows = getDeviceMonitorRows()
     return jsonify({"devices": rows, "summary": getDeviceMonitorSummary(rows)})
+
+
+@frontend.route("/control")
+@login_only
+def control_index():
+    return render_template("control.html")
+
+
+@frontend.route("/control/cover/<eid>")
+@login_only
+def control_cover(eid):
+    cache = current_app.cache
+
+    target_track = Track.select().where(Track.id == eid).first()
+    album = target_track.album if target_track else None
+    new_eid = f"al-{album.id}" if album else None
+    input_size = request.values.get("input_size", "")
+    cover_path = __new_get_cover_path(new_eid, input_size)
+
+    if not cover_path:
+        abort(404, description="Cover art not found")
+    elif not os.path.isfile(cover_path):
+        abort(404, description="Cover art file not found")
+
+    size = request.values.get("size")
+    if size:
+        size = int(size)
+    else:
+        mimetype = None
+        if os.path.splitext(cover_path)[1].lower() not in EXTENSIONS:
+            with Image.open(cover_path) as im:
+                mimetype = f"image/{im.format.lower()}"
+        return send_file(cover_path, mimetype=mimetype)
+
+    with Image.open(cover_path) as im:
+        mimetype = f"image/{im.format.lower()}"
+        if size > im.width and size > im.height:
+            return send_file(cover_path, mimetype=mimetype)
+
+        cache_key = f"control-{eid}-cover-{size}"
+        try:
+            return send_file(cache.get(cache_key), mimetype=mimetype)
+        except CacheMiss:
+            im.thumbnail([size, size], Image.Resampling.LANCZOS)
+            with cache.set_fileobj(cache_key) as fp:
+                im.save(fp, im.format)
+            return send_file(cache.get(cache_key), mimetype=mimetype)
+
+
+@frontend.route("/control/track-meta")
+@login_only
+def control_track_meta():
+    ids = request.args.getlist("ids")
+    valid_ids = []
+    for track_id in ids:
+        try:
+            uuid.UUID(track_id)
+            valid_ids.append(track_id)
+        except ValueError:
+            continue
+
+    result = {}
+    if valid_ids:
+        for track in Track.select(Track, Artist).join(Artist).where(Track.id.in_(valid_ids)):
+            result[str(track.id)] = {
+                "label": f"{track.title} - {track.artist.get_artist_name()}",
+                "title": track.title,
+                "artist": track.artist.get_artist_name(),
+                "coverUrl": url_for("frontend.control_cover", eid=str(track.id)),
+                "durationMs": (track.duration or 0) * 1000,
+            }
+
+    return jsonify(result)
 
 
 @frontend.route("/devices/cover/<eid>")

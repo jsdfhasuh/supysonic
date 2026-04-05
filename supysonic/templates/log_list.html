@@ -1,22 +1,83 @@
 {% extends "layout.html" %}
+{% block navbar_logs %}
+<a class="nav-link active" aria-current="page" href="{{ url_for('emo.list_logs') }}"><span data-i18n-en="Logs" data-i18n-zh="日志">Logs</span></a>
+{% endblock %}
 {% block title %}Logs · Emosonic Server{% endblock %}
-{% block page_title %}Uploaded logs{% endblock %}
-{% block page_subtitle %}Review diagnostic files uploaded through the Emo endpoints and open individual logs for inspection.{% endblock %}
+{% block page_title %}<span data-i18n-en="Uploaded logs" data-i18n-zh="上传日志">Uploaded logs</span>{% endblock %}
+{% block page_subtitle %}<span data-i18n-en="Review diagnostic files uploaded through the Emo endpoints and open individual logs for inspection." data-i18n-zh="查看通过 Emo 接口上传的诊断文件，并打开单个日志进行检查。">Review diagnostic files uploaded through the Emo endpoints and open individual logs for inspection.</span>{% endblock %}
 {% block body %}
+<div class="card console-section-spacer console-download-console is-hidden" data-log-download-console>
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span data-i18n-en="Download progress" data-i18n-zh="下载进度">Download progress</span>
+    <span class="console-chip" data-download-percent>0%</span>
+  </div>
+  <div class="card-body d-flex flex-column gap-3">
+    <div>
+      <div class="console-table-title" data-download-file>-</div>
+      <div class="console-metric-caption" data-download-status data-i18n-en="Waiting to start download." data-i18n-zh="等待开始下载。">Waiting to start download.</div>
+    </div>
+    <div class="progress console-progress" role="progressbar" aria-label="Download progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="progress-bar console-progress-bar" data-download-bar style="width: 0%"></div>
+    </div>
+    <div class="d-flex justify-content-between gap-3 flex-wrap console-metric-caption">
+      <span data-download-detail data-i18n-en="No active download." data-i18n-zh="当前没有下载任务。">No active download.</span>
+      <span data-download-speed></span>
+    </div>
+  </div>
+</div>
+
+<div class="row row-cols-1 row-cols-md-3 g-3 console-section-spacer">
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header"><span data-i18n-en="Uploaded files" data-i18n-zh="已上传文件">Uploaded files</span></div>
+      <div class="card-body">
+        <div class="console-metric-value">{{ files|length }}</div>
+        <div class="console-metric-caption" data-i18n-en="Diagnostic logs currently stored on the server." data-i18n-zh="当前保存在服务端上的诊断日志数量。">Diagnostic logs currently stored on the server.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header"><span data-i18n-en="Latest file" data-i18n-zh="最新文件">Latest file</span></div>
+      <div class="card-body">
+        <div class="console-table-title text-truncate">{{ files[0] if files else '-' }}</div>
+        <div class="console-metric-caption" data-i18n-en="Most recent uploaded log in the current storage folder." data-i18n-zh="当前存储目录中最近上传的日志文件。">Most recent uploaded log in the current storage folder.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header"><span data-i18n-en="Actions" data-i18n-zh="操作">Actions</span></div>
+      <div class="card-body d-flex flex-column gap-2">
+        <div class="console-metric-caption" data-i18n-en="Open a file below to inspect raw output from mobile clients and related Emo uploads." data-i18n-zh="从下方打开文件，检查移动端客户端和相关 Emo 上传产生的原始输出。">Open a file below to inspect raw output from mobile clients and related Emo uploads.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="card">
-  <div class="card-header">Available log files</div>
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span data-i18n-en="Available log files" data-i18n-zh="可用日志文件">Available log files</span>
+    <span class="console-chip">{{ files|length }} file{{ '' if files|length == 1 else 's' }}</span>
+  </div>
   <div class="card-body">
     {% if files %}
-    <ul class="console-info-list">
+    <div class="console-panel-stack">
       {% for f in files %}
-      <li>
-        <span><code>{{ f }}</code></span>
-        <a href="{{ url_for('emo.view_log', filename=f) }}">Open log</a>
-      </li>
+      <div class="console-log-file-row">
+        <div>
+          <div class="console-table-title"><code>{{ f }}</code></div>
+          <small class="console-muted" data-i18n-en="Uploaded diagnostic artifact" data-i18n-zh="已上传诊断文件">Uploaded diagnostic artifact</small>
+        </div>
+        <div class="d-flex gap-2 flex-wrap justify-content-end">
+          <a href="{{ url_for('emo.view_log', filename=f) }}" class="btn btn-outline-dark btn-sm"><span data-i18n-en="Open log" data-i18n-zh="打开日志">Open log</span></a>
+          <a href="{{ url_for('emo.download_log', filename=f) }}" class="btn btn-primary btn-sm" data-log-download data-log-filename="{{ f }}"><span data-i18n-en="Download" data-i18n-zh="下载">Download</span></a>
+        </div>
+      </div>
       {% endfor %}
-    </ul>
+    </div>
     {% else %}
-    <div class="text-body-secondary">No uploaded logs were found.</div>
+    <div class="text-body-secondary" data-i18n-en="No uploaded logs were found." data-i18n-zh="未找到已上传日志。">No uploaded logs were found.</div>
     {% endif %}
   </div>
 </div>

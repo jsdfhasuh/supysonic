@@ -8,47 +8,47 @@
 {% block title %}Devices · Emosonic Server{% endblock %}
 {% block page_container_class %}console-container-wide{% endblock %}
 {% block navbar_devices %}
-<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.device_index') }}">Devices</a>
+<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.device_index') }}"><span data-i18n-en="Devices" data-i18n-zh="设备">Devices</span></a>
 {% endblock %}
-{% block page_title %}Device monitor{% endblock %}
-{% block page_subtitle %}Select a connected client to inspect its playback context, queue state, and last known activity without overcrowding the monitoring surface.{% endblock %}
+{% block page_title %}<span data-i18n-en="Device monitor" data-i18n-zh="设备监控">Device monitor</span>{% endblock %}
+{% block page_subtitle %}<span data-i18n-en="Inspect per-device playback state, the shared room queue for its session, and that client's own local queue." data-i18n-zh="查看每台设备的播放状态、所属会话的共享队列，以及该客户端自己的本地队列。">Inspect per-device playback state, the shared room queue for its session, and that client's own local queue.</span>{% endblock %}
 {% block body %}
 <div class="row row-cols-1 row-cols-md-4 g-3 mb-3">
   <div class="col">
     <div class="card text-center h-100 console-metric-card">
-      <div class="card-header">Online Devices</div>
+      <div class="card-header"><span data-i18n-en="Online Devices" data-i18n-zh="在线设备">Online Devices</span></div>
       <div class="card-body">
         <div class="console-metric-value" id="summary-online">{{ summary.onlineDevices }}</div>
-        <div class="console-metric-caption">Connected control and playback endpoints.</div>
+        <div class="console-metric-caption" data-i18n-en="Connected control and playback endpoints." data-i18n-zh="已连接的控制端与播放端。">Connected control and playback endpoints.</div>
       </div>
     </div>
   </div>
   <div class="col">
     <div class="card text-center h-100 console-metric-card">
-      <div class="card-header">Active Sessions</div>
+      <div class="card-header"><span data-i18n-en="Active Sessions" data-i18n-zh="活跃会话">Active Sessions</span></div>
       <div class="card-body">
         <div class="console-metric-value" id="summary-sessions">{{ summary.activeSessions }}</div>
-        <div class="console-metric-caption">Unique session scopes currently represented online.</div>
+        <div class="console-metric-caption" data-i18n-en="Unique session scopes currently represented online." data-i18n-zh="当前在线设备所覆盖的唯一会话范围。">Unique session scopes currently represented online.</div>
       </div>
     </div>
   </div>
   <div class="col">
     <div class="card text-center h-100 console-metric-card">
-      <div class="card-header">Playing Sessions</div>
+      <div class="card-header"><span data-i18n-en="Playing Devices" data-i18n-zh="播放中的设备">Playing Devices</span></div>
       <div class="card-body">
-        <div class="console-metric-value" id="summary-playing">{{ summary.playingSessions }}</div>
-        <div class="console-metric-caption">Sessions actively reporting a playing state.</div>
+        <div class="console-metric-value" id="summary-playing">{{ summary.playingDevices }}</div>
+        <div class="console-metric-caption" data-i18n-en="Devices actively reporting a playing state." data-i18n-zh="正在上报播放状态的设备数量。">Devices actively reporting a playing state.</div>
       </div>
     </div>
   </div>
   <div class="col">
     <div class="card text-center h-100 console-metric-card">
-      <div class="card-header">Last Refresh</div>
+      <div class="card-header"><span data-i18n-en="Last Refresh" data-i18n-zh="最近刷新">Last Refresh</span></div>
       <div class="card-body">
         <div class="console-metric-value" id="summary-recent">{{ summary.recentlyUpdated }}</div>
-        <div class="console-metric-caption mb-2">Sessions with persisted state available.</div>
-        <div class="small text-body-secondary" id="last-refresh">just now</div>
-        <button type="button" class="btn btn-light btn-sm mt-2" id="refresh-now">Refresh now</button>
+        <div class="console-metric-caption mb-2" data-i18n-en="Devices with persisted playback or queue state." data-i18n-zh="拥有持久化播放或队列状态的设备数。">Devices with persisted playback or queue state.</div>
+        <div class="small text-body-secondary" id="last-refresh" data-i18n-en="just now" data-i18n-zh="刚刚">just now</div>
+        <button type="button" class="btn btn-light btn-sm mt-2" id="refresh-now"><span data-i18n-en="Refresh now" data-i18n-zh="立即刷新">Refresh now</span></button>
       </div>
     </div>
   </div>
@@ -58,7 +58,7 @@
   <div class="col-xl-4">
     <div class="card h-100">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Connected clients</span>
+        <span data-i18n-en="Connected clients" data-i18n-zh="已连接客户端">Connected clients</span>
         <small class="console-muted" id="device-count-label">{{ devices|length }} online</small>
       </div>
       <div class="card-body p-2">
@@ -93,11 +93,15 @@
   <div class="col-xl-8">
     <div class="card h-100">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Selected client details</span>
-        <small class="console-muted">Queue is shown only for the selected client.</small>
+        <span data-i18n-en="Selected client details" data-i18n-zh="选中客户端详情">Selected client details</span>
+        <div class="d-flex gap-2 flex-wrap">
+          <span class="console-scope-badge scope-device">Device</span>
+          <span class="console-scope-badge scope-session">Session</span>
+          <span class="console-scope-badge scope-local">Local</span>
+        </div>
       </div>
       <div class="card-body" id="device-detail-panel">
-        <div class="text-body-secondary">Select a client to inspect playback and queue data.</div>
+        <div class="text-body-secondary" data-i18n-en="Select a client to inspect playback and queue data." data-i18n-zh="选择一个客户端以查看播放与队列数据。">Select a client to inspect playback and queue data.</div>
       </div>
     </div>
   </div>
@@ -126,6 +130,39 @@
     return `${minutes}:${String(seconds).padStart(2, "0")}`;
   }
 
+  function clampPlaybackPosition(positionMs, durationMs) {
+    if (!Number.isFinite(positionMs)) {
+      return null;
+    }
+    if (!Number.isFinite(durationMs) || durationMs <= 0) {
+      return Math.max(0, positionMs);
+    }
+    return Math.min(Math.max(0, positionMs), durationMs);
+  }
+
+  function getPlaybackPosition(device) {
+    if (!device || device.positionMs === null || device.positionMs === undefined || device.positionMs === "") {
+      return null;
+    }
+
+    const basePositionMs = Number(device.positionMs) || 0;
+    if (device.state !== "playing" || !device.playbackUpdatedAt) {
+      return clampPlaybackPosition(basePositionMs, Number(device.durationMs));
+    }
+
+    const elapsedMs = Math.max(0, (Date.now() / 1000 - device.playbackUpdatedAt) * 1000);
+    return clampPlaybackPosition(basePositionMs + elapsedMs, Number(device.durationMs));
+  }
+
+  function getPlaybackProgressPercent(device) {
+    const currentPositionMs = getPlaybackPosition(device);
+    const durationMs = Number(device?.durationMs);
+    if (currentPositionMs === null || !Number.isFinite(durationMs) || durationMs <= 0) {
+      return null;
+    }
+    return Math.max(0, Math.min(100, (currentPositionMs / durationMs) * 100));
+  }
+
   function escapeHtml(value) {
     return String(value)
       .replace(/&/g, "&amp;")
@@ -138,7 +175,7 @@
   function updateSummary(summary) {
     document.getElementById("summary-online").textContent = summary.onlineDevices || 0;
     document.getElementById("summary-sessions").textContent = summary.activeSessions || 0;
-    document.getElementById("summary-playing").textContent = summary.playingSessions || 0;
+    document.getElementById("summary-playing").textContent = summary.playingDevices || 0;
     document.getElementById("summary-recent").textContent = summary.recentlyUpdated || 0;
     document.getElementById("last-refresh").textContent = new Date().toLocaleTimeString();
     document.getElementById("device-count-label").textContent = `${summary.onlineDevices || 0} online`;
@@ -174,22 +211,22 @@
     }).join("");
   }
 
-  function renderQueueEntries(device) {
-    const entries = Array.isArray(device.queueEntries) ? device.queueEntries : [];
-    if (!entries.length) {
-      return '<div class="text-body-secondary">No queue available for this client.</div>';
+  function renderQueueEntries(entries, emptyMessage) {
+    const safeEntries = Array.isArray(entries) ? entries : [];
+    if (!safeEntries.length) {
+      return `<div class="text-body-secondary">${escapeHtml(emptyMessage)}</div>`;
     }
 
-    const first = entries.slice(0, 4).map((entry) => `
+    const first = safeEntries.slice(0, 4).map((entry) => `
       <span class="console-queue-chip ${entry.isCurrent ? "is-current" : ""}">${escapeHtml(entry.label)}</span>
     `).join("");
 
-    const hiddenEntries = entries.slice(4).map((entry) => `
+    const hiddenEntries = safeEntries.slice(4).map((entry) => `
       <span class="console-queue-chip ${entry.isCurrent ? "is-current" : ""}">${escapeHtml(entry.label)}</span>
     `).join("");
 
-    const more = entries.length > 4
-      ? `<details class="console-queue-more"><summary>+${entries.length - 4} more</summary><div class="console-queue-more-body">${hiddenEntries}</div></details>`
+    const more = safeEntries.length > 4
+      ? `<details class="console-queue-more"><summary>+${safeEntries.length - 4} more</summary><div class="console-queue-more-body">${hiddenEntries}</div></details>`
       : "";
 
     return `<div class="console-queue-list">${first}${more}</div>`;
@@ -202,6 +239,11 @@
       return;
     }
 
+    const playbackPositionMs = getPlaybackPosition(device);
+    const playbackDurationMs = Number(device.durationMs);
+    const playbackProgressPercent = getPlaybackProgressPercent(device);
+    const hasDuration = Number.isFinite(playbackDurationMs) && playbackDurationMs > 0;
+
     const trackBlock = device.trackLabel
       ? `<div class="console-track-preview">${device.trackCoverUrl ? `<img class="console-cover-thumb" src="${escapeHtml(device.trackCoverUrl)}" alt="cover art">` : ""}<div class="console-queue-preview"><div><strong>${escapeHtml(device.trackLabel)}</strong></div><small class="console-muted">${escapeHtml(device.trackId || "")}</small></div></div>`
       : '<div class="text-body-secondary">No current track metadata.</div>';
@@ -210,41 +252,163 @@
       ? `<div class="console-track-preview mb-3">${device.currentQueueSongCoverUrl ? `<img class="console-cover-thumb" src="${escapeHtml(device.currentQueueSongCoverUrl)}" alt="current queue cover">` : ""}<div class="console-queue-preview"><div><strong>${escapeHtml(device.currentQueueSongLabel || device.currentQueueSongId)}</strong></div><small class="console-muted">Current queue item</small></div></div>`
       : "";
 
+    const currentLocalQueueBlock = device.localCurrentQueueSongLabel || device.localCurrentQueueSongId
+      ? `<div class="console-track-preview mb-3">${device.localCurrentQueueSongCoverUrl ? `<img class="console-cover-thumb" src="${escapeHtml(device.localCurrentQueueSongCoverUrl)}" alt="current local queue cover">` : ""}<div class="console-queue-preview"><div><strong>${escapeHtml(device.localCurrentQueueSongLabel || device.localCurrentQueueSongId)}</strong></div><small class="console-muted">Current local queue item</small></div></div>`
+      : "";
+
     panel.innerHTML = `
       <div class="row g-3">
         <div class="col-lg-6">
           <div class="card h-100">
-            <div class="card-header">Playback context</div>
-            <div class="card-body">
-              <ul class="console-info-list">
-                <li><span>Device</span><strong>${escapeHtml(device.deviceName || "-")}</strong></li>
-                <li><span>Playback</span><span class="console-status status-${escapeHtml(device.state || "unknown")}">${escapeHtml(device.state || "unknown")}</span></li>
-                <li><span>Position</span><strong>${formatPosition(device.positionMs)}</strong></li>
-                <li><span>Volume</span><strong>${device.volume ?? "-"}</strong></li>
-                <li><span>Session</span><code>${escapeHtml(device.sessionId || "")}</code></li>
-                <li><span>Connected</span><strong>${formatTimestamp(device.connectedAt)}</strong></li>
-              </ul>
-              <div class="mt-3">${trackBlock}</div>
-            </div>
+              <div class="card-header">Device playback</div>
+              <div class="card-body">
+                <p class="console-section-lead">Live device-scoped state for the selected client. This is the most direct view of what that player reports right now.</p>
+                <div class="console-signal-panel mb-3">
+                  <div class="console-signal-panel-body">
+                    <div class="console-signal-grid">
+                      <div class="console-signal-cell">
+                        <span class="console-signal-label">Device</span>
+                        <div class="console-signal-value">${escapeHtml(device.deviceName || "-")}</div>
+                      </div>
+                      <div class="console-signal-cell">
+                        <span class="console-signal-label">Playback</span>
+                        <div class="console-signal-value"><span class="console-status status-${escapeHtml(device.state || "unknown")}">${escapeHtml(device.state || "unknown")}</span></div>
+                      </div>
+                      <div class="console-signal-cell">
+                        <span class="console-signal-label">Position</span>
+                        <div class="console-signal-value" data-playback-position>${formatPosition(playbackPositionMs)}</div>
+                      </div>
+                      <div class="console-signal-cell">
+                        <span class="console-signal-label">Duration</span>
+                        <div class="console-signal-value" data-playback-duration>${hasDuration ? formatPosition(playbackDurationMs) : "-"}</div>
+                      </div>
+                      <div class="console-signal-cell">
+                        <span class="console-signal-label">Volume</span>
+                        <div class="console-signal-value">${device.volume ?? "-"}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="mb-3 ${hasDuration ? "" : "d-none"}" data-playback-progress-wrap>
+                  <div class="d-flex justify-content-between align-items-center gap-3 console-metric-caption mb-2">
+                    <span data-playback-progress-label>${hasDuration ? `${formatPosition(playbackPositionMs)} / ${formatPosition(playbackDurationMs)}` : formatPosition(playbackPositionMs)}</span>
+                    <span data-playback-progress-percent>${playbackProgressPercent === null ? "-" : `${Math.round(playbackProgressPercent)}%`}</span>
+                  </div>
+                  <div class="progress console-progress" role="progressbar" aria-label="Playback progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${playbackProgressPercent === null ? 0 : Math.round(playbackProgressPercent)}">
+                    <div class="progress-bar console-progress-bar" data-playback-progress-bar style="width: ${playbackProgressPercent === null ? 0 : playbackProgressPercent}%"></div>
+                  </div>
+                </div>
+                <ul class="console-info-list">
+                  <li><span>Session</span><code>${escapeHtml(device.sessionId || "")}</code></li>
+                  <li><span>Playback source</span><code>${escapeHtml(device.playbackSourceClientId || device.clientId || "")}</code></li>
+                  <li><span>Connected</span><strong>${formatTimestamp(device.connectedAt)}</strong></li>
+                  <li><span>Playback update</span><strong>${formatTimestamp(device.playbackUpdatedAt)}</strong></li>
+                </ul>
+                <div class="mt-3">${trackBlock}</div>
+              </div>
           </div>
         </div>
         <div class="col-lg-6">
           <div class="card h-100">
-            <div class="card-header">Queue inspection</div>
-            <div class="card-body">
-              <ul class="console-info-list mb-3">
-                <li><span>Queue size</span><strong>${device.queueCount ?? "-"}</strong></li>
-                <li><span>Current index</span><strong>${device.currentIndex ?? "-"}</strong></li>
-                <li><span>Queue position</span><strong>${formatPosition(device.queuePositionMs)}</strong></li>
-                <li><span>Last update</span><strong>${formatTimestamp(device.lastUpdatedAt)}</strong></li>
-              </ul>
-              ${currentQueueBlock}
-              ${renderQueueEntries(device)}
+              <div class="card-header">Queue inspection</div>
+              <div class="card-body">
+                <div class="mb-4">
+                  <div class="console-panel-subhead">
+                    <strong>Shared room queue</strong>
+                    <span class="console-scope-badge scope-session">Session</span>
+                  </div>
+                  <p class="console-section-lead">Shared across devices that sit in the same room session.</p>
+                  <ul class="console-info-list mb-3">
+                    <li><span>Queue size</span><strong>${device.queueCount ?? "-"}</strong></li>
+                    <li><span>Current index</span><strong>${device.currentIndex ?? "-"}</strong></li>
+                    <li><span>Queue position</span><strong>${formatPosition(device.queuePositionMs)}</strong></li>
+                    <li><span>Queue source</span><code>${escapeHtml(device.queueSourceClientId || "")}</code></li>
+                    <li><span>Queue update</span><strong>${formatTimestamp(device.queueUpdatedAt)}</strong></li>
+                  </ul>
+                  ${currentQueueBlock}
+                  ${renderQueueEntries(device.queueEntries, "No shared room queue available for this session.")}
+                </div>
+                <div>
+                  <div class="console-panel-subhead">
+                    <strong>Device local queue</strong>
+                    <span class="console-scope-badge scope-local">Local</span>
+                  </div>
+                  <p class="console-section-lead">Private queue state that belongs only to this selected client.</p>
+                  <ul class="console-info-list mb-3">
+                    <li><span>Queue size</span><strong>${device.localQueueCount ?? "-"}</strong></li>
+                    <li><span>Current index</span><strong>${device.localCurrentIndex ?? "-"}</strong></li>
+                    <li><span>Queue position</span><strong>${formatPosition(device.localQueuePositionMs)}</strong></li>
+                    <li><span>Queue source</span><code>${escapeHtml(device.localQueueSourceClientId || device.clientId || "")}</code></li>
+                    <li><span>Queue update</span><strong>${formatTimestamp(device.localQueueUpdatedAt)}</strong></li>
+                  </ul>
+                  ${currentLocalQueueBlock}
+                  ${renderQueueEntries(device.localQueueEntries, "No device local queue available for this client.")}
+                </div>
+              </div>
             </div>
           </div>
-        </div>
       </div>
     `;
+
+    updatePlaybackProgressDisplay(device);
+  }
+
+  function updatePlaybackProgressDisplay(device) {
+    const panel = document.getElementById("device-detail-panel");
+    if (!panel || !device) {
+      return;
+    }
+
+    const positionNode = panel.querySelector("[data-playback-position]");
+    const durationNode = panel.querySelector("[data-playback-duration]");
+    const progressWrapNode = panel.querySelector("[data-playback-progress-wrap]");
+    const progressLabelNode = panel.querySelector("[data-playback-progress-label]");
+    const progressPercentNode = panel.querySelector("[data-playback-progress-percent]");
+    const progressBarNode = panel.querySelector("[data-playback-progress-bar]");
+    const progressNode = panel.querySelector(".console-progress");
+    const playbackPositionMs = getPlaybackPosition(device);
+    const playbackDurationMs = Number(device.durationMs);
+    const hasDuration = Number.isFinite(playbackDurationMs) && playbackDurationMs > 0;
+    const playbackProgressPercent = getPlaybackProgressPercent(device);
+
+    if (positionNode) {
+      positionNode.textContent = formatPosition(playbackPositionMs);
+    }
+    if (durationNode) {
+      durationNode.textContent = hasDuration ? formatPosition(playbackDurationMs) : "-";
+    }
+    if (!progressWrapNode) {
+      return;
+    }
+
+    progressWrapNode.classList.toggle("d-none", !hasDuration);
+    if (!hasDuration) {
+      return;
+    }
+
+    if (progressLabelNode) {
+      progressLabelNode.textContent = `${formatPosition(playbackPositionMs)} / ${formatPosition(playbackDurationMs)}`;
+    }
+    if (progressPercentNode) {
+      progressPercentNode.textContent = playbackProgressPercent === null ? "-" : `${Math.round(playbackProgressPercent)}%`;
+    }
+    if (progressBarNode) {
+      progressBarNode.style.width = `${playbackProgressPercent === null ? 0 : playbackProgressPercent}%`;
+    }
+    if (progressNode) {
+      progressNode.setAttribute("aria-valuenow", String(playbackProgressPercent === null ? 0 : Math.round(playbackProgressPercent)));
+    }
+  }
+
+  function refreshSelectedPlaybackProgress() {
+    if (!selectedClientId) {
+      return;
+    }
+    const device = devicesState.find((item) => item.clientId === selectedClientId);
+    if (!device) {
+      return;
+    }
+    updatePlaybackProgressDisplay(device);
   }
 
   function bindCardClicks() {
@@ -288,5 +452,6 @@
   renderDevices(initialDevices);
   document.getElementById("refresh-now").addEventListener("click", refreshDevices);
   window.setInterval(refreshDevices, 5000);
+  window.setInterval(refreshSelectedPlaybackProgress, 500);
 </script>
 {% endblock %}

@@ -7,10 +7,10 @@ Distributed under terms of the GNU AGPLv3 license.
 {% extends "layout.html" %}
 {% block title %}Overview · Emosonic Server{% endblock %}
 {% block navbar_index %}
-<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.index') }}">Overview</a>
+<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.index') }}"><span data-i18n-en="Overview" data-i18n-zh="概览">Overview</span></a>
 {% endblock %}
-{% block page_title %}Overview{% endblock %}
-{% block page_subtitle %}Monitor your media footprint, keep an eye on live devices, and jump directly into the operational areas you use most.{% endblock %}
+{% block page_title %}<span data-i18n-en="Overview" data-i18n-zh="概览">Overview</span>{% endblock %}
+{% block page_subtitle %}<span data-i18n-en="Manage your library, monitor live players, and move between the main playback and account areas of Emosonic." data-i18n-zh="管理曲库，查看实时播放状态，在 Emosonic 的播放与账号板块间自由切换。">Manage your library, monitor live players, and move between the main playback and account areas of Emosonic.</span>{% endblock %}
 {% block body %}
 <div class="row row-cols-1 row-cols-md-3 g-3 console-section-spacer">
   <div class="col">
@@ -52,7 +52,7 @@ Distributed under terms of the GNU AGPLv3 license.
       <div class="card-body">
         <div class="row g-3">
           <div class="col-md-6">
-            <div class="p-3 rounded-4 border h-100" style="border-color: var(--console-border); background: var(--console-brand-soft);">
+            <div class="p-3 rounded-4 border h-100" style="border-color: var(--console-border); background: linear-gradient(135deg, rgba(82, 168, 255, 0.12), rgba(110, 214, 255, 0.08));">
               <p class="console-eyebrow mb-2">Live supervision</p>
               <h5 class="mb-2">Track active devices and sessions</h5>
               <p class="console-muted mb-3">Open the devices panel to review playback state, queue depth, session activity, and last update times.</p>
@@ -60,7 +60,7 @@ Distributed under terms of the GNU AGPLv3 license.
             </div>
           </div>
           <div class="col-md-6">
-            <div class="p-3 rounded-4 border h-100" style="border-color: var(--console-border); background: rgba(222, 143, 63, 0.12);">
+            <div class="p-3 rounded-4 border h-100" style="border-color: var(--console-border); background: linear-gradient(135deg, rgba(142, 137, 255, 0.1), rgba(82, 168, 255, 0.08));">
               <p class="console-eyebrow mb-2">Library operations</p>
               <h5 class="mb-2">Keep folders and metadata organized</h5>
               <p class="console-muted mb-3">Manage source folders, trigger scans, and curate metadata from the administrative surfaces.</p>
@@ -161,8 +161,8 @@ Distributed under terms of the GNU AGPLv3 license.
         <ul class="console-info-list">
           <li><span>Online devices</span><strong>{{ device_summary.onlineDevices }}</strong></li>
           <li><span>Active sessions</span><strong>{{ device_summary.activeSessions }}</strong></li>
-          <li><span>Playing sessions</span><strong>{{ device_summary.playingSessions }}</strong></li>
-          <li><span>Recently updated sessions</span><strong>{{ device_summary.recentlyUpdated }}</strong></li>
+          <li><span>Playing devices</span><strong>{{ device_summary.playingDevices }}</strong></li>
+          <li><span>Recently updated devices</span><strong>{{ device_summary.recentlyUpdated }}</strong></li>
         </ul>
       </div>
     </div>

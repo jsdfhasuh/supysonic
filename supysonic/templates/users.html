@@ -7,36 +7,36 @@
 {% extends "layout.html" %}
 {% block title %}Users · Emosonic Server{% endblock %}
 {% block navbar_users %}
-<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.user_index') }}">Users</a>
+<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.user_index') }}"><span data-i18n-en="Users" data-i18n-zh="用户">Users</span></a>
 {% endblock %}
-{% block page_title %}User administration{% endblock %}
-{% block page_subtitle %}Manage access, review account roles, and inspect recent playback activity across your Emosonic Server instance.{% endblock %}
+{% block page_title %}<span data-i18n-en="User administration" data-i18n-zh="用户管理">User administration</span>{% endblock %}
+{% block page_subtitle %}<span data-i18n-en="Manage access, review account roles, and inspect recent playback activity across your Emosonic Server instance." data-i18n-zh="管理访问权限、查看账号角色，并检查 Emosonic 实例中的近期播放活动。">Manage access, review account roles, and inspect recent playback activity across your Emosonic Server instance.</span>{% endblock %}
 {% block body %}
 <div class="row row-cols-1 row-cols-md-3 g-3 console-section-spacer">
   <div class="col">
     <div class="card console-metric-card">
-      <div class="card-header">Total users</div>
+      <div class="card-header"><span data-i18n-en="Total users" data-i18n-zh="用户总数">Total users</span></div>
       <div class="card-body">
         <div class="console-metric-value">{{ summary.total }}</div>
-        <div class="console-metric-caption">Accounts currently provisioned in the system.</div>
+        <div class="console-metric-caption" data-i18n-en="Accounts currently provisioned in the system." data-i18n-zh="当前系统中已创建的账号数量。">Accounts currently provisioned in the system.</div>
       </div>
     </div>
   </div>
   <div class="col">
     <div class="card console-metric-card">
-      <div class="card-header">Administrators</div>
+      <div class="card-header"><span data-i18n-en="Administrators" data-i18n-zh="管理员">Administrators</span></div>
       <div class="card-body">
         <div class="console-metric-value">{{ summary.admins }}</div>
-        <div class="console-metric-caption">Users with elevated control over server operations.</div>
+        <div class="console-metric-caption" data-i18n-en="Users with elevated control over server operations." data-i18n-zh="拥有更高控制权限的用户数量。">Users with elevated control over server operations.</div>
       </div>
     </div>
   </div>
   <div class="col">
     <div class="card console-metric-card">
-      <div class="card-header">Recently active</div>
+      <div class="card-header"><span data-i18n-en="Recently active" data-i18n-zh="近期活跃">Recently active</span></div>
       <div class="card-body">
         <div class="console-metric-value">{{ summary.recentlyActive }}</div>
-        <div class="console-metric-caption">Accounts that already have a recorded playback timestamp.</div>
+        <div class="console-metric-caption" data-i18n-en="Accounts that already have a recorded playback timestamp." data-i18n-zh="已有播放记录时间戳的账号数量。">Accounts that already have a recorded playback timestamp.</div>
       </div>
     </div>
   </div>
@@ -44,8 +44,8 @@
 
 <div class="card console-section-spacer">
   <div class="card-header d-flex justify-content-between align-items-center">
-    <span>Account registry</span>
-    <a href="{{ url_for('frontend.add_user_form') }}" class="btn btn-dark btn-sm">Add new user</a>
+    <span data-i18n-en="Account registry" data-i18n-zh="账号列表">Account registry</span>
+    <a href="{{ url_for('frontend.add_user_form') }}" class="btn btn-dark btn-sm"><span data-i18n-en="Add new user" data-i18n-zh="新增用户">Add new user</span></a>
   </div>
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
@@ -96,15 +96,15 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h1 class="modal-title fs-5" id="confirm-delete-label">Remove account?</h1>
+        <h1 class="modal-title fs-5" id="confirm-delete-label"><span data-i18n-en="Remove account?" data-i18n-zh="移除账号？">Remove account?</span></h1>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <p>The selected user will lose access to Emosonic Server.</p>
+        <p data-i18n-en="The selected user will lose access to Emosonic Server." data-i18n-zh="该用户将失去对 Emosonic Server 的访问权限。">The selected user will lose access to Emosonic Server.</p>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <a type="button" class="btn btn-danger btn-ok">Delete user</a>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><span data-i18n-en="Cancel" data-i18n-zh="取消">Cancel</span></button>
+        <a type="button" class="btn btn-danger btn-ok"><span data-i18n-en="Delete user" data-i18n-zh="删除用户">Delete user</span></a>
       </div>
     </div>
   </div>

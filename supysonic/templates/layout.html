@@ -21,10 +21,10 @@
       <nav class="navbar navbar-expand-xl console-navbar fixed-top">
         <div class="container-fluid console-container {% block page_container_class %}{% endblock %} px-3 px-xl-4">
           <a class="navbar-brand console-brand" href="{{ url_for('frontend.index') }}">
-            <span class="brand-mark">SS</span>
+            <span class="brand-mark">EM</span>
             <span>
               <strong>Emosonic</strong>
-              <small>Server Console</small>
+              <small data-i18n-en="Music that stays with your mood" data-i18n-zh="懂你情绪的音乐空间">Music that stays with your mood</small>
             </span>
           </a>
           {% if session.userid %}
@@ -35,59 +35,80 @@
             <ul class="navbar-nav me-auto mb-2 mb-xl-0 console-nav-links">
               <li class="nav-item">
                 {% block navbar_index %}
-                <a class="nav-link" href="{{ url_for('frontend.index') }}">Overview</a>
+                <a class="nav-link" href="{{ url_for('frontend.index') }}"><span data-i18n-en="Overview" data-i18n-zh="概览">Overview</span></a>
                 {% endblock %}
               </li>
               <li class="nav-item">
                 {% block navbar_playlists %}
-                <a class="nav-link" href="{{ url_for('frontend.playlist_index') }}">Playlists</a>
+                <a class="nav-link" href="{{ url_for('frontend.playlist_index') }}"><span data-i18n-en="Playlists" data-i18n-zh="播放列表">Playlists</span></a>
+                {% endblock %}
+              </li>
+              <li class="nav-item">
+                {% block navbar_control %}
+                <a class="nav-link" href="{{ url_for('frontend.control_index') }}"><span data-i18n-en="Control" data-i18n-zh="控制台">Control</span></a>
                 {% endblock %}
               </li>
               {% if request.user.admin %}
               <li class="nav-item">
                 {% block navbar_devices %}
-                <a class="nav-link" href="{{ url_for('frontend.device_index') }}">Devices</a>
+                <a class="nav-link" href="{{ url_for('frontend.device_index') }}"><span data-i18n-en="Devices" data-i18n-zh="设备">Devices</span></a>
                 {% endblock %}
               </li>
               <li class="nav-item">
                 {% block navbar_users %}
-                <a class="nav-link" href="{{ url_for('frontend.user_index') }}">Users</a>
+                <a class="nav-link" href="{{ url_for('frontend.user_index') }}"><span data-i18n-en="Users" data-i18n-zh="用户">Users</span></a>
                 {% endblock %}
               </li>
               <li class="nav-item">
                 {% block navbar_folders %}
-                <a class="nav-link" href="{{ url_for('frontend.folder_index') }}">Folders</a>
+                <a class="nav-link" href="{{ url_for('frontend.folder_index') }}"><span data-i18n-en="Folders" data-i18n-zh="文件夹">Folders</span></a>
+                {% endblock %}
+              </li>
+              <li class="nav-item">
+                {% block navbar_logs %}
+                <a class="nav-link" href="{{ url_for('emo.list_logs') }}"><span data-i18n-en="Logs" data-i18n-zh="日志">Logs</span></a>
                 {% endblock %}
               </li>
               {% endif %}
             </ul>
             <div class="console-toolbar ms-xl-auto">
+              <div class="console-locale-switch btn-group" role="group" aria-label="Toggle language">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-language-toggle="en">EN</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-language-toggle="zh">中文</button>
+              </div>
               <div class="console-theme-switch btn-group" role="group" aria-label="Toggle theme">
                 <input type="radio" class="btn-check" name="theme" id="light" value="light" autocomplete="off">
-                <label class="btn btn-sm btn-outline-secondary" for="light">Light</label>
+                <label class="btn btn-sm btn-outline-secondary" for="light"><span data-i18n-en="Light" data-i18n-zh="浅色">Light</span></label>
                 <input type="radio" class="btn-check" name="theme" id="dark" value="dark" autocomplete="off">
-                <label class="btn btn-sm btn-outline-secondary" for="dark">Dark</label>
+                <label class="btn btn-sm btn-outline-secondary" for="dark"><span data-i18n-en="Dark" data-i18n-zh="深色">Dark</span></label>
                 <input type="radio" class="btn-check" name="theme" id="auto" value="auto" autocomplete="off">
-                <label class="btn btn-sm btn-outline-secondary" for="auto">Auto</label>
+                <label class="btn btn-sm btn-outline-secondary" for="auto"><span data-i18n-en="Auto" data-i18n-zh="自动">Auto</span></label>
               </div>
               <div class="dropdown">
                 <a class="console-user dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                   <span class="console-user-badge">{{ request.user.name[0]|upper }}</span>
                   <span class="console-user-meta">
                     <strong>{{ request.user.name }}</strong>
-                    <small>{% if request.user.admin %}Administrator{% else %}Operator{% endif %}</small>
+                    <small>{% if request.user.admin %}<span data-i18n-en="Administrator" data-i18n-zh="管理员">Administrator</span>{% else %}<span data-i18n-en="Operator" data-i18n-zh="使用者">Operator</span>{% endif %}</small>
                   </span>
                 </a>
                 <ul class="dropdown-menu dropdown-menu-end shadow-sm">
                   <li>
                     {% block navbar_profile %}
-                    <a class="dropdown-item" href="{{ url_for('frontend.user_profile', uid = 'me')}}">Profile</a>
+                    <a class="dropdown-item" href="{{ url_for('frontend.user_profile', uid = 'me')}}"><span data-i18n-en="Profile" data-i18n-zh="个人资料">Profile</span></a>
                     {% endblock %}
                   </li>
                   <li><hr class="dropdown-divider"></li>
-                  <li><a class="dropdown-item" href="{{ url_for('frontend.logout') }}">Log out</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('frontend.logout') }}"><span data-i18n-en="Log out" data-i18n-zh="退出登录">Log out</span></a></li>
                 </ul>
               </div>
+            </div>
+          </div>
+          {% else %}
+          <div class="console-toolbar ms-auto">
+            <div class="console-locale-switch btn-group" role="group" aria-label="Toggle language">
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-language-toggle="en">EN</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-language-toggle="zh">中文</button>
             </div>
           </div>
           {% endif %}
@@ -98,9 +119,9 @@
         <div class="container-fluid console-container px-3 px-xl-4">
           <section class="console-hero">
             <div>
-              <p class="console-eyebrow">Music operations</p>
+              <p class="console-eyebrow" data-i18n-en="Music operations" data-i18n-zh="音乐操作">Music operations</p>
               <h1 class="console-title">{% block page_title %}Emosonic Server operations console{% endblock %}</h1>
-              <p class="console-subtitle">{% block page_subtitle %}Monitor devices, manage the library, and operate your music stack from a single control surface.{% endblock %}</p>
+              <p class="console-subtitle">{% block page_subtitle %}<span data-i18n-en="Manage playback, queues, and library operations inside the Emosonic project workspace." data-i18n-zh="在 Emosonic 项目工作空间中管理播放、队列与曲库操作。">Manage playback, queues, and library operations inside the Emosonic project workspace.</span>{% endblock %}</p>
             </div>
           </section>
 
@@ -121,8 +142,8 @@
 
           <footer class="console-footer">
             <div>
-            <strong>Emosonic Server</strong>
-              <span class="text-body-secondary">Forked from Supysonic, maintained and extended by jsdfhasuh.</span>
+              <strong>Emosonic Server</strong>
+              <span class="text-body-secondary" data-i18n-en="Backend workspace for playback control, queue coordination, and library operations within Emosonic." data-i18n-zh="Emosonic 中的播放与管理工作空间，用于控制播放、协调队列与管理曲库。">Backend workspace for playback control, queue coordination, and library operations within Emosonic.</span>
             </div>
             <div class="console-footer-meta">
               <span>Version {{ version }}</span>

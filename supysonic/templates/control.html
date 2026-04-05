@@ -1,0 +1,1030 @@
+{% extends "layout.html" %}
+{% block title %}Control · Emosonic Server{% endblock %}
+{% block page_container_class %}console-container-wide{% endblock %}
+{% block navbar_control %}
+<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.control_index') }}"><span data-i18n-en="Control" data-i18n-zh="控制台">Control</span></a>
+{% endblock %}
+{% block page_title %}<span data-i18n-en="Realtime control console" data-i18n-zh="实时控制台">Realtime control console</span>{% endblock %}
+{% block page_subtitle %}<span data-i18n-en="Control live players, route queues, and inspect device state from the realtime playback workspace inside Emosonic." data-i18n-zh="在 Emosonic 实时播放工作区，掌控播放器、调度队列并查看设备状态。">Control live players, route queues, and inspect device state from the realtime playback workspace inside Emosonic.</span>{% endblock %}
+{% block body %}
+<div class="row row-cols-1 row-cols-md-4 g-3 mb-3">
+  <div class="col">
+    <div class="card text-center h-100 console-metric-card console-control-accent">
+      <div class="card-header">Connection</div>
+      <div class="card-body">
+        <div class="console-metric-value" id="control-connection-state">OFFLINE</div>
+        <div class="console-metric-caption">Socket.IO session health.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card text-center h-100 console-metric-card console-control-accent">
+      <div class="card-header">Players online</div>
+      <div class="card-body">
+        <div class="console-metric-value" id="control-player-count">0</div>
+        <div class="console-metric-caption">Playable target devices visible to this user.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card text-center h-100 console-metric-card console-control-accent">
+      <div class="card-header">Selected target</div>
+      <div class="card-body">
+        <div class="console-metric-value" id="control-target-name">-</div>
+        <div class="console-metric-caption">Current command destination.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card text-center h-100 console-metric-card console-control-accent">
+      <div class="card-header">Playback state</div>
+      <div class="card-body">
+        <div class="console-metric-value" id="control-playback-state">-</div>
+        <div class="console-metric-caption">Latest reported state for the selected session.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-xl-4">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Online players</span>
+        <div class="d-flex align-items-center gap-2">
+          <small class="console-muted" id="control-player-label">0 available</small>
+          <button type="button" class="btn btn-light btn-sm" id="control-refresh-devices">Refresh</button>
+        </div>
+      </div>
+      <div class="card-body p-2">
+        <div class="console-device-list" id="control-player-list">
+          <div class="text-body-secondary p-4">Waiting for device list...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-5">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Target playback context</span>
+        <span class="console-scope-badge scope-device">Device</span>
+      </div>
+      <div class="card-body" id="control-target-panel">
+        <div class="text-body-secondary">Select an online player to inspect live state.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-3">
+    <div class="card h-100">
+      <div class="card-header">Transport controls</div>
+      <div class="card-body d-flex flex-column gap-3">
+        <div class="control-selected-banner" id="control-selected-banner">
+          <div class="console-muted">No player selected.</div>
+        </div>
+        <div class="console-auth-note">
+          <strong data-i18n-en="Emosonic signal flow" data-i18n-zh="Emosonic 播放链路">Emosonic signal flow</strong>
+          <div class="console-muted mt-1" data-i18n-en="Pick a player, shape the queue, and inspect how session playback and local device state move through the current Emosonic workspace." data-i18n-zh="选定播放器，编排队列，查看播放会话与设备状态是如何在 Emosonic 中流转的。">Pick a player, shape the queue, and inspect how session playback and local device state move through the current Emosonic workspace.</div>
+        </div>
+        <div class="d-grid gap-2 control-grid-2">
+          <button type="button" class="btn btn-dark control-command" data-action="player.play">Play</button>
+          <button type="button" class="btn btn-outline-dark control-command" data-action="player.pause">Pause</button>
+          <button type="button" class="btn btn-outline-dark control-command" data-action="player.prev">Previous</button>
+          <button type="button" class="btn btn-outline-dark control-command" data-action="player.next">Next</button>
+        </div>
+        <div>
+          <label class="form-label" for="seek-position">Seek to (ms)</label>
+          <div class="input-group">
+            <input type="number" class="form-control" id="seek-position" min="0" step="1000" value="0">
+            <button type="button" class="btn btn-outline-dark" id="send-seek">Seek</button>
+          </div>
+        </div>
+        <div>
+          <label class="form-label" for="volume-level">Volume</label>
+          <div class="input-group">
+            <input type="number" class="form-control" id="volume-level" min="0" max="100" step="1" value="70">
+            <button type="button" class="btn btn-outline-dark" id="send-volume">Set</button>
+          </div>
+        </div>
+        <div class="console-control-hint">
+          Commands are routed to the selected <code>clientId</code>. Playback and queue state are rendered from the selected <code>sessionId</code>.
+        </div>
+        <div class="control-command-status" id="control-command-status">
+          <strong>Command status</strong>
+          <div class="console-muted" id="control-command-status-text">No commands sent yet.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-xl-6">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Queue surfaces</span>
+        <div class="d-flex gap-2 flex-wrap">
+          <span class="console-scope-badge scope-session">Session</span>
+          <span class="console-scope-badge scope-local">Local</span>
+        </div>
+      </div>
+      <div class="card-body" id="control-queue-panel">
+        <div class="text-body-secondary">Queue details will appear when the selected player reports a session queue.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-6">
+    <div class="card h-100 mb-3">
+      <div class="card-header">Local queue editor</div>
+      <div class="card-body d-flex flex-column gap-3">
+        <div>
+          <label class="form-label" for="queue-song-ids">Song IDs</label>
+          <textarea class="form-control control-queue-editor" id="queue-song-ids" rows="6" placeholder="One songId per line"></textarea>
+          <div class="form-text">Paste one `songId` per line. This editor represents the selected device local queue.</div>
+        </div>
+        <div class="row g-2">
+          <div class="col-md-6">
+            <label class="form-label" for="queue-current-index">Current index</label>
+            <input type="number" class="form-control" id="queue-current-index" min="0" step="1" value="0">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="queue-position-ms">Position (ms)</label>
+            <input type="number" class="form-control" id="queue-position-ms" min="0" step="1000" value="0">
+          </div>
+        </div>
+        <div class="d-flex gap-2 justify-content-end">
+          <button type="button" class="btn btn-outline-dark" id="load-local-queue">Load local queue</button>
+          <button type="button" class="btn btn-outline-dark" id="load-current-queue">Load current queue</button>
+          <button type="button" class="btn btn-outline-dark" id="send-local-queue">Save local</button>
+          <button type="button" class="btn btn-dark" id="send-queue-sync">Submit queue</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Realtime event log</span>
+        <button type="button" class="btn btn-light btn-sm" id="clear-control-log">Clear</button>
+      </div>
+      <div class="card-body">
+        <div class="console-log-view" id="control-event-log"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous"></script>
+<script>
+  const controlState = {
+    selfClientId: `web-control-${Math.random().toString(36).slice(2, 10)}`,
+    sessionId: `web-control:{{ request.user.name }}`,
+    devices: [],
+    selectedClientId: null,
+    selectedSessionId: null,
+    playbackByClientSession: {},
+    queueBySession: {},
+    localQueueByClientSession: {},
+    trackMeta: {},
+    eventLines: [],
+    subscriptions: new Set(),
+    pendingCommands: new Map(),
+  };
+
+  const socket = io(window.location.origin + '/emo', {
+    path: '/emo/ws',
+    transports: ['polling'],
+  });
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function formatTimestamp(timestamp) {
+    if (!timestamp) return '-';
+    return new Date(timestamp * 1000).toLocaleString();
+  }
+
+  function formatPosition(positionMs) {
+    if (positionMs === null || positionMs === undefined) return '-';
+    const totalSeconds = Math.floor(positionMs / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
+  }
+
+  function clampPlaybackPosition(positionMs, durationMs) {
+    if (!Number.isFinite(positionMs)) {
+      return null;
+    }
+    if (!Number.isFinite(durationMs) || durationMs <= 0) {
+      return Math.max(0, positionMs);
+    }
+    return Math.min(Math.max(0, positionMs), durationMs);
+  }
+
+  function getPlaybackDurationMs(playback) {
+    const durationMs = Number(playback?.durationMs ?? controlState.trackMeta[playback?.trackId]?.durationMs);
+    return Number.isFinite(durationMs) && durationMs > 0 ? durationMs : null;
+  }
+
+  function getComputedPlaybackPosition(playback) {
+    if (!playback || playback.positionMs === null || playback.positionMs === undefined) {
+      return null;
+    }
+
+    const durationMs = getPlaybackDurationMs(playback);
+    const basePositionMs = Number(playback.positionMs) || 0;
+    if (playback.state !== 'playing' || !playback.updatedAt) {
+      return clampPlaybackPosition(basePositionMs, durationMs);
+    }
+
+    const elapsedMs = Math.max(0, (Date.now() / 1000 - playback.updatedAt) * 1000);
+    return clampPlaybackPosition(basePositionMs + elapsedMs, durationMs);
+  }
+
+  function getComputedPlaybackProgressPercent(playback) {
+    const durationMs = getPlaybackDurationMs(playback);
+    const positionMs = getComputedPlaybackPosition(playback);
+    if (positionMs === null || !durationMs) {
+      return null;
+    }
+    return Math.max(0, Math.min(100, (positionMs / durationMs) * 100));
+  }
+
+  function nextRequestId(prefix) {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function pushEventLine(message, level = 'info') {
+    controlState.eventLines.unshift({
+      level,
+      text: `[${new Date().toLocaleTimeString()}] ${message}`,
+    });
+    controlState.eventLines = controlState.eventLines.slice(0, 50);
+    document.getElementById('control-event-log').innerHTML = controlState.eventLines
+      .map((line) => `<span class="console-log-${line.level}">${escapeHtml(line.text)}</span>`)
+      .join('<br>');
+  }
+
+  function updateConnectionState(label) {
+    document.getElementById('control-connection-state').textContent = label;
+  }
+
+  function setCommandStatus(message, level = 'idle') {
+    const status = document.getElementById('control-command-status');
+    const text = document.getElementById('control-command-status-text');
+    status.dataset.level = level;
+    text.textContent = message;
+  }
+
+  async function ensureTrackMeta(trackIds) {
+    const missing = Array.from(new Set((trackIds || []).filter((trackId) => trackId && !controlState.trackMeta[trackId])));
+    if (!missing.length) {
+      return;
+    }
+
+    const params = new URLSearchParams();
+    missing.forEach((trackId) => params.append('ids', trackId));
+    const response = await fetch(`{{ url_for('frontend.control_track_meta') }}?${params.toString()}`, {
+      headers: { 'X-Requested-With': 'fetch' },
+    });
+    if (!response.ok) {
+      return;
+    }
+    const payload = await response.json();
+    Object.assign(controlState.trackMeta, payload || {});
+  }
+
+  function getPlayers() {
+    return controlState.devices.filter((device) => {
+      const roles = Array.isArray(device.roles) ? device.roles : [];
+      return roles.includes('player') && device.clientId !== controlState.selfClientId;
+    });
+  }
+
+  function ensureSelection() {
+    const players = getPlayers();
+    if (!players.length) {
+      if (controlState.selectedSessionId) {
+        sendSessionAction('session.unsubscribe', controlState.selectedSessionId);
+      }
+      controlState.selectedClientId = null;
+      controlState.selectedSessionId = null;
+      return;
+    }
+    if (!players.some((device) => device.clientId === controlState.selectedClientId)) {
+      const previousSessionId = controlState.selectedSessionId;
+      controlState.selectedClientId = players[0].clientId;
+      controlState.selectedSessionId = players[0].sessionId || null;
+      if (previousSessionId && previousSessionId !== controlState.selectedSessionId) {
+        sendSessionAction('session.unsubscribe', previousSessionId);
+      }
+      if (controlState.selectedSessionId && previousSessionId !== controlState.selectedSessionId) {
+        sendSessionAction('session.subscribe', controlState.selectedSessionId);
+      }
+    }
+  }
+
+  function sendSessionAction(action, sessionId) {
+    if (!sessionId) {
+      return;
+    }
+    socket.emit('message', {
+      type: 'state',
+      action,
+      requestId: nextRequestId(action),
+      payload: { sessionId },
+      timestamp: Date.now() / 1000,
+    });
+  }
+
+  function updateSummary() {
+    const players = getPlayers();
+    document.getElementById('control-player-count').textContent = players.length;
+    document.getElementById('control-player-label').textContent = `${players.length} available`;
+
+    const target = players.find((device) => device.clientId === controlState.selectedClientId);
+    document.getElementById('control-target-name').textContent = target ? target.deviceName : '-';
+    const selectedBanner = document.getElementById('control-selected-banner');
+    if (target) {
+      selectedBanner.innerHTML = `
+        <div><strong>${escapeHtml(target.deviceName)}</strong></div>
+        <small class="console-muted">${escapeHtml(target.clientId)} · ${escapeHtml(target.sessionId || '')}</small>
+      `;
+      selectedBanner.classList.add('is-active');
+    } else {
+      selectedBanner.innerHTML = '<div class="console-muted">No player selected.</div>';
+      selectedBanner.classList.remove('is-active');
+    }
+
+    const playback = getSelectedPlayback();
+    document.getElementById('control-playback-state').textContent = playback?.state || '-';
+
+    const disabled = !target;
+    document.querySelectorAll('.control-command, #send-seek, #send-volume').forEach((button) => {
+      button.disabled = disabled;
+    });
+  }
+
+  function getLocalQueueKey() {
+    if (!controlState.selectedSessionId || !controlState.selectedClientId) {
+      return null;
+    }
+    return `${controlState.selectedSessionId}::${controlState.selectedClientId}`;
+  }
+
+  function getPlaybackKey(sessionId, clientId) {
+    if (!sessionId || !clientId) {
+      return null;
+    }
+    return `${sessionId}::${clientId}`;
+  }
+
+  function getSelectedPlayback() {
+    return controlState.playbackByClientSession[getPlaybackKey(controlState.selectedSessionId, controlState.selectedClientId)] || null;
+  }
+
+  function renderPlayerCards() {
+    const players = getPlayers();
+    const list = document.getElementById('control-player-list');
+    if (!players.length) {
+      list.innerHTML = '<div class="text-body-secondary p-4">No online playback device available.</div>';
+      return;
+    }
+
+    list.innerHTML = players.map((device) => {
+      const active = device.clientId === controlState.selectedClientId ? 'is-active' : '';
+      const playback = controlState.playbackByClientSession[getPlaybackKey(device.sessionId, device.clientId)] || {};
+      const status = playback.state || 'unknown';
+      const trackLabel = playback.trackLabel || controlState.trackMeta[playback.trackId]?.label || playback.trackId || 'No track';
+      return `
+        <button type="button" class="console-device-card ${active}" data-client-id="${escapeHtml(device.clientId)}">
+          <div class="console-device-card-top">
+            <div>
+              <div class="console-table-title">${escapeHtml(device.deviceName)}</div>
+              <small class="console-muted">${escapeHtml(device.clientId)}</small>
+            </div>
+            <span class="console-status status-${escapeHtml(status)}">${escapeHtml(status)}</span>
+          </div>
+          <div class="console-device-card-meta">
+            <span>${escapeHtml(device.userName)}</span>
+            <span>${escapeHtml((device.roles || []).join(', '))}</span>
+          </div>
+          <div class="console-device-card-session">${escapeHtml(device.sessionId || '')}</div>
+          <div class="console-device-card-track">${escapeHtml(trackLabel)}</div>
+        </button>
+      `;
+    }).join('');
+
+    list.querySelectorAll('.console-device-card').forEach((card) => {
+      card.addEventListener('click', () => {
+        const previousSessionId = controlState.selectedSessionId;
+        controlState.selectedClientId = card.dataset.clientId;
+        const target = players.find((device) => device.clientId === controlState.selectedClientId);
+        controlState.selectedSessionId = target?.sessionId || null;
+        if (previousSessionId && previousSessionId !== controlState.selectedSessionId) {
+          sendSessionAction('session.unsubscribe', previousSessionId);
+        }
+        if (controlState.selectedSessionId && previousSessionId !== controlState.selectedSessionId) {
+          sendSessionAction('session.subscribe', controlState.selectedSessionId);
+        }
+        renderPlayerCards();
+        renderTargetPanels();
+        updateSummary();
+      });
+    });
+  }
+
+  function buildQueueEntries(queue) {
+    if (Array.isArray(queue?.queueEntries)) {
+      return queue.queueEntries;
+    }
+    if (!Array.isArray(queue?.queueSongIds)) {
+      return [];
+    }
+    return queue.queueSongIds.map((songId, index) => ({
+      songId,
+      label: controlState.trackMeta[songId]?.label || songId,
+      isCurrent: index === queue.currentIndex,
+    }));
+  }
+
+  function renderQueueEntries(queue, queueScope, emptyMessage) {
+    const entries = buildQueueEntries(queue);
+
+    if (!entries.length) {
+      return `<div class="text-body-secondary">${escapeHtml(emptyMessage)}</div>`;
+    }
+
+    return `<div class="console-queue-list">${entries.map((entry) => `
+      <button type="button" class="console-queue-chip console-queue-chip-button ${entry.isCurrent ? 'is-current' : ''}" data-queue-scope="${escapeHtml(queueScope)}" data-queue-index="${entries.indexOf(entry)}">${escapeHtml(entry.label)}</button>
+    `).join('')}</div>`;
+  }
+
+  function sendQueuePlayItem(queueScope, index) {
+    if (!controlState.selectedSessionId || !controlState.selectedClientId) {
+      setCommandStatus('Queue play failed: no target player selected.', 'error');
+      return;
+    }
+
+    const queue = queueScope === 'local'
+      ? (getLocalQueueKey() ? controlState.localQueueByClientSession[getLocalQueueKey()] : null)
+      : controlState.queueBySession[controlState.selectedSessionId];
+    if (!queue || !Array.isArray(queue.queueSongIds) || !queue.queueSongIds.length) {
+      setCommandStatus(`Queue play failed: no ${queueScope} queue available.`, 'error');
+      return;
+    }
+    if (index < 0 || index >= queue.queueSongIds.length) {
+      setCommandStatus('Queue play failed: invalid queue index.', 'error');
+      return;
+    }
+
+    const payload = {
+      sessionId: controlState.selectedSessionId,
+      queueIndex: index,
+    };
+    if (queueScope === 'local') {
+      payload.clientId = controlState.selectedClientId;
+    }
+    sendCommand('queue.playItem', payload);
+    pushEventLine(
+      `Requested ${queueScope} queue item ${index} for ${controlState.selectedClientId}.`,
+      'info'
+    );
+  }
+
+  function renderTargetPanels() {
+    const players = getPlayers();
+    const target = players.find((device) => device.clientId === controlState.selectedClientId);
+    const playback = getSelectedPlayback();
+    const queue = controlState.selectedSessionId ? controlState.queueBySession[controlState.selectedSessionId] : null;
+    const localQueue = getLocalQueueKey() ? controlState.localQueueByClientSession[getLocalQueueKey()] : null;
+    const targetPanel = document.getElementById('control-target-panel');
+    const queuePanel = document.getElementById('control-queue-panel');
+
+    if (!target) {
+      targetPanel.innerHTML = '<div class="text-body-secondary">Select an online player to inspect live state.</div>';
+      queuePanel.innerHTML = '<div class="text-body-secondary">Queue details will appear when the selected player reports a session queue.</div>';
+      return;
+    }
+
+    const trackMeta = playback?.trackId ? controlState.trackMeta[playback.trackId] : null;
+    const trackLabel = playback?.trackLabel || trackMeta?.label || playback?.trackId || 'No current track';
+    const coverUrl = trackMeta?.coverUrl || '';
+    const playbackPositionMs = getComputedPlaybackPosition(playback);
+    const playbackDurationMs = getPlaybackDurationMs(playback);
+    const playbackProgressPercent = getComputedPlaybackProgressPercent(playback);
+    const hasDuration = Boolean(playbackDurationMs);
+    const trackBlock = playback?.trackId
+      ? `<div class="console-track-preview mt-3">${coverUrl ? `<img class="console-cover-thumb" src="${escapeHtml(coverUrl)}" alt="cover art">` : ''}<div class="console-queue-preview"><div><strong>${escapeHtml(trackLabel)}</strong></div><small class="console-muted">${escapeHtml(playback.trackId || '')}</small></div></div>`
+      : '<div class="text-body-secondary mt-3">No current track metadata.</div>';
+
+    targetPanel.innerHTML = `
+      <p class="console-section-lead">Selected target signal path. Device state is live, while queue state below is split between the room session and this player's local queue.</p>
+      <div class="console-signal-panel mb-3">
+        <div class="console-signal-panel-body">
+          <div class="console-signal-grid">
+            <div class="console-signal-cell">
+              <span class="console-signal-label">Device</span>
+              <div class="console-signal-value">${escapeHtml(target.deviceName)}</div>
+            </div>
+            <div class="console-signal-cell">
+              <span class="console-signal-label">Client ID</span>
+              <div class="console-signal-value"><code>${escapeHtml(target.clientId)}</code></div>
+            </div>
+            <div class="console-signal-cell">
+              <span class="console-signal-label">Session</span>
+              <div class="console-signal-value"><code>${escapeHtml(target.sessionId || '')}</code></div>
+            </div>
+            <div class="console-signal-cell">
+              <span class="console-signal-label">Playback</span>
+              <div class="console-signal-value"><span class="console-status status-${escapeHtml(playback?.state || 'unknown')}">${escapeHtml(playback?.state || 'unknown')}</span></div>
+            </div>
+            <div class="console-signal-cell">
+              <span class="console-signal-label">Position</span>
+              <div class="console-signal-value" data-control-playback-position>${formatPosition(playbackPositionMs)}</div>
+            </div>
+            <div class="console-signal-cell">
+              <span class="console-signal-label">Duration</span>
+              <div class="console-signal-value" data-control-playback-duration>${hasDuration ? formatPosition(playbackDurationMs) : '-'}</div>
+            </div>
+            <div class="console-signal-cell">
+              <span class="console-signal-label">Volume</span>
+              <div class="console-signal-value">${playback?.volume ?? '-'}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mb-3 ${hasDuration ? '' : 'd-none'}" data-control-playback-progress-wrap>
+        <div class="d-flex justify-content-between align-items-center gap-3 console-metric-caption mb-2">
+          <span data-control-playback-progress-label>${hasDuration ? `${formatPosition(playbackPositionMs)} / ${formatPosition(playbackDurationMs)}` : formatPosition(playbackPositionMs)}</span>
+          <span data-control-playback-progress-percent>${playbackProgressPercent === null ? '-' : `${Math.round(playbackProgressPercent)}%`}</span>
+        </div>
+        <div class="progress console-progress" role="progressbar" aria-label="Playback progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${playbackProgressPercent === null ? 0 : Math.round(playbackProgressPercent)}">
+          <div class="progress-bar console-progress-bar" data-control-playback-progress-bar style="width: ${playbackProgressPercent === null ? 0 : playbackProgressPercent}%"></div>
+        </div>
+      </div>
+      <ul class="console-info-list">
+        <li><span>Connected</span><strong>${formatTimestamp(target.connectedAt)}</strong></li>
+        <li><span>Track source</span><code>${escapeHtml(playback?.sourceClientId || target.clientId)}</code></li>
+      </ul>
+      ${trackBlock}
+    `;
+
+    updateControlPlaybackProgress();
+
+    const currentQueueSongId = Array.isArray(queue?.queueSongIds) && Number.isInteger(queue?.currentIndex)
+      && queue.currentIndex >= 0 && queue.currentIndex < queue.queueSongIds.length
+      ? queue.queueSongIds[queue.currentIndex]
+      : null;
+    const currentQueueMeta = currentQueueSongId ? controlState.trackMeta[currentQueueSongId] : null;
+    const currentQueueCoverUrl = currentQueueMeta?.coverUrl || '';
+    const currentQueueBlock = currentQueueSongId
+      ? `<div class="console-track-preview mb-3">${currentQueueCoverUrl ? `<img class="console-cover-thumb" src="${escapeHtml(currentQueueCoverUrl)}" alt="current queue cover">` : ''}<div class="console-queue-preview"><div><strong>${escapeHtml(currentQueueMeta?.label || currentQueueSongId)}</strong></div><small class="console-muted">Current queue item</small></div></div>`
+      : '';
+
+    const currentLocalQueueSongId = Array.isArray(localQueue?.queueSongIds) && Number.isInteger(localQueue?.currentIndex)
+      && localQueue.currentIndex >= 0 && localQueue.currentIndex < localQueue.queueSongIds.length
+      ? localQueue.queueSongIds[localQueue.currentIndex]
+      : null;
+    const currentLocalQueueMeta = currentLocalQueueSongId ? controlState.trackMeta[currentLocalQueueSongId] : null;
+    const currentLocalQueueCoverUrl = currentLocalQueueMeta?.coverUrl || '';
+    const currentLocalQueueBlock = currentLocalQueueSongId
+      ? `<div class="console-track-preview mb-3">${currentLocalQueueCoverUrl ? `<img class="console-cover-thumb" src="${escapeHtml(currentLocalQueueCoverUrl)}" alt="current local queue cover">` : ''}<div class="console-queue-preview"><div><strong>${escapeHtml(currentLocalQueueMeta?.label || currentLocalQueueSongId)}</strong></div><small class="console-muted">Current local queue item</small></div></div>`
+      : '';
+
+    queuePanel.innerHTML = `
+      <div class="mb-4">
+        <div class="console-panel-subhead">
+          <strong>Shared room queue</strong>
+          <span class="console-scope-badge scope-session">Session</span>
+        </div>
+        <p class="console-section-lead">Authority shared by every device in this room. Clicking an item asks the selected player to resolve playback from the session queue.</p>
+        <ul class="console-info-list mb-3">
+          <li><span>Queue size</span><strong>${queue?.queueSongIds?.length ?? 0}</strong></li>
+          <li><span>Current index</span><strong>${queue?.currentIndex ?? '-'}</strong></li>
+          <li><span>Queue position</span><strong>${formatPosition(queue?.positionMs)}</strong></li>
+          <li><span>Last update</span><strong>${formatTimestamp(queue?.updatedAt)}</strong></li>
+        </ul>
+        ${currentQueueBlock}
+        ${renderQueueEntries(queue, 'session', 'No session queue available for this player.')}
+      </div>
+      <div>
+        <div class="console-panel-subhead">
+          <strong>Device local queue</strong>
+          <span class="console-scope-badge scope-local">Local</span>
+        </div>
+        <p class="console-section-lead">Private to the selected player. Use this when the device should follow its own queue instead of the shared room queue.</p>
+        <ul class="console-info-list mb-3">
+          <li><span>Queue size</span><strong>${localQueue?.queueSongIds?.length ?? 0}</strong></li>
+          <li><span>Current index</span><strong>${localQueue?.currentIndex ?? '-'}</strong></li>
+          <li><span>Queue position</span><strong>${formatPosition(localQueue?.positionMs)}</strong></li>
+          <li><span>Last update</span><strong>${formatTimestamp(localQueue?.updatedAt)}</strong></li>
+        </ul>
+        ${currentLocalQueueBlock}
+        ${renderQueueEntries(localQueue, 'local', 'No local queue available for this player.')}
+      </div>
+    `;
+  }
+
+  function updateControlPlaybackProgress() {
+    const targetPanel = document.getElementById('control-target-panel');
+    if (!targetPanel) {
+      return;
+    }
+
+    const playback = getSelectedPlayback();
+    const positionNode = targetPanel.querySelector('[data-control-playback-position]');
+    const durationNode = targetPanel.querySelector('[data-control-playback-duration]');
+    const progressWrapNode = targetPanel.querySelector('[data-control-playback-progress-wrap]');
+    const progressLabelNode = targetPanel.querySelector('[data-control-playback-progress-label]');
+    const progressPercentNode = targetPanel.querySelector('[data-control-playback-progress-percent]');
+    const progressBarNode = targetPanel.querySelector('[data-control-playback-progress-bar]');
+    const progressNode = targetPanel.querySelector('.console-progress');
+    const playbackPositionMs = getComputedPlaybackPosition(playback);
+    const playbackDurationMs = getPlaybackDurationMs(playback);
+    const hasDuration = Boolean(playbackDurationMs);
+    const playbackProgressPercent = getComputedPlaybackProgressPercent(playback);
+
+    if (positionNode) {
+      positionNode.textContent = formatPosition(playbackPositionMs);
+    }
+    if (durationNode) {
+      durationNode.textContent = hasDuration ? formatPosition(playbackDurationMs) : '-';
+    }
+    if (!progressWrapNode) {
+      return;
+    }
+
+    progressWrapNode.classList.toggle('d-none', !hasDuration);
+    if (!hasDuration) {
+      return;
+    }
+
+    if (progressLabelNode) {
+      progressLabelNode.textContent = `${formatPosition(playbackPositionMs)} / ${formatPosition(playbackDurationMs)}`;
+    }
+    if (progressPercentNode) {
+      progressPercentNode.textContent = playbackProgressPercent === null ? '-' : `${Math.round(playbackProgressPercent)}%`;
+    }
+    if (progressBarNode) {
+      progressBarNode.style.width = `${playbackProgressPercent === null ? 0 : playbackProgressPercent}%`;
+    }
+    if (progressNode) {
+      progressNode.setAttribute('aria-valuenow', String(playbackProgressPercent === null ? 0 : Math.round(playbackProgressPercent)));
+    }
+  }
+
+  function sendDeviceListRequest() {
+    socket.emit('message', {
+      type: 'device',
+      action: 'device.list',
+      requestId: nextRequestId('device-list'),
+      payload: {},
+      timestamp: Date.now() / 1000,
+    });
+  }
+
+  function sendCommand(action, payload = {}) {
+    if (!controlState.selectedClientId) {
+      pushEventLine('No target player selected.', 'error');
+      return;
+    }
+
+    const requestId = nextRequestId(action);
+    controlState.pendingCommands.set(requestId, action);
+    socket.emit('message', {
+      type: 'command',
+      action,
+      requestId,
+      targetClientId: controlState.selectedClientId,
+      payload,
+      timestamp: Date.now() / 1000,
+    });
+    pushEventLine(`Sent ${action} to ${controlState.selectedClientId}`, 'info');
+    setCommandStatus(`Sending ${action}...`, 'pending');
+  }
+
+  function sendQueueSync() {
+    if (!controlState.selectedSessionId) {
+      pushEventLine('No session selected for queue sync.', 'error');
+      setCommandStatus('Queue sync failed: no target session selected.', 'error');
+      return;
+    }
+
+    const queueSongIds = document.getElementById('queue-song-ids').value
+      .split('\n')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const currentIndex = parseInt(document.getElementById('queue-current-index').value, 10) || 0;
+    const positionMs = parseInt(document.getElementById('queue-position-ms').value, 10) || 0;
+
+    if (queueSongIds.length === 0 && (currentIndex !== 0 || positionMs !== 0)) {
+      setCommandStatus('Queue sync failed: empty queue must use currentIndex=0 and positionMs=0.', 'error');
+      return;
+    }
+
+    if (queueSongIds.length > 0 && (currentIndex < 0 || currentIndex >= queueSongIds.length)) {
+      setCommandStatus('Queue sync failed: current index is out of bounds.', 'error');
+      return;
+    }
+
+    const requestId = nextRequestId('queue.session.sync');
+    controlState.pendingCommands.set(requestId, 'queue.session.sync');
+    socket.emit('message', {
+      type: 'state',
+      action: 'queue.session.sync',
+      requestId,
+      payload: {
+        sessionId: controlState.selectedSessionId,
+        queueSongIds,
+        currentIndex,
+        positionMs,
+      },
+      timestamp: Date.now() / 1000,
+    });
+    pushEventLine(`Submitted queue.session.sync for ${controlState.selectedSessionId} (${queueSongIds.length} items).`, 'info');
+    setCommandStatus('Sending queue.session.sync...', 'pending');
+  }
+
+  function sendLocalQueue() {
+    if (!controlState.selectedSessionId || !controlState.selectedClientId) {
+      setCommandStatus('Local queue update failed: no target player selected.', 'error');
+      return;
+    }
+
+    const queueSongIds = document.getElementById('queue-song-ids').value
+      .split('\n')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const currentIndex = parseInt(document.getElementById('queue-current-index').value, 10) || 0;
+    const positionMs = parseInt(document.getElementById('queue-position-ms').value, 10) || 0;
+
+    if (queueSongIds.length === 0 && (currentIndex !== 0 || positionMs !== 0)) {
+      setCommandStatus('Local queue update failed: empty queue must use currentIndex=0 and positionMs=0.', 'error');
+      return;
+    }
+    if (queueSongIds.length > 0 && (currentIndex < 0 || currentIndex >= queueSongIds.length)) {
+      setCommandStatus('Local queue update failed: current index is out of bounds.', 'error');
+      return;
+    }
+
+    const requestId = nextRequestId('queue.local.set');
+    controlState.pendingCommands.set(requestId, 'queue.local.set');
+    socket.emit('message', {
+      type: 'state',
+      action: 'queue.local.set',
+      requestId,
+      payload: {
+        sessionId: controlState.selectedSessionId,
+        clientId: controlState.selectedClientId,
+        queueSongIds,
+        currentIndex,
+        positionMs,
+      },
+      timestamp: Date.now() / 1000,
+    });
+    pushEventLine(`Updated local queue for ${controlState.selectedClientId} (${queueSongIds.length} items).`, 'info');
+    setCommandStatus('Sending queue.local.set...', 'pending');
+  }
+
+  function requestLocalQueue() {
+    if (!controlState.selectedSessionId || !controlState.selectedClientId) {
+      return;
+    }
+    socket.emit('message', {
+      type: 'state',
+      action: 'queue.local.get',
+      requestId: nextRequestId('queue.local.get'),
+      payload: {
+        sessionId: controlState.selectedSessionId,
+        clientId: controlState.selectedClientId,
+      },
+      timestamp: Date.now() / 1000,
+    });
+  }
+
+  socket.on('connect', () => {
+    updateConnectionState('ONLINE');
+    pushEventLine('Socket connected.', 'success');
+    socket.emit('message', {
+      type: 'auth',
+      action: 'auth.login',
+      requestId: 'web-auth-1',
+      payload: {},
+      timestamp: Date.now() / 1000,
+    });
+  });
+
+  socket.on('disconnect', () => {
+    updateConnectionState('OFFLINE');
+    pushEventLine('Socket disconnected.', 'error');
+  });
+
+  socket.on('connect_error', (error) => {
+    updateConnectionState('ERROR');
+    pushEventLine(`Connection error: ${error.message}`, 'error');
+  });
+
+  socket.on('message', (message) => {
+    const action = message.action;
+    if (action === 'system.ack' && message.requestId === 'web-auth-1') {
+      socket.emit('message', {
+        type: 'device',
+        action: 'device.register',
+        requestId: 'web-register-1',
+        payload: {
+          clientId: controlState.selfClientId,
+          deviceName: 'Web Control Console',
+          roles: ['controller'],
+          sessionId: controlState.sessionId,
+        },
+        timestamp: Date.now() / 1000,
+      });
+      pushEventLine('Authenticated using browser session.', 'success');
+      return;
+    }
+
+    if (action === 'system.ack' && message.requestId === 'web-register-1') {
+      sendDeviceListRequest();
+      pushEventLine('Registered browser control client.', 'success');
+      return;
+    }
+
+    if (action === 'device.list') {
+      const devices = Array.isArray(message.payload?.devices) ? message.payload.devices : [];
+      const previousSessionId = controlState.selectedSessionId;
+      controlState.devices = devices;
+      ensureSelection();
+      renderPlayerCards();
+      renderTargetPanels();
+      updateSummary();
+      if (previousSessionId && previousSessionId !== controlState.selectedSessionId) {
+        sendSessionAction('session.unsubscribe', previousSessionId);
+      }
+      if (controlState.selectedSessionId && previousSessionId !== controlState.selectedSessionId) {
+        sendSessionAction('session.subscribe', controlState.selectedSessionId);
+      }
+      pushEventLine(`Received device list (${devices.length} devices).`, 'info');
+      return;
+    }
+
+    if (action === 'playback.update') {
+      const payload = message.payload || {};
+      if (payload.sessionId) {
+        const playbackKey = getPlaybackKey(payload.sessionId, payload.sourceClientId);
+        if (playbackKey) {
+          controlState.playbackByClientSession[playbackKey] = payload;
+        }
+        ensureTrackMeta(payload.trackId ? [payload.trackId] : []).then(() => {
+          if (
+            payload.sessionId === controlState.selectedSessionId &&
+            payload.sourceClientId === controlState.selectedClientId
+          ) {
+            renderPlayerCards();
+            renderTargetPanels();
+            updateSummary();
+          }
+        });
+      }
+      if (
+        payload.sessionId === controlState.selectedSessionId &&
+        payload.sourceClientId === controlState.selectedClientId
+      ) {
+        renderPlayerCards();
+        renderTargetPanels();
+        updateSummary();
+      }
+      pushEventLine(`Playback update for ${payload.sourceClientId || 'unknown client'} in ${payload.sessionId || 'unknown session'}: ${payload.state || 'unknown'}`, 'info');
+      return;
+    }
+
+    if (action === 'queue.session.sync') {
+      const payload = message.payload || {};
+      if (payload.sessionId) {
+        controlState.queueBySession[payload.sessionId] = payload;
+        ensureTrackMeta(payload.queueSongIds || []).then(() => {
+          if (payload.sessionId === controlState.selectedSessionId) {
+            renderTargetPanels();
+          }
+        });
+      }
+      if (payload.sessionId === controlState.selectedSessionId) {
+        document.getElementById('queue-song-ids').value = (payload.queueSongIds || []).join('\n');
+        document.getElementById('queue-current-index').value = payload.currentIndex ?? 0;
+        document.getElementById('queue-position-ms').value = payload.positionMs ?? 0;
+        renderTargetPanels();
+      }
+      pushEventLine(`Queue update for ${payload.sessionId || 'unknown session'} (${(payload.queueSongIds || []).length} items).`, 'info');
+      return;
+    }
+
+    if (action === 'queue.local.set') {
+      const payload = message.payload || {};
+      const key = `${payload.sessionId || ''}::${payload.sourceClientId || ''}`;
+      controlState.localQueueByClientSession[key] = payload;
+      ensureTrackMeta(payload.queueSongIds || []).then(() => {
+        if (
+          payload.sessionId === controlState.selectedSessionId &&
+          payload.sourceClientId === controlState.selectedClientId
+        ) {
+          renderTargetPanels();
+        }
+      });
+      if (
+        payload.sessionId === controlState.selectedSessionId &&
+        payload.sourceClientId === controlState.selectedClientId
+      ) {
+        document.getElementById('queue-song-ids').value = (payload.queueSongIds || []).join('\n');
+        document.getElementById('queue-current-index').value = payload.currentIndex ?? 0;
+        document.getElementById('queue-position-ms').value = payload.positionMs ?? 0;
+        renderTargetPanels();
+      }
+      pushEventLine(`Local queue update for ${payload.sourceClientId || 'unknown client'} (${(payload.queueSongIds || []).length} items).`, 'info');
+      return;
+    }
+
+    if (action === 'system.error') {
+      const pendingAction = controlState.pendingCommands.get(message.requestId);
+      if (pendingAction) {
+        controlState.pendingCommands.delete(message.requestId);
+        setCommandStatus(`${pendingAction} failed: ${message.payload?.message || 'Unknown error'}`, 'error');
+      }
+      pushEventLine(`Error: ${message.payload?.message || 'Unknown error'}`, 'error');
+      return;
+    }
+
+    if (action === 'system.ack') {
+      if ((message.requestId || '').includes('session.subscribe')) {
+        const subscriptions = message.payload?.subscriptions || [];
+        controlState.subscriptions = new Set(subscriptions);
+        pushEventLine(`Subscribed to ${subscriptions.join(', ') || controlState.selectedSessionId}`, 'success');
+        return;
+      }
+      if ((message.requestId || '').includes('session.unsubscribe')) {
+        const subscriptions = message.payload?.subscriptions || [];
+        controlState.subscriptions = new Set(subscriptions);
+        pushEventLine('Session subscription updated.', 'info');
+        return;
+      }
+      const pendingAction = controlState.pendingCommands.get(message.requestId);
+      if (pendingAction) {
+        controlState.pendingCommands.delete(message.requestId);
+        setCommandStatus(`${pendingAction} acknowledged by server.`, 'success');
+      }
+      pushEventLine(`Ack: ${message.requestId || 'command'}`, 'success');
+    }
+  });
+
+  document.querySelectorAll('.control-command').forEach((button) => {
+    button.addEventListener('click', () => sendCommand(button.dataset.action));
+  });
+
+  document.getElementById('send-seek').addEventListener('click', () => {
+    const positionMs = parseInt(document.getElementById('seek-position').value, 10) || 0;
+    sendCommand('player.seek', { positionMs });
+  });
+
+  document.getElementById('send-volume').addEventListener('click', () => {
+    const volume = parseInt(document.getElementById('volume-level').value, 10);
+    if (Number.isNaN(volume)) {
+      pushEventLine('Invalid volume value.', 'error');
+      return;
+    }
+    sendCommand('player.setVolume', { volume });
+  });
+
+  document.getElementById('send-queue-sync').addEventListener('click', sendQueueSync);
+  document.getElementById('send-local-queue').addEventListener('click', sendLocalQueue);
+  document.getElementById('load-current-queue').addEventListener('click', () => {
+    const queue = controlState.selectedSessionId ? controlState.queueBySession[controlState.selectedSessionId] : null;
+    document.getElementById('queue-song-ids').value = (queue?.queueSongIds || []).join('\n');
+    document.getElementById('queue-current-index').value = queue?.currentIndex ?? 0;
+    document.getElementById('queue-position-ms').value = queue?.positionMs ?? 0;
+    setCommandStatus('Loaded current session queue into the editor.', 'success');
+  });
+  document.getElementById('load-local-queue').addEventListener('click', requestLocalQueue);
+
+  document.getElementById('control-refresh-devices').addEventListener('click', sendDeviceListRequest);
+  document.getElementById('clear-control-log').addEventListener('click', () => {
+    controlState.eventLines = [];
+    document.getElementById('control-event-log').innerHTML = '';
+  });
+  document.getElementById('control-queue-panel').addEventListener('click', (event) => {
+    const chip = event.target.closest('[data-queue-index]');
+    if (!chip) {
+      return;
+    }
+    sendQueuePlayItem(chip.dataset.queueScope || 'session', parseInt(chip.dataset.queueIndex, 10));
+  });
+
+  updateSummary();
+  window.setInterval(updateControlPlaybackProgress, 500);
+</script>
+{% endblock %}

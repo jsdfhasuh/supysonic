@@ -36,6 +36,13 @@
             <input type="text" class="form-control" id="mail" name="mail" value="{{ form_data.mail }}" placeholder="Optional email address" data-i18n-en="Optional email address" data-i18n-zh="可选邮箱地址" data-i18n-attr="placeholder">
           </div>
 
+          {% if registration_invite_required %}
+          <div>
+            <label class="form-label" for="registration_code"><span data-i18n-en="Invite code" data-i18n-zh="邀请码">Invite code</span></label>
+            <input type="text" class="form-control" id="registration_code" name="registration_code" value="{{ form_data.registration_code }}" placeholder="Enter the registration code" data-i18n-en="Enter the registration code" data-i18n-zh="输入注册码" data-i18n-attr="placeholder">
+          </div>
+          {% endif %}
+
           {% if lastfm_link_available %}
           <div class="border rounded-4 p-3 d-flex align-items-start gap-3">
             <input type="checkbox" class="form-check-input flex-shrink-0 mt-1 ms-0" role="switch" id="link_lastfm" name="link_lastfm" {{ 'checked="checked"' if form_data.link_lastfm }}>

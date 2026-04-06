@@ -40,6 +40,7 @@ class DefaultConfig:
         "mount_emosonic": False,
         "emo_ws_enabled": True,
         "allow_user_registration": True,
+        "registration_invite_code": "",
         "index_ignored_prefixes": "El La Le Las Les Los The",
         "online_lyrics": False,
     }

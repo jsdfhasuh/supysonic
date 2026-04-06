@@ -24,6 +24,14 @@ def _is_registration_enabled():
     return current_app.config["WEBAPP"].get("allow_user_registration", True)
 
 
+def _get_registration_invite_code():
+    return str(current_app.config["WEBAPP"].get("registration_invite_code", "") or "").strip()
+
+
+def _is_registration_invite_required():
+    return bool(_get_registration_invite_code())
+
+
 def _is_lastfm_link_available():
     config = current_app.config["LASTFM"]
     return config.get("api_key") is not None and config.get("secret") is not None
@@ -37,8 +45,9 @@ def _build_lastfm_auth_url(uid):
     )
 
 
-def _create_registered_user(user_name, password, password_confirm, mail):
+def _create_registered_user(user_name, password, password_confirm, mail, registration_code=""):
     errors = []
+    expected_invite_code = _get_registration_invite_code()
 
     if not _is_registration_enabled():
         errors.append("User registration is disabled.")
@@ -49,6 +58,12 @@ def _create_registered_user(user_name, password, password_confirm, mail):
         errors.append("Please provide a password.")
     elif password != password_confirm:
         errors.append("The passwords don't match.")
+
+    if expected_invite_code:
+        if not registration_code:
+            errors.append("Please provide the registration invite code.")
+        elif registration_code.strip() != expected_invite_code:
+            errors.append("Invalid registration invite code.")
 
     if errors:
         return None, errors
@@ -67,10 +82,12 @@ def _login_registered_user(user):
 def _register_form_context():
     return {
         "registration_enabled": _is_registration_enabled(),
+        "registration_invite_required": _is_registration_invite_required(),
         "lastfm_link_available": _is_lastfm_link_available(),
         "form_data": {
             "user": request.form.get("user", ""),
             "mail": request.form.get("mail", ""),
+            "registration_code": request.form.get("registration_code", ""),
             "link_lastfm": request.form.get("link_lastfm", ""),
         },
     }
@@ -443,7 +460,14 @@ def register():
     password = request.form.get("passwd", "")
     password_confirm = request.form.get("passwd_confirm", "")
     mail = request.form.get("mail", "")
-    user, errors = _create_registered_user(user_name, password, password_confirm, mail)
+    registration_code = request.form.get("registration_code", "")
+    user, errors = _create_registered_user(
+        user_name,
+        password,
+        password_confirm,
+        mail,
+        registration_code,
+    )
     if errors:
         for error in errors:
             flash(error, "danger")
@@ -471,7 +495,14 @@ def register_json():
     password = data.get("password", "")
     password_confirm = data.get("passwordConfirm", "")
     mail = data.get("mail", "")
-    user, errors = _create_registered_user(user_name, password, password_confirm, mail)
+    registration_code = data.get("registrationCode", "")
+    user, errors = _create_registered_user(
+        user_name,
+        password,
+        password_confirm,
+        mail,
+        registration_code,
+    )
     if errors:
         return jsonify({"ok": False, "error": errors[0]}), 400
 

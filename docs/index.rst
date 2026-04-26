@@ -30,3 +30,10 @@ __ https://listenbrainz.org/
    jukebox
    man/index
    api
+
+.. rubric:: 开发者指南
+
+.. toctree::
+   :maxdepth: 2
+
+   scanner_reference

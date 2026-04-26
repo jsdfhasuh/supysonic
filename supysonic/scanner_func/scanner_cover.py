@@ -1,15 +1,25 @@
+"""Repair missing album cover assets from local files and external services."""
+
+from __future__ import annotations
+
+import logging
 import os
+from typing import List, Optional, TYPE_CHECKING
 
 import mediafile
 
-from ..covers import find_cover_in_folder
-from ..db import Album, Image, Track
+from ..covers import CoverFile, find_cover_in_folder
+from ..db import Album, Folder, Image, Track
+from ..lastfm import LastFm
 from ..tool import download_image
 from ..MusicBrainz import get_musicbrainz_album_image_info, search_musicbrainz_album
 
+if TYPE_CHECKING:
+    from ..scanner import Scanner
 
-def collectAlbumsMissingCover(scanner):
-    lost_cover_album = []
+
+def collectAlbumsMissingCover(scanner: Scanner) -> List[Album]:
+    lost_cover_album: List[Album] = []
     for album in Album.select():
         if (
             Image.select()
@@ -18,19 +28,96 @@ def collectAlbumsMissingCover(scanner):
         ):
             continue
         lost_cover_album.append(album)
-        scanner._Scanner__stats.lost_covers_albums[album.name] = ""
-        scanner._Scanner__stats.lost_covers.albums += 1
+        scanner.stats().lost_covers_albums[album.name] = ""
+        scanner.stats().lost_covers.albums += 1
     return lost_cover_album
 
 
-def markAlbumCoverRestored(scanner, album):
-    scanner._Scanner__stats.lost_covers.albums -= 1
-    scanner._Scanner__stats.lost_covers_albums.pop(album.name, None)
+def findCover(scanner: Scanner, dirpath: str) -> None:
+    if not isinstance(dirpath, str):  # pragma: nocover
+        raise TypeError("Expecting string, got " + str(type(dirpath)))
+    if not os.path.exists(dirpath):
+        return
+
+    try:
+        folder = Folder.get(path=dirpath)
+    except Folder.DoesNotExist:
+        return
+
+    track = folder.tracks.select().first()
+    if track is None:
+        return
+
+    # This path handles folder-level cover discovery during scans and watcher updates.
+    album_name = track.album.name
+    album = track.album
+    cover = find_cover_in_folder(folder.path, album_name)
+    if cover:
+        image_path = os.path.join(folder.path, cover.name)
+        Image.get_or_create(
+            image_type="album",
+            related_id=album.id,
+            path=image_path,
+        )
 
 
-def repairAlbumCover(scanner, album, get_cover_interner=False, lfm=None, logger=None):
+def addCover(path: str, logger: logging.Logger) -> None:
+    if not isinstance(path, str):  # pragma: nocover
+        raise TypeError("Expecting string, got " + str(type(path)))
+
+    try:
+        folder = Folder.get(path=os.path.dirname(path))
+    except Folder.DoesNotExist:
+        return
+
+    track = folder.tracks.select().first()
+    if track is not None:
+        album = track.album
+        if not album:
+            logger.error(f"Track {track.path} has no album, cannot add cover")
+            return
+    else:
+        logger.error(f"Folder {folder.path} has no tracks, cannot add cover")
+        return
+
+    # This path handles a specific cover file being created or updated.
+    cover_name = os.path.basename(path)
+    album_name = track.album.name
+    old_cover = Image.get_or_none(image_type="album", related_id=album.id)
+    if old_cover and os.path.exists(old_cover.path):
+        current_cover = CoverFile(old_cover.path, album_name)
+        new_cover = CoverFile(cover_name, album_name)
+        if new_cover.score > current_cover.score:
+            old_cover.path = path
+            old_cover.save()
+            logger.info(f"Updated cover for album {album_name} with {cover_name}")
+        return
+
+    if os.path.exists(path):
+        Image.create(
+            image_type="album",
+            related_id=album.id,
+            path=path,
+        )
+        logger.info(f"Added cover for album {album_name} with {cover_name}")
+    else:
+        logger.error(f"Cover file {path} does not exist, cannot add cover")
+
+
+def markAlbumCoverRestored(scanner: Scanner, album: Album) -> None:
+    scanner.stats().lost_covers.albums -= 1
+    scanner.stats().lost_covers_albums.pop(album.name, None)
+
+
+def repairAlbumCover(
+    scanner: Scanner,
+    album: Album,
+    get_cover_interner: bool = False,
+    lfm: Optional[LastFm] = None,
+    logger: Optional[logging.Logger] = None,
+) -> None:
     track = Track.select().where(Track.album == album.id).first()
-    scanner._Scanner__stats.lost_covers_albums[album.name] = os.path.dirname(track.path) if track else ""
+    scanner.stats().lost_covers_albums[album.name] = os.path.dirname(track.path) if track else ""
     if track is None:
         return
 
@@ -44,7 +131,7 @@ def repairAlbumCover(scanner, album, get_cover_interner=False, lfm=None, logger=
     cover = mediafile.MediaFile(track.path).art
     if cover:
         image_path = os.path.join(
-            scanner._Scanner__config.BASE['tempdatafolder'], "album", f"{album.name}.png"
+            scanner.scan_config.BASE['tempdatafolder'], "album", f"{album.name}.png"
         )
         os.makedirs(os.path.dirname(image_path), exist_ok=True)
         with open(image_path, "wb") as f:

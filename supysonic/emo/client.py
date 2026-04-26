@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 from functools import wraps
@@ -7,6 +8,8 @@ from flask import jsonify, redirect, render_template, request, send_file, url_fo
 from . import api_routing
 from .exceptions import GenericError
 Version = "1.0.0"
+
+logger = logging.getLogger(__name__)
 
 
 def admin_only(f):
@@ -38,14 +41,36 @@ def get_log_path(filename):
 
     return safePath
 
+
+def getRequestSummary():
+    return {
+        'method': request.method,
+        'path': request.path,
+        'remote_addr': request.remote_addr,
+        'content_type': request.content_type,
+        'content_length': request.content_length,
+        'args': request.args.to_dict(flat=False),
+        'form_keys': sorted(request.form.keys()),
+        'file_keys': sorted(request.files.keys()),
+        'user_agent': request.user_agent.string,
+    }
+
 @api_routing('/upload_log')
 def upload_log():
     # 检查 HTTP 请求中是否有 "file"
     if 'file' not in request.files:
+        logger.warning(
+            "Upload log failed: no file part; request=%s",
+            getRequestSummary(),
+        )
         return jsonify({'status': 'error', 'message': 'No file part'}), 400
     
     file = request.files['file']
     if file.filename == '':
+        logger.warning(
+            "Upload log failed: empty filename; request=%s",
+            getRequestSummary(),
+        )
         return jsonify({'status': 'error', 'message': 'No selected file'}), 400
     
     filename = time.strftime("%Y%m%d_%H%M%S_") + file.filename
@@ -55,6 +80,12 @@ def upload_log():
         file.save(file_path)
         return jsonify({'status': 'success', 'message': 'File uploaded successfully', 'path': file_path})
     except Exception as e:
+        logger.exception(
+            "Upload log failed while saving file '%s' to '%s'; request=%s",
+            file.filename,
+            file_path,
+            getRequestSummary(),
+        )
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # 日志列表页面

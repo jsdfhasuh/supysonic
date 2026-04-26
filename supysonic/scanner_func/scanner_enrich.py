@@ -1,4 +1,10 @@
+"""Fill missing album and artist metadata after the main scan finishes."""
+
+from __future__ import annotations
+
+import logging
 import os
+from typing import List, Optional, Tuple, TYPE_CHECKING
 
 from ..db import Album, Artist, Track, User
 from ..lastfm import LastFm
@@ -7,26 +13,36 @@ from ..tool import download_image, extract_year, read_dict_from_json, write_dict
 from ..MusicBrainz import get_musicbrainz_album, search_musicbrainz_album
 from .scanner_cover import collectAlbumsMissingCover, repairAlbumCover
 
+if TYPE_CHECKING:
+    from ..scanner import Scanner
 
-def buildExternalMetadataClients(scanner):
+
+def buildExternalMetadataClients(
+    scanner: Scanner,
+) -> Tuple[Optional[User], bool, Optional[LastFm], Optional[MySpotify]]:
     user = User.get_or_none(User.name == "root")
-    if not (user and user.lastfm_status and scanner._Scanner__config.SPOTIFY['client_id']):
+    if not (user and user.lastfm_status and scanner.scan_config.SPOTIFY['client_id']):
         return user, False, None, None
-    return user, True, LastFm(scanner._Scanner__config.LASTFM, user), MySpotify(scanner._Scanner__config.SPOTIFY)
+    return user, True, LastFm(scanner.scan_config.LASTFM, user), MySpotify(scanner.scan_config.SPOTIFY)
 
 
-def collectAlbumsMissingYear(scanner):
-    lost_year_albums = []
+def collectAlbumsMissingYear(scanner: Scanner) -> List[Album]:
+    lost_year_albums: List[Album] = []
     for album in Album.select():
         if album.year:
             continue
         track = Track.select().where(Track.album == album.id).first()
         lost_year_albums.append(album)
-        scanner._Scanner__stats.lost_year_albums[album.name] = os.path.dirname(track.path) if track else ""
+        scanner.stats().lost_year_albums[album.name] = os.path.dirname(track.path) if track else ""
     return lost_year_albums
 
 
-def repairAlbumYear(scanner, album, lfm=None, sp=None):
+def repairAlbumYear(
+    scanner: Scanner,
+    album: Album,
+    lfm: Optional[LastFm] = None,
+    sp: Optional[MySpotify] = None,
+) -> bool:
     track = Track.select().where(Track.album == album.id).first()
     if track and track.year:
         album.year = extract_year(str(track.year))
@@ -42,7 +58,7 @@ def repairAlbumYear(scanner, album, lfm=None, sp=None):
 
     if album.year:
         album.save()
-        scanner._Scanner__stats.lost_year_albums.pop(album.name, None)
+        scanner.stats().lost_year_albums.pop(album.name, None)
         return True
 
     if lfm and sp:
@@ -59,41 +75,47 @@ def repairAlbumYear(scanner, album, lfm=None, sp=None):
             print(f"find year {year} for album {album.name}")
             album.year = year
             album.save()
-            scanner._Scanner__stats.lost_year_albums.pop(album.name, None)
+            scanner.stats().lost_year_albums.pop(album.name, None)
             return True
     return False
 
 
-def collectArtistsMissingInfo(scanner):
-    lost_cover_artist = []
+def collectArtistsMissingInfo(scanner: Scanner) -> List[Artist]:
+    lost_cover_artist: List[Artist] = []
     for artist in Artist.select():
         if artist.artist_info_json:
             continue
         lost_cover_artist.append(artist)
-        scanner._Scanner__stats.lost_covers.artists += 1
-        scanner._Scanner__stats.lost_covers_artists.append(artist.get_artist_name())
+        scanner.stats().lost_covers.artists += 1
+        scanner.stats().lost_covers_artists.append(artist.get_artist_name())
     return lost_cover_artist
 
 
-def repairArtistProfiles(scanner, lost_cover_artist, get_cover_interner=False, user=None, logger=None):
-    if not (get_cover_interner and user and user.lastfm_status and scanner._Scanner__config.SPOTIFY['client_id']):
+def repairArtistProfiles(
+    scanner: Scanner,
+    lost_cover_artist: List[Artist],
+    get_cover_interner: bool = False,
+    user: Optional[User] = None,
+    logger: Optional[logging.Logger] = None,
+) -> None:
+    if not (get_cover_interner and user and user.lastfm_status and scanner.scan_config.SPOTIFY['client_id']):
         return
 
-    sp = MySpotify(scanner._Scanner__config.SPOTIFY, user)
-    lfm = LastFm(scanner._Scanner__config.LASTFM, user)
+    sp = MySpotify(scanner.scan_config.SPOTIFY, user)
+    lfm = LastFm(scanner.scan_config.LASTFM, user)
     for artist in lost_cover_artist:
         if artist.get_artist_name() == "Various Artists" or len(artist.get_artist_name()) < 2:
             continue
         result = lfm.get_artistinfo(
             name=artist.get_artist_name(),
-            lang=scanner._Scanner__config.LASTFM['display_lang'],
+            lang=scanner.scan_config.LASTFM['display_lang'],
         )
         if not result or result.get('message', "") == 'The artist you supplied could not be found':
             continue
         result_json = {"image": {}, "similarArtists": []}
         wiki_url = result['artist']['bio']['links']['link']['href']
         artist_name = result['artist']['name']
-        artists_folder = os.path.join(scanner._Scanner__config.BASE['tempdatafolder'], 'artist', f'{artist_name}')
+        artists_folder = os.path.join(scanner.scan_config.BASE['tempdatafolder'], 'artist', f'{artist_name}')
         sp_result = sp.get_artist_info(artist.name)
         os.makedirs(artists_folder, exist_ok=True)
         dl_status = False
@@ -117,7 +139,7 @@ def repairArtistProfiles(scanner, lost_cover_artist, get_cover_interner=False, u
                     )
                     if image_path:
                         result_json['image'][size] = image_path
-                        scanner._Scanner__stats.lost_covers.artists -= 1
+                        scanner.stats().lost_covers.artists -= 1
                     else:
                         if logger:
                             logger.error("Download image failed")
@@ -142,14 +164,19 @@ def repairArtistProfiles(scanner, lost_cover_artist, get_cover_interner=False, u
         if os.path.exists(info_path):
             artist.artist_info_json = info_path
             artist.save()
-            scanner._Scanner__stats.lost_covers_artists.remove(artist.name)
+            scanner.stats().lost_covers_artists.remove(artist.name)
 
 
-def repairMissingArtistImages(scanner, get_cover_interner=False, user=None, logger=None):
-    if not (get_cover_interner and user and user.lastfm_status and scanner._Scanner__config.SPOTIFY['client_id']):
+def repairMissingArtistImages(
+    scanner: Scanner,
+    get_cover_interner: bool = False,
+    user: Optional[User] = None,
+    logger: Optional[logging.Logger] = None,
+) -> None:
+    if not (get_cover_interner and user and user.lastfm_status and scanner.scan_config.SPOTIFY['client_id']):
         return
 
-    sp = MySpotify(scanner._Scanner__config.SPOTIFY, user)
+    sp = MySpotify(scanner.scan_config.SPOTIFY, user)
     for artist in Artist.select().where(Artist.artist_info_json.is_null(False)):
         if not os.path.exists(artist.artist_info_json):
             continue
@@ -184,7 +211,7 @@ def repairMissingArtistImages(scanner, get_cover_interner=False, user=None, logg
                         )
 
 
-def findLostInformation(scanner, logger=None):
+def findLostInformation(scanner: Scanner, logger: Optional[logging.Logger] = None) -> None:
     user, get_cover_interner, lfm, sp = buildExternalMetadataClients(scanner)
 
     for album in list(collectAlbumsMissingYear(scanner)):

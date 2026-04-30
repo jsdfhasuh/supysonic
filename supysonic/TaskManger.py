@@ -41,9 +41,12 @@ class TaskManager:
                     break
                 
                 task_id, func, args, kwargs = task
+                started_at = time.time()
+                self.logger.info("Task %s started", task_id)
                 try:
                     result = func(*args, **kwargs)
-                    self.logger.info(f"Task {task_id} completed successfully")
+                    duration = time.time() - started_at
+                    self.logger.info("Task %s completed successfully duration=%.6fs", task_id, duration)
                     with self.results_lock:
                         self.task_results[task_id] = {
                             'status': 'completed',
@@ -51,6 +54,8 @@ class TaskManager:
                             'timestamp': time.time()
                         }
                 except Exception as e:
+                    duration = time.time() - started_at
+                    self.logger.error("Task %s failed error=%s duration=%.6fs", task_id, e, duration)
                     with self.results_lock:
                         self.task_results[task_id] = {
                             'status': 'failed',
@@ -114,6 +119,24 @@ class TaskManager:
             for task_id in to_delete:
                 del self.task_results[task_id]
     
+    def list_task_results(self) -> list:
+        with self.results_lock:
+            items = sorted(
+                self.task_results.items(),
+                key=lambda kv: kv[1].get("timestamp", 0),
+                reverse=True,
+            )
+            return [
+                {
+                    "task_id": tid,
+                    "status": info.get("status", "unknown"),
+                    "timestamp": info.get("timestamp"),
+                    "result": info.get("result"),
+                    "error": info.get("error"),
+                }
+                for tid, info in items
+            ]
+
     def shutdown(self):
         """关闭任务管理器"""
         self.is_running = False
@@ -141,6 +164,11 @@ def submit_background_task(task_id: str, func: Callable, *args, **kwargs) -> str
 def get_task_result(task_id: str) -> Optional[Dict[str, Any]]:
     """便捷函数：获取任务结果"""
     return get_task_manager().get_task_result(task_id)
+
+
+def list_task_results() -> list:
+    """便捷函数：列出所有任务结果"""
+    return get_task_manager().list_task_results()
 
 
 def clean_old_task_results(max_age: int = 3600):

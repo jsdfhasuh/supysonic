@@ -12,6 +12,7 @@ from ..spotify import MySpotify
 from ..tool import download_image, extract_year, read_dict_from_json, write_dict_to_json
 from ..MusicBrainz import get_musicbrainz_album, search_musicbrainz_album
 from .scanner_cover import collectAlbumsMissingCover, repairAlbumCover
+from .scanner_trace import logTrace
 
 if TYPE_CHECKING:
     from ..scanner import Scanner
@@ -43,10 +44,13 @@ def repairAlbumYear(
     lfm: Optional[LastFm] = None,
     sp: Optional[MySpotify] = None,
 ) -> bool:
+    trace_details = ["repair type: album year"]
     track = Track.select().where(Track.album == album.id).first()
     if track and track.year:
         album.year = extract_year(str(track.year))
+        trace_details.append("year source: track metadata")
     else:
+        trace_details.append("year source: track metadata miss")
         album_artist_name = album.artist.get_artist_name()
         musicbrainz_album = search_musicbrainz_album(artist_name=album_artist_name, album_name=album.name)
         if musicbrainz_album and musicbrainz_album.get('id'):
@@ -55,10 +59,19 @@ def repairAlbumYear(
             if year:
                 print(f"find year {year} for album {album.name}")
                 album.year = year
+                trace_details.append("year source: musicbrainz")
+        else:
+            trace_details.append("year source: musicbrainz miss")
 
     if album.year:
         album.save()
         scanner.stats().lost_year_albums.pop(album.name, None)
+        logTrace(
+            logging.getLogger(__name__),
+            "REPAIR_TRACE",
+            {"album": album.name},
+            trace_details + ["repair result: success"],
+        )
         return True
 
     if lfm and sp:
@@ -76,7 +89,19 @@ def repairAlbumYear(
             album.year = year
             album.save()
             scanner.stats().lost_year_albums.pop(album.name, None)
+            logTrace(
+                logging.getLogger(__name__),
+                "REPAIR_TRACE",
+                {"album": album.name},
+                trace_details + ["year source: lastfm", "repair result: success"],
+            )
             return True
+    logTrace(
+        logging.getLogger(__name__),
+        "REPAIR_TRACE",
+        {"album": album.name},
+        trace_details + ["repair result: no year found"],
+    )
     return False
 
 
@@ -104,6 +129,7 @@ def repairArtistProfiles(
     sp = MySpotify(scanner.scan_config.SPOTIFY, user)
     lfm = LastFm(scanner.scan_config.LASTFM, user)
     for artist in lost_cover_artist:
+        trace_details = ["repair type: artist profile"]
         if artist.get_artist_name() == "Various Artists" or len(artist.get_artist_name()) < 2:
             continue
         result = lfm.get_artistinfo(
@@ -111,7 +137,14 @@ def repairArtistProfiles(
             lang=scanner.scan_config.LASTFM['display_lang'],
         )
         if not result or result.get('message', "") == 'The artist you supplied could not be found':
+            logTrace(
+                logging.getLogger(__name__),
+                "REPAIR_TRACE",
+                {"artist": artist.get_artist_name()},
+                trace_details + ["lastfm artist info: miss", "repair result: no profile data found"],
+            )
             continue
+        trace_details.append("lastfm artist info: hit")
         result_json = {"image": {}, "similarArtists": []}
         wiki_url = result['artist']['bio']['links']['link']['href']
         artist_name = result['artist']['name']
@@ -122,6 +155,7 @@ def repairArtistProfiles(
         if sp_result:
             dl_status = True
             if sp_result['artists']['items']:
+                trace_details.append("spotify images: hit")
                 for element in sp_result['artists']['items'][0]['images']:
                     size_num = element['height']
                     if size_num > 600:
@@ -144,11 +178,24 @@ def repairArtistProfiles(
                         if logger:
                             logger.error("Download image failed")
                         dl_status = False
+                        trace_details.append(f"spotify image download failed: {size}")
             else:
+                logTrace(
+                    logging.getLogger(__name__),
+                    "REPAIR_TRACE",
+                    {"artist": artist.get_artist_name()},
+                    trace_details + ["spotify images: miss (empty result)", "repair result: no profile data found"],
+                )
                 continue
         elif not dl_status:
             if logger:
                 logger.error("Download image failed")
+            logTrace(
+                logging.getLogger(__name__),
+                "REPAIR_TRACE",
+                {"artist": artist.get_artist_name()},
+                trace_details + ["spotify images: miss", "repair result: no profile data found"],
+            )
             continue
 
         wiki_content = lfm.get_lastfm_wiki(wiki_url)
@@ -156,7 +203,14 @@ def repairArtistProfiles(
         if not wiki_content:
             if logger:
                 logger.error("Get wiki content failed")
+            logTrace(
+                logging.getLogger(__name__),
+                "REPAIR_TRACE",
+                {"artist": artist.get_artist_name()},
+                trace_details + ["lastfm biography: miss", "repair result: no profile data found"],
+            )
             continue
+        trace_details.append("lastfm biography: hit")
         result_json['biography'] = wiki_content
         result_json['lastFmUrl'] = result['artist']['url']
         write_dict_to_json(data=result_json, filename=os.path.join(artists_folder, "info.json"))
@@ -165,6 +219,12 @@ def repairArtistProfiles(
             artist.artist_info_json = info_path
             artist.save()
             scanner.stats().lost_covers_artists.remove(artist.name)
+            logTrace(
+                logging.getLogger(__name__),
+                "REPAIR_TRACE",
+                {"artist": artist.get_artist_name()},
+                trace_details + ["repair result: success"],
+            )
 
 
 def repairMissingArtistImages(
@@ -183,12 +243,16 @@ def repairMissingArtistImages(
         info = read_dict_from_json(artist.artist_info_json)
         if not info or not info.get('image'):
             continue
+        trace_details = ["repair type: artist images"]
+        restored_any = False
         for size, image_path in info['image'].items():
             if os.path.exists(image_path):
                 continue
+            trace_details.append(f"missing image size: {size}")
             sp_result = sp.get_artist_info(artist.name)
             artists_folder = os.path.dirname(image_path)
             if sp_result and sp_result['artists']['items']:
+                trace_details.append("spotify images: hit")
                 for element in sp_result['artists']['items'][0]['images']:
                     size_num = element['height']
                     if size_num > 600:
@@ -209,6 +273,23 @@ def repairMissingArtistImages(
                             data=info,
                             filename=os.path.join(artists_folder, "info.json"),
                         )
+                        restored_any = True
+                        trace_details.append(f"restored image size: {size}")
+                    else:
+                        trace_details.append(f"spotify image download failed: {size}")
+            else:
+                trace_details.append("spotify images: miss (empty result)")
+
+        if trace_details != ["repair type: artist images"]:
+            result_line = "repair result: success"
+            if not restored_any:
+                result_line = "repair result: no missing image restored"
+            logTrace(
+                logging.getLogger(__name__),
+                "REPAIR_TRACE",
+                {"artist": artist.name},
+                trace_details + [result_line],
+            )
 
 
 def findLostInformation(scanner: Scanner, logger: Optional[logging.Logger] = None) -> None:

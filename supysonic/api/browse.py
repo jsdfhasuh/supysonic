@@ -5,6 +5,7 @@
 #
 # Distributed under terms of the GNU AGPLv3 license.
 
+import logging
 import re
 import string
 
@@ -14,6 +15,8 @@ from ..lastfm import LastFm
 from ..db import Folder, Artist, Album, Track
 from ..TaskManger import get_task_manager, TaskManager
 from . import get_entity, get_root_folder, api_routing, get_entity_by_name,get_entity_by_id
+
+logger = logging.getLogger(__name__)
 
 
 @api_routing("/getMusicFolders")
@@ -258,8 +261,7 @@ def artist_info():
 @api_routing("/getArtistInfo2")
 def artist_info2():
     id = request.values.get("id")
-    image_base_url = request.url.replace("/getArtistInfo2", "/getCoverArt")
-    image_base_url = image_base_url.replace(f"{id}", f"ar-{id}")
+    image_base_url = request.base_url.replace("/getArtistInfo2", "/getCoverArt")
     client = request.client.client_name
     res = get_entity(Artist)
     info = res.get_info()
@@ -348,7 +350,7 @@ def list_tracks():
             track = get_entity_by_id(Track, track_id, param="id")
             tracks.append(track)
         except Exception as e:
-            current_app.logger.error(f"Error retrieving track with ID {track_id}: {e}")
+            logger.error("Error retrieving track with ID %s: %s", track_id, e)
 
     result_info = [t.as_subsonic_child(request.user, request.client) for t in tracks]
     return request.formatter("songs", {"song": result_info})

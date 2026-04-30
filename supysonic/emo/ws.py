@@ -47,6 +47,21 @@ def init_socketio(app):
     return socketio
 
 
+def _get_access_logger():
+    logger_name = current_app.extensions.get("supysonic_access_logger_name", "supysonic")
+    return logging.getLogger(f"{logger_name}.access")
+
+
+def _log_socket_access(event):
+    _get_access_logger().info(
+        "[ACCESS:SOCKET] %s SOCKET %s event=%s sid=%s",
+        request.remote_addr or "-",
+        request.path or "/emo/ws",
+        event,
+        request.sid,
+    )
+
+
 def _build_message(msg_type, action, payload=None, **extra):
     message = {
         "type": msg_type,
@@ -359,10 +374,12 @@ class EmoNamespace(Namespace):
         if not current_app.config["WEBAPP"].get("emo_ws_enabled", True):
             return False
         state.register_session(request.sid)
+        _log_socket_access("connect")
         logger.info("emo socket connected: %s", request.sid)
 
     def on_disconnect(self):
         session_info, client_info = state.unregister_session(request.sid)
+        _log_socket_access("disconnect")
         logger.info("emo socket disconnected: %s", request.sid)
         if client_info is not None:
             _broadcast_clients(client_info["userName"])
@@ -404,15 +421,29 @@ class EmoNamespace(Namespace):
             if action == "auth.login":
                 user = _authenticate(payload)
                 if user is None:
+                    logger.warning(
+                        "emo auth login failed sid=%s user=%s",
+                        request.sid,
+                        payload.get("u"),
+                    )
                     _send_error("unauthorized", "Invalid credentials", request_id)
                     return
                 state.authenticate_session(request.sid, user.name)
                 current_user_name = user.name
+                logger.info("emo auth login succeeded user=%s sid=%s", user.name, request.sid)
                 _send_ack(request_id, {"authenticated": True, "userName": user.name})
             elif action == "device.register":
                 if not current_user_name:
                     raise PermissionError("Authenticate first")
                 current_client = _register_device(request.sid, current_user_name, payload)
+                logger.info(
+                    "emo device registered user=%s client_id=%s session_id=%s roles=%s sid=%s",
+                    current_user_name,
+                    current_client.get("clientId"),
+                    current_client.get("sessionId"),
+                    current_client.get("roles"),
+                    request.sid,
+                )
                 _send_ack(request_id, {"client": current_client})
                 _broadcast_clients(current_user_name)
                 _restorePersistedState(request.sid, current_client.get("sessionId"))

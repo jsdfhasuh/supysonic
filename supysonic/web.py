@@ -11,15 +11,27 @@ import logging
 import mimetypes
 
 from flask import Flask
-from logging.handlers import TimedRotatingFileHandler
 from os import makedirs, path
 from .    import TaskManger 
 from .config import IniConfig
 from .cache import Cache
 from .db import init_database, open_connection, close_connection, Folder
+from .logging_manager import configure_web_logging, register_access_logging
 from .utils import get_secret_key
 from .recommend import create_recommend_playlist
 logger = logging.getLogger(__package__)
+
+
+def _build_web_logging_config(webapp_config):
+    log_dir = webapp_config.get("log_dir")
+    if not log_dir and webapp_config.get("log_file"):
+        log_dir = path.dirname(webapp_config["log_file"]) or "."
+    return {
+        "log_dir": log_dir,
+        "log_rotate": webapp_config.get("log_rotate", True),
+        "log_level": webapp_config.get("log_level", "WARNING"),
+        "log_backup_count": webapp_config.get("log_backup_count", 7),
+    }
 
 
 def create_application(config=None):
@@ -32,29 +44,8 @@ def create_application(config=None):
         config = IniConfig.from_common_locations()
     app.config.from_object(config)
 
-    # Set loglevel
-    logfile = app.config["WEBAPP"]["log_file"]
-    logfile_dir = path.dirname(logfile)
-    if logfile and not path.exists(logfile_dir):
-        makedirs(logfile_dir,exist_ok=True)  # pragma: nocover
-    if logfile:  # pragma: nocover
-        if app.config["WEBAPP"]["log_rotate"]:
-            handler = TimedRotatingFileHandler(logfile, when="midnight")
-        else:
-            handler = logging.FileHandler(logfile)
-        handler.setFormatter(
-            logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-        )
-        logger.addHandler(handler)
-    # add console handler too
-    console = logging.StreamHandler()
-    console.setFormatter(
-        logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-    )
-    logger.addHandler(console)
-    loglevel = app.config["WEBAPP"]["log_level"]
-    if loglevel:
-        logger.setLevel(getattr(logging, loglevel.upper(), logging.NOTSET))
+    configure_web_logging(_build_web_logging_config(app.config["WEBAPP"]), logger_name=logger.name)
+    register_access_logging(app, logger_name=logger.name)
 
     # Initialize database
     init_database(app.config["BASE"]["database_uri"])
@@ -114,6 +105,14 @@ def create_application(config=None):
 
     TaskManger_instance =TaskManger.get_task_manager()
     logger.info("Task Manager initialized: %s", TaskManger_instance)
+
+    if not app.testing:
+        from .scanner_func.scanner_review_tasks import runMissingYearAlbumReviewBootstrap
+
+        TaskManger_instance.submit_task(
+            "bootstrap-missing-year-review-tasks",
+            runMissingYearAlbumReviewBootstrap,
+        )
     
     
     # match mode setting

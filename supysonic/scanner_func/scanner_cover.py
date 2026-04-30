@@ -13,9 +13,13 @@ from ..db import Album, Folder, Image, Track
 from ..lastfm import LastFm
 from ..tool import download_image
 from ..MusicBrainz import get_musicbrainz_album_image_info, search_musicbrainz_album
+from .scanner_trace import logTrace
 
 if TYPE_CHECKING:
     from ..scanner import Scanner
+
+
+module_logger = logging.getLogger(__name__)
 
 
 def collectAlbumsMissingCover(scanner: Scanner) -> List[Album]:
@@ -116,17 +120,37 @@ def repairAlbumCover(
     lfm: Optional[LastFm] = None,
     logger: Optional[logging.Logger] = None,
 ) -> None:
+    trace_logger = logger or module_logger
+    trace_details = []
     track = Track.select().where(Track.album == album.id).first()
     scanner.stats().lost_covers_albums[album.name] = os.path.dirname(track.path) if track else ""
     if track is None:
+        logTrace(
+            trace_logger,
+            "ALBUM_COVER_TRACE",
+            {"album": album.name},
+            ["cover repair result: no track found"],
+        )
         return
 
+    trace_header = {"album": album.name, "track_path": track.path}
     cover_file = find_cover_in_folder(path=os.path.dirname(track.path), album_name=album.name)
     if cover_file:
         image_path = os.path.join(os.path.dirname(track.path), cover_file.name)
         Image.get_or_create(image_type="album", related_id=album.id, path=image_path)
         markAlbumCoverRestored(scanner, album)
+        logTrace(
+            trace_logger,
+            "ALBUM_COVER_TRACE",
+            trace_header,
+            [
+                "cover source: folder file",
+                f"selected cover file: {cover_file.name}",
+            ],
+        )
         return
+
+    trace_details.append("folder cover lookup: miss")
 
     cover = mediafile.MediaFile(track.path).art
     if cover:
@@ -138,7 +162,19 @@ def repairAlbumCover(
             f.write(cover)
         Image.create(image_type="album", related_id=album.id, path=image_path)
         markAlbumCoverRestored(scanner, album)
+        logTrace(
+            trace_logger,
+            "ALBUM_COVER_TRACE",
+            trace_header,
+            trace_details
+            + [
+                "embedded artwork: hit",
+                f"saved embedded artwork: {image_path}",
+            ],
+        )
         return
+
+    trace_details.append("embedded artwork: miss")
 
     if get_cover_interner and not cover and lfm:
         dl_status = False
@@ -164,7 +200,17 @@ def repairAlbumCover(
                                 logger.info("download %s cover image", album.name)
                             markAlbumCoverRestored(scanner, album)
                             dl_status = True
-                            break
+                            logTrace(
+                                trace_logger,
+                                "ALBUM_COVER_TRACE",
+                                trace_header,
+                                trace_details
+                                + [
+                                    "remote cover source: musicbrainz",
+                                    f"downloaded cover path: {image_path}",
+                                ],
+                            )
+                            return
                         if logger:
                             logger.error("Download image failed")
         if lastfm_album and not dl_status and lastfm_album['album']['image']:
@@ -186,6 +232,23 @@ def repairAlbumCover(
                     if logger:
                         logger.info("download %s cover image", album.name)
                     markAlbumCoverRestored(scanner, album)
-                    break
+                    logTrace(
+                        trace_logger,
+                        "ALBUM_COVER_TRACE",
+                        trace_header,
+                        trace_details
+                        + [
+                            "remote cover source: lastfm",
+                            f"downloaded cover path: {image_path}",
+                        ],
+                    )
+                    return
                 if logger:
                     logger.error("Download image failed")
+
+    logTrace(
+        trace_logger,
+        "ALBUM_COVER_TRACE",
+        trace_header,
+        trace_details + ["cover repair result: no source succeeded"],
+    )

@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from supysonic import db
 from supysonic.scanner_func import scanner_folder
@@ -34,6 +34,9 @@ class ScannerHelpersTestCase(unittest.TestCase):
         db.db.execute_sql(
             "CREATE UNIQUE INDEX IF NOT EXISTS track_artist_track_id_artist_id ON track_artist(track_id, artist_id)"
         )
+        db.db.execute_sql("ALTER TABLE artist ADD COLUMN artist_info_json VARCHAR(4096)")
+        db.db.execute_sql("ALTER TABLE artist ADD COLUMN real_artist_id INTEGER")
+        db.db.execute_sql("ALTER TABLE album ADD COLUMN year VARCHAR(255)")
         self.stats = Stats()
         self.scanner = SimpleNamespace(stats=lambda: self.stats)
 
@@ -121,6 +124,66 @@ class ScannerHelpersTestCase(unittest.TestCase):
         finally:
             shutil.rmtree(root_dir)
 
+    def test_create_album_review_tasks_creates_one_pending_task_per_new_album(self):
+        artist = db.Artist.create(name="Review Artist")
+        album = db.Album.create(name="Review Album", artist=artist)
+
+        from supysonic.scanner_func.scanner_review_tasks import createAlbumReviewTasks, rememberNewAlbum
+
+        rememberNewAlbum(self.scanner, album)
+        createAlbumReviewTasks(self.scanner)
+
+        tasks = list(db.AlbumReviewTask.select().where(db.AlbumReviewTask.album == album))
+        self.assertEqual(len(tasks), 1)
+        self.assertEqual(tasks[0].status, "pending")
+        self.assertEqual(tasks[0].reason, "new_album")
+
+    def test_create_album_review_tasks_skips_when_pending_task_exists(self):
+        artist = db.Artist.create(name="Review Artist")
+        album = db.Album.create(name="Review Album", artist=artist)
+
+        db.AlbumReviewTask.create(
+            album=album,
+            task_type="metadata_review",
+            status="pending",
+            reason="new_album",
+            snapshot_json="{}",
+        )
+
+        from supysonic.scanner_func.scanner_review_tasks import createAlbumReviewTasks, rememberNewAlbum
+
+        rememberNewAlbum(self.scanner, album)
+        createAlbumReviewTasks(self.scanner)
+
+        task_count = db.AlbumReviewTask.select().where(db.AlbumReviewTask.album == album).count()
+        self.assertEqual(task_count, 1)
+
+    def test_create_album_review_tasks_allows_new_task_after_closed_task(self):
+        artist = db.Artist.create(name="Review Artist")
+        album = db.Album.create(name="Review Album", artist=artist)
+
+        db.AlbumReviewTask.create(
+            album=album,
+            task_type="metadata_review",
+            status="dismissed",
+            reason="new_album",
+            snapshot_json="{}",
+            resolved_at=db.now(),
+        )
+
+        from supysonic.scanner_func.scanner_review_tasks import createAlbumReviewTasks, rememberNewAlbum
+
+        rememberNewAlbum(self.scanner, album)
+        createAlbumReviewTasks(self.scanner)
+
+        tasks = list(
+            db.AlbumReviewTask.select()
+            .where(db.AlbumReviewTask.album == album)
+            .order_by(db.AlbumReviewTask.created)
+        )
+        self.assertEqual(len(tasks), 2)
+        self.assertEqual(tasks[-1].status, "pending")
+
     def test_run_scanner_skips_post_processing_after_stop_requested(self):
         calls = []
 
@@ -160,6 +223,71 @@ class ScannerHelpersTestCase(unittest.TestCase):
 
         self.assertEqual(calls, [("scan_folder", "folder-row")])
         prune_library.assert_not_called()
+
+    def test_run_scanner_logs_summary_after_successful_run(self):
+        calls = []
+
+        class FakeScanner:
+            stop_requested = False
+
+            def __init__(self):
+                self._stats = SimpleNamespace(
+                    added=SimpleNamespace(artists=1, albums=2, tracks=3),
+                    deleted=SimpleNamespace(artists=4, albums=5, tracks=6),
+                    errors=["bad-file.mp3", "bad-folder"],
+                    scanned=7,
+                    existing_tracks=8,
+                )
+
+            def next_queued_folder(self):
+                if calls:
+                    return None
+                return "folder"
+
+            def scan_folder(self, folder):
+                calls.append(("scan_folder", folder))
+
+            def decideAllPositions(self):
+                calls.append(("decideAllPositions", None))
+
+            def find_lost_information(self):
+                calls.append(("find_lost_information", None))
+
+            def handle_done(self):
+                calls.append(("handle_done", None))
+
+            def stats(self):
+                return self._stats
+
+        fake_scanner = FakeScanner()
+        fake_logger = Mock()
+
+        with patch.object(scanner_runtime, "open_connection", return_value=False), patch.object(
+            scanner_runtime, "close_connection"
+        ), patch.object(scanner_runtime, "Folder") as folder_model, patch.object(
+            scanner_runtime, "pruneLibrary"
+        ) as prune_library, patch.object(
+            scanner_runtime, "createAlbumReviewTasks"
+        ) as create_review_tasks:
+            folder_model.get.return_value = "folder-row"
+
+            scanner_runtime.runScanner(fake_scanner, fake_logger)
+
+        prune_library.assert_called_once_with(fake_scanner)
+        create_review_tasks.assert_called_once_with(fake_scanner)
+        fake_logger.info.assert_any_call("begin to find all covers")
+        fake_logger.info.assert_any_call(
+            "scan summary scanned=%s existing_tracks=%s added=%s/%s/%s deleted=%s/%s/%s errors=%s",
+            7,
+            8,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            2,
+        )
 
     def test_scan_folder_entries_continues_after_scandir_error(self):
         root_dir = tempfile.mkdtemp()

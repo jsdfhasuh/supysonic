@@ -54,17 +54,36 @@ def resolveAlbumContext(
     scanner: Scanner,
     path: str,
     tag: mediafile.MediaFile,
-) -> Tuple[Dict[str, Any], List[str], Album]:
+) -> Tuple[Dict[str, Any], List[str], Album, Dict[str, Any]]:
     album_info_path = os.path.join(os.path.dirname(path), "album.nfo")
     nfo_data = readNfo(album_info_path)
-    raw = tag.mgfile
+    raw = getattr(tag, "mgfile", {})
     raw_artists = raw.get("artist", [])
     raw_albumartists = raw.get("albumartist", [])
     album_section = nfo_data.get("album", {})
     album_artists = album_section.get("albumartist", []) or raw_albumartists or ["unknown"]
     artists = album_section.get("artist", []) or raw_artists or ["unknown"]
     _, album_id, _ = recordAlbumArtists(scanner, album_artists, sanitizeString(tag.album))
-    return nfo_data, artists, album_id
+    trace_context = {
+        "album_artists": album_artists,
+        "album_artist_source": "fallback unknown",
+        "raw_album_artists": raw_albumartists,
+        "raw_artists": raw_artists,
+        "artist_source": "fallback unknown",
+        "resolved_album_artists": album_artists,
+        "resolved_album_artist_count": len(album_artists),
+    }
+    if album_section.get("albumartist", []):
+        trace_context["album_artist_source"] = "album.nfo albumartist"
+    elif raw_albumartists:
+        trace_context["album_artist_source"] = "tag albumartist"
+
+    if album_section.get("artist", []):
+        trace_context["artist_source"] = "album.nfo artist"
+    elif raw_artists:
+        trace_context["artist_source"] = "tag artist"
+
+    return nfo_data, artists, album_id, trace_context
 
 
 def buildTrackData(

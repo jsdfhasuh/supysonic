@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from ..db import Album, Artist, Folder, close_connection, open_connection
+from .scanner_review_tasks import createAlbumReviewTasks
 
 from typing import TYPE_CHECKING
 
@@ -47,6 +48,20 @@ def runScanner(scanner: Scanner, logger: logging.Logger) -> None:
         pruneLibrary(scanner)
         logger.info("begin to find all covers")
         scanner.find_lost_information()
+        createAlbumReviewTasks(scanner)
+        stats = scanner.stats()
+        logger.info(
+            "scan summary scanned=%s existing_tracks=%s added=%s/%s/%s deleted=%s/%s/%s errors=%s",
+            stats.scanned,
+            stats.existing_tracks,
+            stats.added.artists,
+            stats.added.albums,
+            stats.added.tracks,
+            stats.deleted.artists,
+            stats.deleted.albums,
+            stats.deleted.tracks,
+            len(stats.errors),
+        )
         scanner.handle_done()
     finally:
         if opened:

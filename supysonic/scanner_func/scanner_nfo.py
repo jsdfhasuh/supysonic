@@ -10,6 +10,7 @@ from ..db import Album, AlbumArtist, Folder, Track, TrackArtist
 from ..nfo.nfo import NfoHandler
 from .scanner_lookup import findArtist
 from .scanner_relations import recordAlbumArtists, recordTrackArtists
+from .scanner_trace import logTrace
 
 if TYPE_CHECKING:
     from ..scanner import Scanner
@@ -154,12 +155,31 @@ def renowAlbumByNfo(scanner: Scanner, path: str, logger: logging.Logger) -> None
     if not nfoData or not folderPath:
         return
 
+    trace_details = ["album.nfo found", "album metadata updated from nfo"]
     _, trackElement, allTracks = _loadAlbumFolderState(folderPath)
     if not trackElement:
+        logTrace(
+            logger,
+            "NFO_TRACE",
+            {"folder": folderPath, "path": path},
+            trace_details + ["track artist renow skipped: no scanned tracks found"],
+        )
         return
 
     albumElement = trackElement.album
     _renowAlbumMetadata(scanner, albumElement, nfoData, logger)
     if not _validateTrackNumbers(allTracks, logger):
+        logTrace(
+            logger,
+            "NFO_TRACE",
+            {"folder": folderPath, "path": path, "album": albumElement.name},
+            trace_details + ["track artist renow skipped: invalid track numbers"],
+        )
         return
     _renowTrackArtists(scanner, albumElement, nfoData, logger)
+    logTrace(
+        logger,
+        "NFO_TRACE",
+        {"folder": folderPath, "path": path, "album": albumElement.name},
+        trace_details + ["track artist renow applied"],
+    )

@@ -4,7 +4,7 @@ import shutil
 import tempfile
 import unittest
 
-from flask import Flask
+from flask import Flask, send_file
 
 from supysonic.db import release_database
 from supysonic.emo.ws import socketio
@@ -37,6 +37,10 @@ class AccessLoggingTestCase(unittest.TestCase):
     def _create_app(self):
         from supysonic.logging_manager import configure_web_logging, register_access_logging
 
+        file_path = os.path.join(self._tmp_dir, "sample.bin")
+        with open(file_path, "wb") as f:
+            f.write(b"sample-bytes")
+
         configure_web_logging(
             {
                 "log_dir": self._tmp_dir,
@@ -57,6 +61,10 @@ class AccessLoggingTestCase(unittest.TestCase):
         @app.route("/page")
         def page():
             return "page"
+
+        @app.route("/download")
+        def download():
+            return send_file(file_path, conditional=True)
 
         register_access_logging(app, logger_name=self.logger_name)
         return app
@@ -92,6 +100,23 @@ class AccessLoggingTestCase(unittest.TestCase):
 
         self.assertIn("[ACCESS:WEB]", access_content)
         self.assertIn("/page?tab=albums", access_content)
+        self.assertIn("status=200", access_content)
+
+    def test_logs_send_file_requests_without_breaking_direct_passthrough(self):
+        app = self._create_app()
+        client = app.test_client()
+
+        response = client.get("/download")
+        try:
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.data, b"sample-bytes")
+        finally:
+            response.close()
+
+        with open(os.path.join(self._tmp_dir, "access.log"), "r", encoding="utf-8") as f:
+            access_content = f.read()
+
+        self.assertIn("/download", access_content)
         self.assertIn("status=200", access_content)
 
 

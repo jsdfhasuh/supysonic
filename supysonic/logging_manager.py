@@ -81,6 +81,20 @@ def _get_request_target():
   return f"{request.path}?{query_string}"
 
 
+def _get_response_size(response):
+  content_length = response.calculate_content_length()
+  if content_length is not None:
+    return content_length
+
+  if response.content_length is not None:
+    return response.content_length
+
+  if response.direct_passthrough or response.is_streamed:
+    return "-"
+
+  return len(response.get_data())
+
+
 def register_access_logging(app, logger_name="supysonic"):
   if app.extensions.get("supysonic_access_logging"):
     return
@@ -98,9 +112,7 @@ def register_access_logging(app, logger_name="supysonic"):
     if started_at is not None:
       duration = time.perf_counter() - started_at
 
-    content_length = response.calculate_content_length()
-    if content_length is None:
-      content_length = len(response.get_data())
+    content_length = _get_response_size(response)
 
     access_logger.info(
       "[ACCESS:%s] %s %s %s status=%s bytes=%s duration=%.6fs",

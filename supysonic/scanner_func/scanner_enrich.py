@@ -18,6 +18,9 @@ if TYPE_CHECKING:
     from ..scanner import Scanner
 
 
+logger = logging.getLogger(__name__)
+
+
 def buildExternalMetadataClients(
     scanner: Scanner,
 ) -> Tuple[Optional[User], bool, Optional[LastFm], Optional[MySpotify]]:
@@ -57,7 +60,7 @@ def repairAlbumYear(
             result = get_musicbrainz_album(mb_album_id=musicbrainz_album['id'])
             year = extract_year(result.get('date'))
             if year:
-                print(f"find year {year} for album {album.name}")
+                logger.info("Resolved album year %s for %s from MusicBrainz", year, album.name)
                 album.year = year
                 trace_details.append("year source: musicbrainz")
         else:
@@ -85,7 +88,7 @@ def repairAlbumYear(
             else:
                 published_year = lastfm_album['album']['wiki'].get('published', "")
                 year = extract_year(published_year)
-            print(f"find year {year} for album {album.name}")
+            logger.info("Resolved album year %s for %s from LastFM", year, album.name)
             album.year = year
             album.save()
             scanner.stats().lost_year_albums.pop(album.name, None)

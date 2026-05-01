@@ -10,12 +10,14 @@ from functools import wraps
 import binascii
 import logging
 import uuid
-from flask import request
 from flask import Blueprint
+from flask import g
+from flask import request
 from flask import session
 from peewee import IntegrityError
 
 from ..db import ClientPrefs, Folder
+from ..logging_utils import format_log_event
 from ..managers.user import UserManager
 
 from .exceptions import GenericError, Unauthorized, NotFound
@@ -23,6 +25,23 @@ from .formatters import JSONFormatter, JSONPFormatter, XMLFormatter
 
 api = Blueprint("emo", __name__)
 logger = logging.getLogger(__name__)
+
+
+def get_request_id():
+    return getattr(g, "supysonic_request_id", "-")
+
+
+def get_emo_log_context():
+    return {
+        "request_id": get_request_id(),
+        "path": request.path,
+    }
+
+
+def log_emo_event(level, event, **fields):
+    context = get_emo_log_context()
+    context.update(fields)
+    logger.log(level, format_log_event("emo", event, **context))
 
 
 def api_routing(endpoint):
@@ -61,15 +80,20 @@ def decode_password(password):
 def authorize():
     # 跳过不需要身份验证的端点
     # 尝试 HTTP 基本认证
+    username = None
     if request.authorization:
         username = request.authorization.username
         user = UserManager.try_auth(username, request.authorization.password)
         if user is not None:
             request.user = user
             return
-        logger.warn("Failed login attempt for '%s'", username)
-        logger.error(
-            "Failed login attempt for user %s (IP: %s)", username, request.remote_addr
+        log_emo_event(
+            logging.WARNING,
+            "auth_failure",
+            result="failure",
+            user=username,
+            reason="wrong_credentials",
+            auth_method="basic",
         )
         raise Unauthorized()
 
@@ -94,6 +118,13 @@ def authorize():
             try:
                 password = binascii.unhexlify(password[4:]).decode('utf-8')
             except:
+                log_emo_event(
+                    logging.WARNING,
+                    "auth_failure",
+                    result="failure",
+                    user=username,
+                    reason="invalid_encoded_password",
+                )
                 raise Unauthorized("Invalid encoded password")
 
         user = UserManager.try_auth(username, password)
@@ -130,11 +161,24 @@ def authorize():
             session.clear()
             raise Unauthorized("Please login")
     else:
+        log_emo_event(
+            logging.WARNING,
+            "auth_failure",
+            result="failure",
+            user=username,
+            reason="missing_auth",
+        )
         raise Unauthorized("Missing authentication parameters")
 
     # 检查认证结果
     if user is None:
-        logger.warn("Failed login attempt for '%s'", username)
+        log_emo_event(
+            logging.WARNING,
+            "auth_failure",
+            result="failure",
+            user=username,
+            reason="wrong_credentials",
+        )
         raise Unauthorized("Wrong username or password")
     request.user = user
 

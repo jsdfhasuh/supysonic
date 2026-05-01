@@ -9,6 +9,12 @@ from queue import Queue
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Any, Dict, Optional
 
+from .logging_utils import format_log_event
+
+
+def _logTaskEvent(logger, level, event, **fields):
+    logger.log(level, format_log_event("task", event, **fields))
+
 
 class TaskManager:
     """后台任务管理器"""
@@ -30,7 +36,7 @@ class TaskManager:
         # 启动后台工作线程
         self.worker_thread = Thread(target=self._background_worker, daemon=True)
         self.worker_thread.start()
-        self.logger.info("Background worker thread started")
+        _logTaskEvent(self.logger, logging.INFO, "worker_started", max_workers=self.max_workers)
     
     def _background_worker(self):
         """后台工作线程，不断从队列中取任务执行"""
@@ -42,11 +48,18 @@ class TaskManager:
                 
                 task_id, func, args, kwargs = task
                 started_at = time.time()
-                self.logger.info("Task %s started", task_id)
+                _logTaskEvent(self.logger, logging.INFO, "started", task_id=task_id)
                 try:
                     result = func(*args, **kwargs)
                     duration = time.time() - started_at
-                    self.logger.info("Task %s completed successfully duration=%.6fs", task_id, duration)
+                    _logTaskEvent(
+                        self.logger,
+                        logging.INFO,
+                        "completed",
+                        task_id=task_id,
+                        status="completed",
+                        duration=f"{duration:.6f}s",
+                    )
                     with self.results_lock:
                         self.task_results[task_id] = {
                             'status': 'completed',
@@ -55,7 +68,15 @@ class TaskManager:
                         }
                 except Exception as e:
                     duration = time.time() - started_at
-                    self.logger.error("Task %s failed error=%s duration=%.6fs", task_id, e, duration)
+                    _logTaskEvent(
+                        self.logger,
+                        logging.ERROR,
+                        "failed",
+                        task_id=task_id,
+                        status="failed",
+                        error=str(e),
+                        duration=f"{duration:.6f}s",
+                    )
                     with self.results_lock:
                         self.task_results[task_id] = {
                             'status': 'failed',
@@ -64,7 +85,7 @@ class TaskManager:
                         }
                 finally:
                     self.task_queue.task_done()
-            except:
+            except Exception:
                 continue
     
     def submit_task(self, task_id: str, func: Callable, *args, **kwargs) -> str:
@@ -87,7 +108,7 @@ class TaskManager:
             }
         
         self.task_queue.put((task_id, func, args, kwargs))
-        self.logger.info(f"Submitted task {task_id} to the queue")
+        _logTaskEvent(self.logger, logging.INFO, "submitted", task_id=task_id, status="pending")
         return task_id
     
     def get_task_result(self, task_id: str) -> Optional[Dict[str, Any]]:

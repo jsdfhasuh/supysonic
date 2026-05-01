@@ -64,6 +64,34 @@ class ScannerRepairTraceTestCase(unittest.TestCase):
         self.assertIn("year source: musicbrainz miss", detail_lines)
         self.assertIn("repair result: no year found", detail_lines)
 
+    def test_repair_album_year_does_not_print_musicbrainz_year(self):
+        scanner = SimpleNamespace(stats=lambda: SimpleNamespace(lost_year_albums={"Album": "/music/Album"}))
+        album = SimpleNamespace(
+            id=5,
+            name="Album",
+            year=None,
+            artist=SimpleNamespace(get_artist_name=lambda: "Artist"),
+            save=Mock(),
+        )
+        track_query = Mock()
+        track_query.where.return_value.first.return_value = None
+
+        with patch("supysonic.scanner_func.scanner_enrich.Track.select", return_value=track_query), patch(
+            "supysonic.scanner_func.scanner_enrich.search_musicbrainz_album",
+            return_value={"id": "mbid-1"},
+        ), patch(
+            "supysonic.scanner_func.scanner_enrich.get_musicbrainz_album",
+            return_value={"date": "2021-04-03"},
+        ), patch(
+            "supysonic.scanner_func.scanner_enrich.logTrace",
+            create=True,
+        ), patch("builtins.print") as print_mock:
+            result = repairAlbumYear(scanner, album)
+
+        self.assertTrue(result)
+        self.assertEqual(album.year, "2021")
+        print_mock.assert_not_called()
+
     def test_repair_artist_profiles_logs_successful_profile_repair(self):
         temp_dir = tempfile.mkdtemp()
         real_exists = os.path.exists

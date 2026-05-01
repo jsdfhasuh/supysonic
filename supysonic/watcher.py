@@ -15,6 +15,7 @@ from watchdog.events import PatternMatchingEventHandler
 
 from . import covers
 from .db import Folder, open_connection, close_connection
+from .logging_utils import format_log_event
 from .scanner import Scanner
 from .nfo.nfo import NfoHandler
 
@@ -317,7 +318,7 @@ class SupysonicWatcher:
         else:
             raise TypeError("Expecting string or Folder, got " + str(type(folder)))
 
-        logger.info("Scheduling watcher for %s", path)
+        logger.info(format_log_event("watcher", "folder_scheduled", path=path))
         watch = self.__observer.schedule(self.__handler, path, recursive=True)
         self.__folders[path] = watch
 
@@ -329,7 +330,7 @@ class SupysonicWatcher:
         else:
             raise TypeError("Expecting string or Folder, got " + str(type(folder)))
 
-        logger.info("Unscheduling watcher for %s", path)
+        logger.info(format_log_event("watcher", "folder_unscheduled", path=path))
         self.__observer.unschedule(self.__folders[path])
         del self.__folders[path]
         self.__queue.unschedule_paths(path)
@@ -363,15 +364,23 @@ class SupysonicWatcher:
         self.__observer = Observer()
         self.__handler.queue = self.__queue
 
-        for folder in Folder.select().where(Folder.root):
+        root_folders = list(Folder.select().where(Folder.root))
+        for folder in root_folders:
             self.add_folder(folder)
 
-        logger.info("Starting watcher")
+        logger.info(
+            format_log_event(
+                "watcher",
+                "start",
+                delay=self.__delay,
+                root_folders=len(root_folders),
+            )
+        )
         self.__queue.start()
         self.__observer.start()
 
     def stop(self):
-        logger.info("Stopping watcher")
+        logger.info(format_log_event("watcher", "stop"))
         if self.__observer is not None:
             self.__observer.stop()
             self.__observer.join()

@@ -6,6 +6,7 @@
 # Distributed under terms of the GNU AGPLv3 license.
 
 import click
+import logging
 import time
 
 from click.exceptions import ClickException
@@ -14,9 +15,13 @@ from .config import IniConfig
 from .daemon.client import DaemonClient
 from .daemon.exceptions import DaemonUnavailableError
 from .db import Folder, User, init_database, release_database
+from .logging_manager import build_web_logging_config, configure_web_logging
 from .managers.folder import FolderManager
 from .managers.user import UserManager
 from .scanner import Scanner
+
+
+logger = logging.getLogger(__package__)
 
 
 class TimedProgressDisplay:
@@ -155,6 +160,8 @@ def folder_scan(config, folder, force, mode):
 
 
 def _folder_scan_foreground(config, daemon, folders, force):
+    configure_web_logging(build_web_logging_config(config.WEBAPP), logger_name=logger.name)
+
     try:
         progress = daemon.get_scanning_progress()
         if progress is not None:

@@ -55,7 +55,9 @@ class DefaultConfig:
         "run_watcher": True,
         "wait_delay": 5,
         "jukebox_command": None,
+        "log_dir": None,
         "log_file": None,
+        "log_backup_count": 7,
         "log_level": "WARNING",
         "log_rotate": True,
     }

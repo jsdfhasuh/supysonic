@@ -108,9 +108,9 @@ class TaskManagerLoggingTestCase(unittest.TestCase):
         with open(os.path.join(self._tmp_dir, "task.log"), "r", encoding="utf-8") as f:
             content = f.read()
 
-        self.assertIn("Submitted task task-ok to the queue", content)
-        self.assertIn("Task task-ok started", content)
-        self.assertIn("Task task-ok completed successfully", content)
+        self.assertIn("task event=submitted task_id=task-ok status=pending", content)
+        self.assertIn("task event=started task_id=task-ok", content)
+        self.assertIn("task event=completed task_id=task-ok status=completed", content)
         self.assertIn("duration=", content)
 
     def test_logs_task_failure_with_error_and_duration(self):
@@ -124,7 +124,7 @@ class TaskManagerLoggingTestCase(unittest.TestCase):
         with open(os.path.join(self._tmp_dir, "task.log"), "r", encoding="utf-8") as f:
             content = f.read()
 
-        self.assertIn("Task task-fail started", content)
-        self.assertIn("Task task-fail failed", content)
+        self.assertIn("task event=started task_id=task-fail", content)
+        self.assertIn("task event=failed task_id=task-fail status=failed", content)
         self.assertIn("error=boom", content)
         self.assertIn("duration=", content)

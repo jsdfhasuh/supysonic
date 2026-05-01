@@ -74,19 +74,70 @@ class AccessLoggingTestCase(unittest.TestCase):
         client = app.test_client()
 
         response = client.get("/rest/ping?u=root&t=abc&s=def")
+        request_id = response.headers.get("X-Request-ID")
 
         self.assertEqual(response.status_code, 200)
+        self.assertTrue(request_id)
         with open(os.path.join(self._tmp_dir, "access.log"), "r", encoding="utf-8") as f:
             access_content = f.read()
         with open(os.path.join(self._tmp_dir, "supysonic.log"), "r", encoding="utf-8") as f:
             summary_content = f.read()
 
-        self.assertIn("[ACCESS:REST]", access_content)
-        self.assertIn("/rest/ping?u=root&t=abc&s=def", access_content)
+        self.assertIn("access event=request", access_content)
+        self.assertIn("type=REST", access_content)
+        self.assertIn("path=/rest/ping", access_content)
+        self.assertIn('query="u=root&t=***&s=***"', access_content)
+        self.assertNotIn("t=abc", access_content)
+        self.assertNotIn("s=def", access_content)
         self.assertIn("status=200", access_content)
         self.assertIn("bytes=2", access_content)
         self.assertIn("duration=", access_content)
-        self.assertIn("[ACCESS:REST]", summary_content)
+        self.assertIn(f"request_id={request_id}", access_content)
+        self.assertIn("access event=request", summary_content)
+        self.assertIn(f"request_id={request_id}", summary_content)
+
+    def test_redacts_plain_password_query_parameter(self):
+        app = self._create_app()
+        client = app.test_client()
+
+        response = client.get("/rest/ping?u=alice&p=secret&c=test-client")
+
+        self.assertEqual(response.status_code, 200)
+        with open(os.path.join(self._tmp_dir, "access.log"), "r", encoding="utf-8") as f:
+            access_content = f.read()
+
+        self.assertIn('query="u=alice&p=***&c=test-client"', access_content)
+        self.assertNotIn("p=secret", access_content)
+
+    def test_preserves_incoming_request_id(self):
+        app = self._create_app()
+        client = app.test_client()
+
+        response = client.get("/rest/ping", headers={"X-Request-ID": "client-req-1"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers.get("X-Request-ID"), "client-req-1")
+
+        with open(os.path.join(self._tmp_dir, "access.log"), "r", encoding="utf-8") as f:
+            access_content = f.read()
+
+        self.assertIn("request_id=client-req-1", access_content)
+
+    def test_sanitizes_invalid_incoming_request_id(self):
+        app = self._create_app()
+        client = app.test_client()
+
+        response = client.get("/rest/ping", headers={"X-Request-ID": " bad req/id "})
+        request_id = response.headers.get("X-Request-ID")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(request_id)
+        self.assertEqual(request_id, "bad-req-id")
+
+        with open(os.path.join(self._tmp_dir, "access.log"), "r", encoding="utf-8") as f:
+            access_content = f.read()
+
+        self.assertIn(f"request_id={request_id}", access_content)
 
     def test_logs_web_requests_as_access_web(self):
         app = self._create_app()
@@ -98,8 +149,10 @@ class AccessLoggingTestCase(unittest.TestCase):
         with open(os.path.join(self._tmp_dir, "access.log"), "r", encoding="utf-8") as f:
             access_content = f.read()
 
-        self.assertIn("[ACCESS:WEB]", access_content)
-        self.assertIn("/page?tab=albums", access_content)
+        self.assertIn("access event=request", access_content)
+        self.assertIn("type=WEB", access_content)
+        self.assertIn("path=/page", access_content)
+        self.assertIn('query="tab=albums"', access_content)
         self.assertIn("status=200", access_content)
 
     def test_logs_send_file_requests_without_breaking_direct_passthrough(self):
@@ -116,7 +169,8 @@ class AccessLoggingTestCase(unittest.TestCase):
         with open(os.path.join(self._tmp_dir, "access.log"), "r", encoding="utf-8") as f:
             access_content = f.read()
 
-        self.assertIn("/download", access_content)
+        self.assertIn("access event=request", access_content)
+        self.assertIn("path=/download", access_content)
         self.assertIn("status=200", access_content)
 
 
@@ -147,6 +201,7 @@ class SocketAccessLoggingTestCase(unittest.TestCase):
         with open(os.path.join(self._dir, "access.log"), "r", encoding="utf-8") as f:
             access_content = f.read()
 
-        self.assertIn("[ACCESS:SOCKET]", access_content)
-        self.assertIn("event=connect", access_content)
-        self.assertIn("event=disconnect", access_content)
+        self.assertIn("access event=socket", access_content)
+        self.assertIn("type=SOCKET", access_content)
+        self.assertIn("socket_event=connect", access_content)
+        self.assertIn("socket_event=disconnect", access_content)

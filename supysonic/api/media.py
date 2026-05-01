@@ -28,7 +28,7 @@ from ..db import Track, Album, Artist, Folder, now
 from ..db import Image as db_image
 from ..covers import EXTENSIONS
 
-from . import get_entity, get_entity_id, api_routing
+from . import api_routing, get_entity, get_entity_id, log_api_event
 from .exceptions import (
     GenericError,
     NotFound,
@@ -37,6 +37,10 @@ from .exceptions import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _log_media_event(level, event, **fields):
+    log_api_event(level, event, **fields)
 
 
 def prepare_transcoding_cmdline(
@@ -132,6 +136,15 @@ def stream_media():
                     message = "No way to transcode from {} to {}".format(
                         src_suffix, dst_suffix
                     )
+                    _log_media_event(
+                        logging.WARNING,
+                        "media_stream_failed",
+                        track_id=res.id,
+                        source_format=src_suffix or "-",
+                        target_format=dst_suffix,
+                        target_bitrate=dst_bitrate,
+                        reason="no_transcoder",
+                    )
                     logger.info(message)
                     raise GenericError(message)
 
@@ -149,6 +162,15 @@ def stream_media():
                         encoder, stdin=dec_proc.stdout, stdout=subprocess.PIPE
                     )
             except OSError:
+                _log_media_event(
+                    logging.ERROR,
+                    "media_stream_failed",
+                    track_id=res.id,
+                    source_format=src_suffix or "-",
+                    target_format=dst_suffix,
+                    target_bitrate=dst_bitrate,
+                    reason="transcoder_process_error",
+                )
                 raise ServerError("Error while running the transcoding process")
 
             if estimateContentLength == "true":
@@ -198,6 +220,15 @@ def stream_media():
 
             resp_content = cache.set_generated(cache_key, handle_transcoding)
 
+            _log_media_event(
+                logging.INFO,
+                "transcode_started",
+                track_id=res.id,
+                source_format=src_suffix or "-",
+                target_format=dst_suffix,
+                target_bitrate=dst_bitrate,
+                cache_key=cache_key,
+            )
             logger.info(
                 "Transcoding track {0.id} for user {1.id}. Source: {2} at {0.bitrate}kbps. Dest: {3} at {4}kbps".format(
                     res, request.user, src_suffix, dst_suffix, dst_bitrate
@@ -235,6 +266,7 @@ def download_media():
         fid = None
 
     if uid is None and fid is None:
+        _log_media_event(logging.WARNING, "download_failed", entity_id=id, reason="invalid_id")
         raise GenericError("Invalid ID")
 
     if uid is not None:
@@ -245,11 +277,23 @@ def download_media():
             try:  # Album -> stream zipped tracks
                 rv = Album[uid]
             except Album.DoesNotExist as e:
+                _log_media_event(
+                    logging.WARNING,
+                    "download_failed",
+                    entity_id=id,
+                    reason="track_or_album_not_found",
+                )
                 raise NotFound("Track or Album") from e
     else:
         try:  # Folder -> stream zipped tracks, non recursive
             rv = Folder[fid]
         except Folder.DoesNotExist as e:
+            _log_media_event(
+                logging.WARNING,
+                "download_failed",
+                entity_id=id,
+                reason="folder_not_found",
+            )
             raise NotFound("Folder") from e
 
     # Stream a zip of multiple files to the client
@@ -278,6 +322,7 @@ def download_media():
             z.add_path(cover_path)
 
     if not z:
+        _log_media_event(logging.WARNING, "download_failed", entity_id=id, reason="empty_archive")
         raise GenericError("Nothing to download")
 
     resp = Response(z, mimetype="application/zip")
@@ -426,13 +471,15 @@ def cover_art():
     cache = current_app.cache
 
     eid = request.values["id"]
-    print(f"eid: {eid}")
+    logger.debug("Fetching cover art for entity %s", eid)
     input_size = request.values.get("input_size", "")
     cover_path = __new_get_cover_path(eid, input_size)
 
     if not cover_path:
+        _log_media_event(logging.WARNING, "cover_art_failed", entity_id=eid, reason="not_found")
         raise NotFound("Cover art")
     elif not os.path.isfile(cover_path):
+        _log_media_event(logging.WARNING, "cover_art_failed", entity_id=eid, reason="missing_file")
         raise NotFound("Cover art file does not exist")
 
     size = request.values.get("size")
@@ -546,6 +593,13 @@ def lyrics():
                 cache_key, zlib.compress(json.dumps(lyrics).encode("utf-8"), 9)
             )
         except requests.exceptions.RequestException as e:  # pragma: nocover
+            _log_media_event(
+                logging.WARNING,
+                "lyrics_external_failed",
+                artist=artist,
+                title=title,
+                reason=e.__class__.__name__,
+            )
             logger.warning("Error while requesting the ChartLyrics API: " + str(e))
 
     return request.formatter("lyrics", lyrics)

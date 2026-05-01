@@ -49,6 +49,7 @@ class LoggingManagerTestCase(unittest.TestCase):
                 "access.log",
                 "api.log",
                 "emo.log",
+                "metadata.log",
                 "scanner.log",
                 "supysonic.log",
                 "task.log",
@@ -72,7 +73,7 @@ class LoggingManagerTestCase(unittest.TestCase):
             handler for handler in self.base_logger.handlers if isinstance(handler, TimedRotatingFileHandler)
         ]
 
-        self.assertEqual(len(rotating_handlers), 6)
+        self.assertEqual(len(rotating_handlers), 7)
         self.assertTrue(all(handler.when == "MIDNIGHT" for handler in rotating_handlers))
         self.assertTrue(all(handler.backupCount == 9 for handler in rotating_handlers))
 
@@ -96,6 +97,32 @@ class LoggingManagerTestCase(unittest.TestCase):
 
         self.assertEqual(len(log_lines), 1)
 
+    def test_debug_level_creates_separate_web_debug_log(self):
+        from supysonic.logging_manager import configure_web_logging
+
+        configure_web_logging(
+            {
+                "log_dir": self._tmp_dir,
+                "log_rotate": False,
+                "log_level": "DEBUG",
+                "log_backup_count": 7,
+            },
+            logger_name=self.logger_name,
+        )
+
+        self.base_logger.debug("debug only")
+        self.base_logger.info("info only")
+
+        with open(os.path.join(self._tmp_dir, "web.debug.log"), "r", encoding="utf-8") as f:
+            debug_content = f.read()
+        with open(os.path.join(self._tmp_dir, "supysonic.log"), "r", encoding="utf-8") as f:
+            summary_content = f.read()
+
+        self.assertIn("debug only", debug_content)
+        self.assertIn("info only", debug_content)
+        self.assertNotIn("debug only", summary_content)
+        self.assertIn("info only", summary_content)
+
     def test_routes_named_loggers_to_matching_category_files(self):
         from supysonic.logging_manager import configure_web_logging
 
@@ -113,6 +140,7 @@ class LoggingManagerTestCase(unittest.TestCase):
         logging.getLogger(f"{self.logger_name}.emo.client").info("emo event")
         logging.getLogger(f"{self.logger_name}.scanner_func.scanner_enrich").info("scanner event")
         logging.getLogger(f"{self.logger_name}.api.browse").info("api event")
+        logging.getLogger(f"{self.logger_name}.frontend.metadata").info("metadata event")
 
         with open(os.path.join(self._tmp_dir, "task.log"), "r", encoding="utf-8") as f:
             task_content = f.read()
@@ -122,6 +150,8 @@ class LoggingManagerTestCase(unittest.TestCase):
             scanner_content = f.read()
         with open(os.path.join(self._tmp_dir, "api.log"), "r", encoding="utf-8") as f:
             api_content = f.read()
+        with open(os.path.join(self._tmp_dir, "metadata.log"), "r", encoding="utf-8") as f:
+            metadata_content = f.read()
         with open(os.path.join(self._tmp_dir, "supysonic.log"), "r", encoding="utf-8") as f:
             summary_content = f.read()
 
@@ -132,10 +162,13 @@ class LoggingManagerTestCase(unittest.TestCase):
         self.assertIn("scanner event", scanner_content)
         self.assertNotIn("api event", scanner_content)
         self.assertIn("api event", api_content)
+        self.assertIn("metadata event", metadata_content)
+        self.assertNotIn("metadata event", api_content)
         self.assertIn("task event", summary_content)
         self.assertIn("emo event", summary_content)
         self.assertIn("scanner event", summary_content)
         self.assertIn("api event", summary_content)
+        self.assertIn("metadata event", summary_content)
 
     def test_routes_access_logger_to_access_and_summary_logs(self):
         from supysonic.logging_manager import configure_web_logging

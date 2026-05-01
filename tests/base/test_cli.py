@@ -9,8 +9,11 @@ import os
 import tempfile
 import shlex
 import unittest
+import logging
 
 from click.testing import CliRunner
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from supysonic.db import Folder, User, init_database, release_database
 from supysonic.cli import cli
@@ -82,6 +85,76 @@ class CLITestCase(unittest.TestCase):
             with tempfile.NamedTemporaryFile(dir=d):
                 self.__invoke("folder scan")
                 self.__invoke("folder scan tmpfolder nonexistent")
+
+    def test_foreground_scan_initializes_managed_logging(self):
+        with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as log_dir:
+            self.__conf.WEBAPP["log_dir"] = log_dir
+            self.__conf.WEBAPP["log_level"] = "INFO"
+            self.__add_folder("tmpfolder", d)
+
+            fake_scanner = type(
+                "FakeScanner",
+                (),
+                {
+                    "queue_folder": lambda self, folder: None,
+                    "run": lambda self: logging.getLogger("supysonic.scanner").info(
+                        "scanner event=run_start force=false follow_symlinks=false"
+                    ),
+                    "stats": lambda self: SimpleNamespace(
+                        added=SimpleNamespace(artists=0, albums=0, tracks=0),
+                        deleted=SimpleNamespace(artists=0, albums=0, tracks=0),
+                        errors=[],
+                    ),
+                },
+            )()
+
+            with patch("supysonic.cli.Scanner", return_value=fake_scanner), patch(
+                "supysonic.cli.DaemonClient"
+            ) as daemon_client:
+                daemon_client.return_value.get_scanning_progress.return_value = None
+                self.__invoke("folder scan --foreground tmpfolder")
+
+            scanner_log = os.path.join(log_dir, "scanner.log")
+            summary_log = os.path.join(log_dir, "supysonic.log")
+
+            self.assertTrue(os.path.isfile(scanner_log))
+            self.assertTrue(os.path.isfile(summary_log))
+
+            with open(scanner_log, "r", encoding="utf-8") as f:
+                scanner_content = f.read()
+
+            self.assertIn("scanner event=run_start", scanner_content)
+
+    def test_foreground_scan_uses_legacy_web_log_file_directory(self):
+        with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as log_dir:
+            self.__conf.WEBAPP["log_dir"] = None
+            self.__conf.WEBAPP["log_file"] = os.path.join(log_dir, "legacy.log")
+            self.__conf.WEBAPP["log_level"] = "INFO"
+            self.__add_folder("tmpfolder", d)
+
+            fake_scanner = type(
+                "FakeScanner",
+                (),
+                {
+                    "queue_folder": lambda self, folder: None,
+                    "run": lambda self: logging.getLogger("supysonic.scanner").info(
+                        "scanner event=run_start force=false follow_symlinks=false"
+                    ),
+                    "stats": lambda self: SimpleNamespace(
+                        added=SimpleNamespace(artists=0, albums=0, tracks=0),
+                        deleted=SimpleNamespace(artists=0, albums=0, tracks=0),
+                        errors=[],
+                    ),
+                },
+            )()
+
+            with patch("supysonic.cli.Scanner", return_value=fake_scanner), patch(
+                "supysonic.cli.DaemonClient"
+            ) as daemon_client:
+                daemon_client.return_value.get_scanning_progress.return_value = None
+                self.__invoke("folder scan --foreground tmpfolder")
+
+            self.assertTrue(os.path.isfile(os.path.join(log_dir, "scanner.log")))
 
     def test_user_add(self):
         self.__invoke("user add -p Alic3 alice")

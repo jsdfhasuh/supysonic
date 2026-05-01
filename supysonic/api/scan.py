@@ -6,13 +6,15 @@
 #
 # Distributed under terms of the GNU AGPLv3 license.
 
+import logging
+
 from flask import request
 from flask import current_app
 
 from ..daemon.client import DaemonClient
 from ..daemon.exceptions import DaemonUnavailableError
 
-from . import api_routing
+from . import api_routing, log_api_event
 from .user import admin_only
 from .exceptions import ServerError
 from ..db import Folder, Artist, Album, Track
@@ -26,7 +28,20 @@ def startScan():
         daemonclient.scan()
         scanned = daemonclient.get_scanning_progress()
     except DaemonUnavailableError as e:
+        log_api_event(
+            logging.WARNING,
+            "scan_request_failed",
+            result="failed",
+            reason="daemon_unavailable",
+        )
         raise ServerError(str(e))
+    log_api_event(
+        logging.INFO,
+        "scan_requested",
+        result="queued",
+        scanning=scanned is not None,
+        count=scanned or 0,
+    )
     return request.formatter(
         "scanStatus",
         {
@@ -53,6 +68,12 @@ def getScanStatus():
             current_app.config["DAEMON"]["socket"]
         ).get_scanning_progress()
     except DaemonUnavailableError as e:
+        log_api_event(
+            logging.WARNING,
+            "scan_status_failed",
+            result="failed",
+            reason="daemon_unavailable",
+        )
         raise ServerError(str(e))
     return request.formatter(
         "scanStatus",

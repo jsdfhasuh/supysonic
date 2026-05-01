@@ -16,22 +16,10 @@ from .    import TaskManger
 from .config import IniConfig
 from .cache import Cache
 from .db import init_database, open_connection, close_connection, Folder
-from .logging_manager import configure_web_logging, register_access_logging
+from .logging_manager import build_web_logging_config, configure_web_logging, register_access_logging
 from .utils import get_secret_key
 from .recommend import create_recommend_playlist
 logger = logging.getLogger(__package__)
-
-
-def _build_web_logging_config(webapp_config):
-    log_dir = webapp_config.get("log_dir")
-    if not log_dir and webapp_config.get("log_file"):
-        log_dir = path.dirname(webapp_config["log_file"]) or "."
-    return {
-        "log_dir": log_dir,
-        "log_rotate": webapp_config.get("log_rotate", True),
-        "log_level": webapp_config.get("log_level", "WARNING"),
-        "log_backup_count": webapp_config.get("log_backup_count", 7),
-    }
 
 
 def create_application(config=None):
@@ -44,7 +32,7 @@ def create_application(config=None):
         config = IniConfig.from_common_locations()
     app.config.from_object(config)
 
-    configure_web_logging(_build_web_logging_config(app.config["WEBAPP"]), logger_name=logger.name)
+    configure_web_logging(build_web_logging_config(app.config["WEBAPP"]), logger_name=logger.name)
     register_access_logging(app, logger_name=logger.name)
 
     # Initialize database

@@ -7,12 +7,16 @@
 
 from collections import OrderedDict
 from datetime import datetime
+import logging
 from flask import request
 
 from ..db import Folder, Track, Artist, Album
 
 from . import api_routing, get_root_folder
 from .exceptions import MissingParameter
+
+
+logger = logging.getLogger(__name__)
 
 
 @api_routing("/search")
@@ -211,9 +215,13 @@ def search_id3():
             .where(Track.title.contains(query))
             .order_by(Track.created.desc())
         )
-    print(f"len artists: {len(artists)}")
-    print(f"len albums: {len(albums)}")
-    print(f"len songs: {len(songs)}")
+    logger.debug(
+        "search3 query=%s raw_counts artists=%s albums=%s songs=%s",
+        query,
+        len(artists),
+        len(albums),
+        len(songs),
+    )
     if root is not None:
         artists = artists.join(Track).where(Track.root_folder == root)
         albums = albums.join(Track).where(Track.root_folder == root)

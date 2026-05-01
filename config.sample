@@ -22,8 +22,18 @@ cache_size = 512
 ; Transcode cache max size in MB. Default: 1024 (1GB)
 transcode_cache_size = 1024
 
-; Optional rotating log file. Default: none
-log_file = /var/supysonic/supysonic.log
+; Optional log directory for structured web logs. When set, Supysonic writes
+; supysonic.log, access.log, task.log, emo.log, scanner.log, api.log and
+; metadata.log here. At DEBUG level it also writes web.debug.log.
+; Default: none
+log_dir = /var/supysonic/logs/web
+
+; Optional legacy log file setting. If log_dir is empty, the parent directory of
+; log_file is used for the structured web log files above. Default: none
+;log_file = /var/supysonic/supysonic.log
+
+; Number of rotated log files to keep. Default: 7
+log_backup_count = 7
 
 ; Log level. Possible values: DEBUG, INFO, WARNING, ERROR, CRITICAL.
 ; Default: WARNING
@@ -69,8 +79,18 @@ wait_delay = 5
 ; Command used by the jukebox
 jukebox_command = mplayer -ss %offset %path
 
-; Optional rotating log file for the scanner daemon. Logs to stderr if empty
-log_file = /var/supysonic/supysonic-daemon.log
+; Optional log directory for daemon logs. When set, Supysonic writes
+; supysonic.log, daemon.log, watcher.log, scanner.log and, at DEBUG level,
+; daemon.debug.log here. Default: none
+log_dir = /var/supysonic/logs/daemon
+
+; Optional legacy log file for the scanner daemon. Used only when log_dir is
+; empty. Logs to stderr if empty. Default: none
+;log_file = /var/supysonic/supysonic-daemon.log
+
+; Number of rotated log files to keep. Default: 7
+log_backup_count = 7
+
 log_level = INFO
 log_rotate = yes
 

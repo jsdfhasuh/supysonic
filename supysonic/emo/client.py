@@ -3,9 +3,10 @@ import os
 import time
 from functools import wraps
 
-from flask import jsonify, redirect, render_template, request, send_file, url_for
+from flask import g, jsonify, redirect, render_template, request, send_file, url_for
 
-from . import api_routing
+from ..logging_utils import format_log_event
+from . import api_routing, log_emo_event
 from .exceptions import GenericError
 Version = "1.0.0"
 
@@ -41,35 +42,25 @@ def get_log_path(filename):
 
     return safePath
 
-
-def getRequestSummary():
-    return {
-        'method': request.method,
-        'path': request.path,
-        'remote_addr': request.remote_addr,
-        'content_type': request.content_type,
-        'content_length': request.content_length,
-        'args': request.args.to_dict(flat=False),
-        'form_keys': sorted(request.form.keys()),
-        'file_keys': sorted(request.files.keys()),
-        'user_agent': request.user_agent.string,
-    }
-
 @api_routing('/upload_log')
 def upload_log():
     # 检查 HTTP 请求中是否有 "file"
     if 'file' not in request.files:
-        logger.warning(
-            "Upload log failed: no file part; request=%s",
-            getRequestSummary(),
+        log_emo_event(
+            logging.WARNING,
+            "upload_log_failed",
+            result="bad_request",
+            reason="no_file_part",
         )
         return jsonify({'status': 'error', 'message': 'No file part'}), 400
     
     file = request.files['file']
     if file.filename == '':
-        logger.warning(
-            "Upload log failed: empty filename; request=%s",
-            getRequestSummary(),
+        log_emo_event(
+            logging.WARNING,
+            "upload_log_failed",
+            result="bad_request",
+            reason="empty_filename",
         )
         return jsonify({'status': 'error', 'message': 'No selected file'}), 400
     
@@ -81,10 +72,15 @@ def upload_log():
         return jsonify({'status': 'success', 'message': 'File uploaded successfully', 'path': file_path})
     except Exception as e:
         logger.exception(
-            "Upload log failed while saving file '%s' to '%s'; request=%s",
-            file.filename,
-            file_path,
-            getRequestSummary(),
+            format_log_event(
+                "emo",
+                "upload_log_failed",
+                request_id=getattr(g, "supysonic_request_id", "-"),
+                path=request.path,
+                result="server_error",
+                reason="save_failed",
+                filename=file.filename,
+            )
         )
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
@@ -103,6 +99,12 @@ def view_log():
     try:
         safePath = get_log_path(filename)
     except GenericError:
+        log_emo_event(
+            logging.WARNING,
+            "view_log_failed",
+            result="not_found",
+            filename=filename or "-",
+        )
         return "File not found", 404
     
     try:
@@ -121,6 +123,12 @@ def download_log():
     try:
         safePath = get_log_path(filename)
     except GenericError:
+        log_emo_event(
+            logging.WARNING,
+            "download_log_failed",
+            result="not_found",
+            filename=filename or "-",
+        )
         return "File not found", 404
 
     return send_file(safePath, as_attachment=True, download_name=os.path.basename(safePath))

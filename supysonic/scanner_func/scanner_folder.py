@@ -8,6 +8,7 @@ import time
 from typing import TYPE_CHECKING
 
 from ..db import Folder, Track
+from ..logging_utils import format_log_event
 
 if TYPE_CHECKING:
     from ..scanner import Scanner
@@ -74,7 +75,7 @@ def _refreshFolderCovers(scanner: Scanner, folder: Folder) -> None:
 
 
 def scanFolder(scanner: Scanner, folder: Folder, logger: logging.Logger) -> None:
-    logger.info("Scanning folder %s", folder.name)
+    logger.info(format_log_event("scanner", "folder_start", folder=folder.name, path=folder.path))
     scanner.handle_folder_start(folder)
 
     _scanFolderEntries(scanner, folder)
@@ -86,4 +87,12 @@ def scanFolder(scanner: Scanner, folder: Folder, logger: logging.Logger) -> None
         folder.last_scan = int(time.time())
         folder.save()
 
+    logger.info(
+        format_log_event(
+            "scanner",
+            "folder_end",
+            folder=folder.name,
+            stopped=scanner.stop_requested,
+        )
+    )
     scanner.handle_folder_end(folder)

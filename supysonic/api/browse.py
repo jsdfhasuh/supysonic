@@ -14,7 +14,7 @@ from peewee import fn
 from ..lastfm import LastFm
 from ..db import Folder, Artist, Album, Track
 from ..TaskManger import get_task_manager, TaskManager
-from . import get_entity, get_root_folder, api_routing, get_entity_by_name,get_entity_by_id
+from . import api_routing, get_entity, get_entity_by_id, get_entity_by_name, get_root_folder, log_api_event
 
 logger = logging.getLogger(__name__)
 
@@ -350,7 +350,12 @@ def list_tracks():
             track = get_entity_by_id(Track, track_id, param="id")
             tracks.append(track)
         except Exception as e:
-            logger.error("Error retrieving track with ID %s: %s", track_id, e)
+            log_api_event(
+                logging.WARNING,
+                "get_songs_item_failed",
+                track_id=track_id,
+                reason=e.__class__.__name__,
+            )
 
     result_info = [t.as_subsonic_child(request.user, request.client) for t in tracks]
     return request.formatter("songs", {"song": result_info})

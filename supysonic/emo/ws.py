@@ -6,6 +6,7 @@ from flask import current_app, request, session
 from flask_socketio import Namespace, SocketIO, emit
 
 from ..db import close_connection, open_connection
+from ..logging_utils import format_log_event
 from ..managers.user import UserManager
 from .ws_store import (
     getLocalQueueState,
@@ -40,6 +41,70 @@ CONTROL_ACTIONS = {
     "queue.playItem",
 }
 SESSION_ACTIONS = {"session.subscribe", "session.unsubscribe"}
+ACTION_EVENT_NAMES = {
+    "auth.login": "auth_login",
+    "device.register": "device_register",
+    "session.subscribe": "session_subscribe",
+    "session.unsubscribe": "session_unsubscribe",
+    "playback.update": "playback_update",
+    "queue.local.get": "queue_local_get",
+    "queue.local.set": "queue_local_set",
+    "queue.session.sync": "queue_session_sync",
+    "queue.ready.complete": "queue_ready_complete",
+}
+
+
+def _log_emo_event(level, event, **fields):
+    logger.log(level, format_log_event("emo", event, **fields))
+
+
+def _build_queue_summary(session_id, source_client_id, queue_song_ids, current_index, position_ms, **extra):
+    fields = {
+        "session_id": session_id,
+        "source_client_id": source_client_id,
+        "queue_size": len(queue_song_ids),
+        "current_index": current_index,
+        "position_ms": position_ms,
+    }
+    fields.update(extra)
+    return fields
+
+
+def _build_playback_summary(session_id, source_client_id, payload, **extra):
+    fields = {
+        "session_id": session_id,
+        "source_client_id": source_client_id,
+        "playback_state": payload.get("state") or "-",
+        "track_id": payload.get("trackId") or "-",
+        "position_ms": payload.get("positionMs", 0),
+    }
+    fields.update(extra)
+    return fields
+
+
+def _get_action_event_name(action):
+    if action in CONTROL_ACTIONS:
+        return "control_forward"
+    return ACTION_EVENT_NAMES.get(action)
+
+
+def _build_action_log_context(action, request_id, current_user_name, current_client, payload, message):
+    context = {
+        "action": action,
+        "client_request_id": request_id,
+    }
+    if current_user_name:
+        context["user"] = current_user_name
+    if current_client is not None:
+        context["source_client_id"] = current_client.get("clientId")
+        context["session_id"] = payload.get("sessionId") or current_client.get("sessionId")
+    elif payload.get("sessionId"):
+        context["session_id"] = payload.get("sessionId")
+
+    target_client_id = message.get("targetClientId")
+    if target_client_id:
+        context["target_client_id"] = target_client_id
+    return context
 
 
 def init_socketio(app):
@@ -54,11 +119,15 @@ def _get_access_logger():
 
 def _log_socket_access(event):
     _get_access_logger().info(
-        "[ACCESS:SOCKET] %s SOCKET %s event=%s sid=%s",
-        request.remote_addr or "-",
-        request.path or "/emo/ws",
-        event,
-        request.sid,
+        format_log_event(
+            "access",
+            "socket",
+            type="SOCKET",
+            remote=request.remote_addr or "-",
+            path=request.path or "/emo/ws",
+            socket_event=event,
+            sid=request.sid,
+        )
     )
 
 
@@ -375,12 +444,12 @@ class EmoNamespace(Namespace):
             return False
         state.register_session(request.sid)
         _log_socket_access("connect")
-        logger.info("emo socket connected: %s", request.sid)
+        _log_emo_event(logging.INFO, "socket_connect", sid=request.sid)
 
     def on_disconnect(self):
         session_info, client_info = state.unregister_session(request.sid)
         _log_socket_access("disconnect")
-        logger.info("emo socket disconnected: %s", request.sid)
+        _log_emo_event(logging.INFO, "socket_disconnect", sid=request.sid)
         if client_info is not None:
             _broadcast_clients(client_info["userName"])
         elif session_info is not None and session_info.get("userName"):
@@ -388,12 +457,20 @@ class EmoNamespace(Namespace):
 
     def on_message(self, message):
         if not isinstance(message, dict):
+            _log_emo_event(logging.WARNING, "bad_message", result="bad_request", reason="message_not_object")
             _send_error("bad_request", "Message must be a JSON object")
             return
 
         action = message.get("action")
         request_id = message.get("requestId")
         if not isinstance(action, str) or not action:
+            _log_emo_event(
+                logging.WARNING,
+                "bad_message",
+                result="bad_request",
+                reason="missing_action",
+                client_request_id=request_id,
+            )
             _send_error("bad_request", "Missing message action", request_id)
             return
 
@@ -402,6 +479,14 @@ class EmoNamespace(Namespace):
             payload = {}
             message["payload"] = payload
         elif not isinstance(payload, dict):
+            _log_emo_event(
+                logging.WARNING,
+                "bad_message",
+                result="bad_request",
+                reason="payload_not_object",
+                action=action,
+                client_request_id=request_id,
+            )
             _send_error("bad_request", "Payload must be a JSON object", request_id)
             return
 
@@ -414,6 +499,15 @@ class EmoNamespace(Namespace):
             return
 
         if (session_info is None or not session_info.get("authenticated")) and action not in ALLOWED_PRE_AUTH:
+            _log_emo_event(
+                logging.WARNING,
+                "unauthorized_action",
+                result="unauthorized",
+                action=action,
+                client_request_id=request_id,
+                reason="authenticate_first",
+                sid=request.sid,
+            )
             _send_error("unauthorized", "Authenticate first", request_id)
             return
 
@@ -421,28 +515,42 @@ class EmoNamespace(Namespace):
             if action == "auth.login":
                 user = _authenticate(payload)
                 if user is None:
-                    logger.warning(
-                        "emo auth login failed sid=%s user=%s",
-                        request.sid,
-                        payload.get("u"),
+                    _log_emo_event(
+                        logging.WARNING,
+                        "auth_login",
+                        result="failure",
+                        user=payload.get("u"),
+                        client_request_id=request_id,
+                        reason="invalid_credentials",
+                        sid=request.sid,
                     )
                     _send_error("unauthorized", "Invalid credentials", request_id)
                     return
                 state.authenticate_session(request.sid, user.name)
                 current_user_name = user.name
-                logger.info("emo auth login succeeded user=%s sid=%s", user.name, request.sid)
+                _log_emo_event(
+                    logging.INFO,
+                    "auth_login",
+                    result="success",
+                    user=user.name,
+                    client_request_id=request_id,
+                    sid=request.sid,
+                )
                 _send_ack(request_id, {"authenticated": True, "userName": user.name})
             elif action == "device.register":
                 if not current_user_name:
                     raise PermissionError("Authenticate first")
                 current_client = _register_device(request.sid, current_user_name, payload)
-                logger.info(
-                    "emo device registered user=%s client_id=%s session_id=%s roles=%s sid=%s",
-                    current_user_name,
-                    current_client.get("clientId"),
-                    current_client.get("sessionId"),
-                    current_client.get("roles"),
-                    request.sid,
+                _log_emo_event(
+                    logging.INFO,
+                    "device_register",
+                    result="success",
+                    user=current_user_name,
+                    client_id=current_client.get("clientId"),
+                    session_id=current_client.get("sessionId"),
+                    roles=current_client.get("roles") or [],
+                    client_request_id=request_id,
+                    sid=request.sid,
                 )
                 _send_ack(request_id, {"client": current_client})
                 _broadcast_clients(current_user_name)
@@ -469,10 +577,28 @@ class EmoNamespace(Namespace):
                     ):
                         raise PermissionError("Cannot subscribe to a session outside your scope")
                     subscriptions = state.subscribe_session(request.sid, session_id)
+                    _log_emo_event(
+                        logging.INFO,
+                        "session_subscribe",
+                        result="success",
+                        user=current_user_name,
+                        session_id=session_id,
+                        client_id=current_client.get("clientId"),
+                        client_request_id=request_id,
+                    )
                     _send_ack(request_id, {"subscriptions": subscriptions})
                     _push_session_snapshot(request.sid, session_id)
                 else:
                     subscriptions = state.unsubscribe_session(request.sid, session_id)
+                    _log_emo_event(
+                        logging.INFO,
+                        "session_unsubscribe",
+                        result="success",
+                        user=current_user_name,
+                        session_id=session_id,
+                        client_id=current_client.get("clientId"),
+                        client_request_id=request_id,
+                    )
                     _send_ack(request_id, {"subscriptions": subscriptions})
             elif action in CONTROL_ACTIONS:
                 if current_client is None:
@@ -482,6 +608,17 @@ class EmoNamespace(Namespace):
                 elif action == "player.requestState":
                     _validate_player_request_state(payload)
                 _route_command(current_client, message)
+                _log_emo_event(
+                    logging.INFO,
+                    "control_forward",
+                    result="success",
+                    action=action,
+                    user=current_user_name,
+                    session_id=payload.get("sessionId") or current_client.get("sessionId"),
+                    source_client_id=current_client.get("clientId"),
+                    target_client_id=message.get("targetClientId"),
+                    client_request_id=request_id,
+                )
                 _send_ack(request_id, {"forwarded": True})
             elif action == "playback.update":
                 if current_client is None:
@@ -499,6 +636,18 @@ class EmoNamespace(Namespace):
                     current_user_name,
                     current_client.get("clientId"),
                     playback_payload,
+                )
+                _log_emo_event(
+                    logging.INFO,
+                    "playback_update",
+                    result="success",
+                    user=current_user_name,
+                    client_request_id=request_id,
+                    **_build_playback_summary(
+                        session_id,
+                        current_client.get("clientId"),
+                        playback_payload,
+                    ),
                 )
                 _send_ack(request_id, {"updated": True})
                 _broadcast_playback_state(current_user_name, session_id)
@@ -518,6 +667,31 @@ class EmoNamespace(Namespace):
                             local_queue.get("currentIndex", 0),
                             local_queue.get("positionMs", 0),
                         )
+                if local_queue is None:
+                    _log_emo_event(
+                        logging.INFO,
+                        "queue_local_get",
+                        result="miss",
+                        user=current_user_name,
+                        client_request_id=request_id,
+                        session_id=session_id,
+                        source_client_id=client_id,
+                    )
+                else:
+                    _log_emo_event(
+                        logging.INFO,
+                        "queue_local_get",
+                        result="hit",
+                        user=current_user_name,
+                        client_request_id=request_id,
+                        **_build_queue_summary(
+                            session_id,
+                            client_id,
+                            local_queue.get("queueSongIds") or [],
+                            local_queue.get("currentIndex", 0),
+                            local_queue.get("positionMs", 0),
+                        ),
+                    )
                 _send_ack(request_id, {"found": local_queue is not None})
                 if local_queue is not None:
                     emit(
@@ -560,6 +734,21 @@ class EmoNamespace(Namespace):
                     queue_song_ids,
                     current_index,
                     position_ms,
+                )
+                _log_emo_event(
+                    logging.INFO,
+                    "queue_local_set",
+                    result="direct" if targetClientId else "broadcast",
+                    user=current_user_name,
+                    client_request_id=request_id,
+                    target_client_id=targetClientId or "-",
+                    **_build_queue_summary(
+                        session_id,
+                        current_client_id,
+                        queue_song_ids,
+                        current_index,
+                        position_ms,
+                    ),
                 )
                 _send_ack(request_id, {"updated": True})
                 if targetClientId:
@@ -613,10 +802,36 @@ class EmoNamespace(Namespace):
                     current_index,
                     position_ms,
                 )
+                _log_emo_event(
+                    logging.INFO,
+                    "queue_session_sync",
+                    result="success",
+                    user=current_user_name,
+                    client_request_id=request_id,
+                    **_build_queue_summary(
+                        session_id,
+                        current_client_id,
+                        queue_song_ids,
+                        current_index,
+                        position_ms,
+                    ),
+                )
                 _send_ack(request_id, {"updated": True})
                 _broadcast_queue(current_user_name, session_id)
             elif action == "queue.ready.complete":
                 ready_payload = _build_ready_complete_payload(current_client, payload)
+                _log_emo_event(
+                    logging.INFO,
+                    "queue_ready_complete",
+                    result="broadcast",
+                    user=current_user_name,
+                    client_request_id=request_id,
+                    session_id=ready_payload["sessionId"],
+                    source_client_id=ready_payload["sourceClientId"],
+                    queue_type=ready_payload["queueType"],
+                    queue_size=len(ready_payload.get("queueSongIds") or []),
+                    client_id=ready_payload.get("clientId") or "-",
+                )
                 _send_ack(request_id, {"synced": True})
                 _broadcast_queue_ready_complete(
                     current_user_name,
@@ -625,12 +840,65 @@ class EmoNamespace(Namespace):
                     exclude_sid=request.sid,
                 )
             else:
+                _log_emo_event(
+                    logging.WARNING,
+                    "unsupported_action",
+                    result="not_supported",
+                    user=current_user_name,
+                    action=action,
+                    client_request_id=request_id,
+                    source_client_id=None if current_client is None else current_client.get("clientId"),
+                )
                 _send_error("not_supported", f"Unsupported action: {action}", request_id)
         except PermissionError as exc:
+            _log_emo_event(
+                logging.WARNING,
+                "unauthorized_action",
+                result="forbidden",
+                reason=str(exc),
+                **_build_action_log_context(
+                    action,
+                    request_id,
+                    current_user_name,
+                    current_client,
+                    payload,
+                    message,
+                ),
+            )
             _send_error("forbidden", str(exc), request_id)
         except LookupError as exc:
+            event_name = _get_action_event_name(action) or "bad_message"
+            _log_emo_event(
+                logging.WARNING,
+                event_name,
+                result="not_found",
+                reason=str(exc),
+                **_build_action_log_context(
+                    action,
+                    request_id,
+                    current_user_name,
+                    current_client,
+                    payload,
+                    message,
+                ),
+            )
             _send_error("not_found", str(exc), request_id)
         except ValueError as exc:
+            event_name = _get_action_event_name(action) or "bad_message"
+            _log_emo_event(
+                logging.WARNING,
+                event_name,
+                result="bad_request",
+                reason=str(exc),
+                **_build_action_log_context(
+                    action,
+                    request_id,
+                    current_user_name,
+                    current_client,
+                    payload,
+                    message,
+                ),
+            )
             _send_error("bad_request", str(exc), request_id)
 
 

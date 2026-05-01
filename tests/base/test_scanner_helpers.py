@@ -210,7 +210,7 @@ class ScannerHelpersTestCase(unittest.TestCase):
                 calls.append(("handle_done", None))
 
         fake_scanner = FakeScanner()
-        fake_logger = SimpleNamespace(info=lambda *args, **kwargs: None)
+        fake_logger = Mock()
 
         with patch.object(scanner_runtime, "open_connection", return_value=False), patch.object(
             scanner_runtime, "close_connection"
@@ -223,12 +223,20 @@ class ScannerHelpersTestCase(unittest.TestCase):
 
         self.assertEqual(calls, [("scan_folder", "folder-row")])
         prune_library.assert_not_called()
+        fake_logger.info.assert_any_call(
+            "scanner event=run_start force=- follow_symlinks=-",
+        )
+        fake_logger.info.assert_any_call(
+            "scanner event=run_stopped scanned=- existing_tracks=- result=stopped",
+        )
 
     def test_run_scanner_logs_summary_after_successful_run(self):
         calls = []
 
         class FakeScanner:
             stop_requested = False
+            force_scan = False
+            follow_symlinks = False
 
             def __init__(self):
                 self._stats = SimpleNamespace(
@@ -270,24 +278,57 @@ class ScannerHelpersTestCase(unittest.TestCase):
             scanner_runtime, "createAlbumReviewTasks"
         ) as create_review_tasks:
             folder_model.get.return_value = "folder-row"
+            create_review_tasks.return_value = 3
 
             scanner_runtime.runScanner(fake_scanner, fake_logger)
 
         prune_library.assert_called_once_with(fake_scanner)
         create_review_tasks.assert_called_once_with(fake_scanner)
-        fake_logger.info.assert_any_call("begin to find all covers")
         fake_logger.info.assert_any_call(
-            "scan summary scanned=%s existing_tracks=%s added=%s/%s/%s deleted=%s/%s/%s errors=%s",
-            7,
-            8,
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            2,
+            "scanner event=run_start force=false follow_symlinks=false",
         )
+        fake_logger.info.assert_any_call(
+            "scanner event=repair_start",
+        )
+        fake_logger.info.assert_any_call(
+            "scanner event=review_tasks_created count=3",
+        )
+        fake_logger.info.assert_any_call(
+            "scanner event=run_end scanned=7 existing_tracks=8 added_artists=1 added_albums=2 added_tracks=3 deleted_artists=4 deleted_albums=5 deleted_tracks=6 errors=2 result=completed",
+        )
+
+    def test_scan_folder_logs_start_and_end(self):
+        root_dir = tempfile.mkdtemp()
+        try:
+            root_folder = db.Folder.create(root=True, name="root", path=root_dir)
+            scanner = SimpleNamespace(
+                stop_requested=False,
+                handle_folder_start=Mock(),
+                handle_folder_end=Mock(),
+            )
+            logger = Mock()
+
+            with patch.object(scanner_folder, "_scanFolderEntries"), patch.object(
+                scanner_folder, "_removeDeletedFolders"
+            ), patch.object(scanner_folder, "_removeDeletedTracks"), patch.object(
+                scanner_folder, "_refreshFolderCovers"
+            ), patch.object(
+                scanner_folder.time, "time", return_value=123456789
+            ):
+                scanner_folder.scanFolder(scanner, root_folder, logger)
+
+            logger.info.assert_any_call(
+                f"scanner event=folder_start folder={root_folder.name} path={root_folder.path}",
+            )
+            logger.info.assert_any_call(
+                f"scanner event=folder_end folder={root_folder.name} stopped=false",
+            )
+            scanner.handle_folder_start.assert_called_once_with(root_folder)
+            scanner.handle_folder_end.assert_called_once_with(root_folder)
+            root_folder = db.Folder.get_by_id(root_folder.id)
+            self.assertEqual(root_folder.last_scan, 123456789)
+        finally:
+            shutil.rmtree(root_dir)
 
     def test_scan_folder_entries_continues_after_scandir_error(self):
         root_dir = tempfile.mkdtemp()

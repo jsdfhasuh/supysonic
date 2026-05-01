@@ -14,6 +14,7 @@ from threading import Thread, Event
 from .client import DaemonCommand
 from ..db import Folder, open_connection, close_connection
 from ..jukebox import Jukebox
+from ..logging_utils import format_log_event
 from ..scanner import Scanner
 from ..utils import get_secret_key
 from ..watcher import SupysonicWatcher
@@ -44,17 +45,24 @@ class Daemon:
         elif isinstance(cmd, DaemonCommand):
             cmd.apply(connection, self)
         else:
-            logger.warn("Received unknown command %s", cmd)
+            logger.warning(
+                format_log_event(
+                    "daemon",
+                    "unknown_command",
+                    command_type=type(cmd).__name__,
+                )
+            )
 
     def run(self):
         self.__listener = Listener(
             address=self.__config.DAEMON["socket"], authkey=get_secret_key("daemon_key")
         )
-        logger.info("Listening to %s", self.__listener.address)
+        logger.info(format_log_event("daemon", "listening", socket=self.__listener.address))
 
         if self.__config.DAEMON["run_watcher"]:
             self.__watcher = SupysonicWatcher(self.__config)
             self.__watcher.start()
+            logger.info(format_log_event("daemon", "watcher_started"))
 
         if self.__config.DAEMON["jukebox_command"]:
             self.__jukebox = Jukebox(self.__config.DAEMON["jukebox_command"])
@@ -75,6 +83,14 @@ class Daemon:
         self.__listener.close()
 
     def start_scan(self, folders=[], force=False):
+        logger.info(
+            format_log_event(
+                "daemon",
+                "scan_requested",
+                folders=len(folders) if folders else "all",
+                force=force,
+            )
+        )
         if not folders:
             open_connection()
             folders = [
@@ -85,6 +101,15 @@ class Daemon:
         if self.__scanner is not None and self.__scanner.is_alive():
             for f in folders:
                 self.__scanner.queue_folder(f)
+            logger.info(
+                format_log_event(
+                    "daemon",
+                    "scan_queued",
+                    folders=len(folders),
+                    force=force,
+                    reason="scanner_already_running",
+                )
+            )
             return
 
         extensions = self.__config.BASE["scanner_extensions"]
@@ -102,6 +127,14 @@ class Daemon:
             self.__scanner.queue_folder(f)
 
         self.__scanner.start()
+        logger.info(
+            format_log_event(
+                "daemon",
+                "scan_started",
+                folders=len(folders),
+                force=force,
+            )
+        )
 
     def __watch(self, folder):
         if self.__watcher is not None:

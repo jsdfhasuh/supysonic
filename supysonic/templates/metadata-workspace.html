@@ -1,0 +1,45 @@
+{% extends "layout.html" %}
+{% block title %}Metadata · Emosonic Server{% endblock %}
+{% block page_title %}Metadata{% endblock %}
+{% block page_subtitle %}Review pending library tasks, then inspect artist and album editing tools inside one metadata workspace.{% endblock %}
+{% block body %}
+<style>
+  .metadata-workspace-panel {
+    background: transparent;
+  }
+</style>
+<div class="metadata-workspace-panel console-section-spacer">
+  <div class="d-flex justify-content-between align-items-center mb-3 px-1">
+    <h2 class="h4 mb-0">Metadata workspace</h2>
+    <span class="console-chip">Review and edit</span>
+  </div>
+  <div class="card mb-4">
+    <div class="card-body">
+    <ul class="nav nav-tabs" id="metadata-workspace-tabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <a class="nav-link {% if activeTab == 'inbox' %}active{% endif %}" href="{{ url_for('frontend.metadata', tab='inbox') }}" id="inbox-tab">Inbox</a>
+      </li>
+      <li class="nav-item" role="presentation">
+        <a class="nav-link {% if activeTab == 'artists' %}active{% endif %}" href="{{ url_for('frontend.metadata', tab='artists') }}" id="artists-tab">Artists</a>
+      </li>
+      <li class="nav-item" role="presentation">
+        <a class="nav-link {% if activeTab == 'albums' %}active{% endif %}" href="{{ url_for('frontend.metadata', tab='albums') }}" id="albums-tab">Albums</a>
+      </li>
+    </ul>
+    </div>
+  </div>
+  <div id="metadata-workspace-content">
+    {% if activeTab == 'inbox' %}
+      {% include "partials/metadata-inbox-content.html" %}
+    {% elif activeTab == 'artists' %}
+      <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/metadata.css') }}">
+      <script src="{{ url_for('static', filename='js/get_api.js') }}"></script>
+      {% include "partials/metadata-artist-content.html" %}
+    {% elif activeTab == 'albums' %}
+      <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/metadata.css') }}">
+      <script src="{{ url_for('static', filename='js/get_api.js') }}"></script>
+      {% include "partials/metadata-album-content.html" %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

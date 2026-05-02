@@ -8,6 +8,7 @@ from typing import Iterable, List, Optional, Tuple, TYPE_CHECKING, Union
 from ..db import Album, AlbumArtist, Artist, Track, TrackArtist
 from .scanner_common import sanitizeString
 from .scanner_lookup import findArtist
+from .scanner_review_tasks import rememberNewAlbum
 
 if TYPE_CHECKING:
     from ..scanner import Scanner
@@ -40,6 +41,7 @@ def recordAlbumArtists(
         album_row, created = Album.get_or_create(name=album, artist=main)
         if created:
             scanner.stats().added.albums += 1
+            rememberNewAlbum(scanner, album_row)
 
         relations = []
         for artist in resolved_artists:

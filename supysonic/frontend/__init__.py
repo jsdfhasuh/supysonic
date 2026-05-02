@@ -7,6 +7,7 @@
 # Distributed under terms of the GNU AGPLv3 license.
 
 import json
+import logging
 import os
 import time
 from flask import (
@@ -26,6 +27,7 @@ from flask import Blueprint
 from functools import wraps
 from ..covers import EXTENSIONS
 from .. import VERSION, DOWNLOAD_URL
+from ..TaskManger import list_task_results
 from ..daemon.client import DaemonClient
 from ..daemon.exceptions import DaemonUnavailableError
 from ..db import Artist, Album, EmoLocalQueue, EmoPlaybackState, EmoSessionQueue, Track
@@ -34,6 +36,9 @@ from ..emo.ws_state import get_state
 from ..managers.user import UserManager
 from ..api.media import __new_get_cover_path
 from ..cache import CacheMiss
+
+logger = logging.getLogger(__name__)
+
 frontend = Blueprint("frontend", __name__)
 state = get_state()
 ANONYMOUS_FRONTEND_ENDPOINTS = {
@@ -371,6 +376,42 @@ def device_data():
     return jsonify({"devices": rows, "summary": getDeviceMonitorSummary(rows)})
 
 
+@frontend.route("/admin/tasks")
+@admin_only
+def admin_tasks():
+    tasks = list_task_results()
+    status_counts = {"pending": 0, "completed": 0, "failed": 0}
+    for t in tasks:
+        status_counts[t["status"]] = status_counts.get(t["status"], 0) + 1
+    summary = {
+        "pending": status_counts["pending"],
+        "completed": status_counts["completed"],
+        "failed": status_counts["failed"],
+        "total": len(tasks),
+    }
+    return render_template("admin-tasks.html", tasks=tasks, summary=summary)
+
+
+@frontend.route("/admin/tasks/data")
+@admin_only
+def admin_tasks_data():
+    tasks = list_task_results()
+    status_counts = {"pending": 0, "completed": 0, "failed": 0}
+    for t in tasks:
+        status_counts[t["status"]] = status_counts.get(t["status"], 0) + 1
+    return jsonify(
+        {
+            "tasks": tasks,
+            "summary": {
+                "pending": status_counts["pending"],
+                "completed": status_counts["completed"],
+                "failed": status_counts["failed"],
+                "total": len(tasks),
+            },
+        }
+    )
+
+
 @frontend.route("/control")
 @login_only
 def control_index():
@@ -453,7 +494,7 @@ def device_cover(eid):
     target_track = Track.select().where(Track.id == eid).first()
     album = target_track.album if target_track else None
     new_eid = f"al-{album.id}" if album else None
-    print(f"eid: {eid}")
+    logger.debug("Fetching device cover for track %s", eid)
     input_size = request.values.get("input_size", "")
     cover_path = __new_get_cover_path(new_eid, input_size)
 

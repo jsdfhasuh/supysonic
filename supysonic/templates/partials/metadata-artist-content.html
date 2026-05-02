@@ -1,0 +1,313 @@
+<div class="card console-section-spacer">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>Artist wall</span>
+    <span class="console-chip">Metadata operations</span>
+  </div>
+  <div class="card-body">
+    <div id="artist-wall" class="artist-wall">
+      <div class="loading">Loading artist data...</div>
+    </div>
+  </div>
+</div>
+
+<div id="editModal" class="modal">
+  <div class="modal-content">
+    <h2>Set primary artist</h2>
+    <form id="editForm">
+      <input type="hidden" id="artistId">
+      <div class="form-group">
+        <label for="artistName">Artist name:</label>
+        <input type="text" id="artistName" readonly>
+      </div>
+      <div class="form-group">
+        <label for="primaryArtist">Primary artist name:</label>
+        <input type="text" id="primaryArtist" placeholder="Primary artist name" autocomplete="off">
+        <div id="primary-artist-suggestions" class="list-group mt-2 d-none"></div>
+      </div>
+      <div class="form-group">
+        <label for="biography">Biography:</label>
+        <textarea id="biography" rows="6" placeholder="Artist biography"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Current photo:</label>
+        <img id="artistPhotoPreview" class="artist-photo-preview" alt="Artist photo preview">
+      </div>
+      <div class="form-group">
+        <label for="artistPhoto">Artist photo:</label>
+        <input type="file" id="artistPhoto" accept="image/*">
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn-primary">Apply</button>
+        <button type="button" class="btn-secondary" onclick="closeModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="successToast" class="toast">
+  <div class="toast-content">
+    <i class="toast-icon">✓</i>
+    <span class="toast-message">Saved successfully.</span>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/artist-autocomplete.js') }}"></script>
+<script>
+password = "&v=1.15.0&c=web";
+artistInfoUrl = {{ url_for('api.artist_info2')|tojson }};
+artistSuggestionsUrl = {{ url_for('frontend.metadata_artist_suggestions')|tojson }};
+let activeArtistAutocomplete = null;
+async function loadData() {
+    try {
+        artistsurl = {{ url_for('api.list_artists')|tojson }};
+        const artistsDict = await getArtists(artistsurl, password);
+        image_base_url = {{ url_for('api.cover_art')|tojson }} ;
+
+        for (const artistid in artistsDict) {
+            const image_url = `${image_base_url}?id=ar-${artistid}${password}`;
+            artistsDict[artistid] = {
+                name: artistsDict[artistid],
+                image: image_url
+            };
+        }
+
+        renderPage(artistsDict);
+
+    } catch (error) {
+        console.error('Error loading data:', error);
+        document.getElementById('artist-wall').innerHTML =
+            '<div style="text-align:center;color:red;padding:30px;">Error loading artist data: ' + error.message + '</div>';
+    }
+}
+
+async function loadArtistMetadataForModal(artist) {
+    const biographyField = document.getElementById('biography');
+    const photoPreview = document.getElementById('artistPhotoPreview');
+    const photoPreviewUrl = photoPreview.dataset.previewUrl;
+    if (photoPreviewUrl) {
+        URL.revokeObjectURL(photoPreviewUrl);
+        delete photoPreview.dataset.previewUrl;
+    }
+    biographyField.value = '';
+    photoPreview.src = artist.image;
+    photoPreview.style.display = 'block';
+
+    try {
+        const response = await fetch(`${artistInfoUrl}?f=json&id=${artist.id}${password}`);
+        if (!response.ok) {
+            return;
+        }
+        const data = await response.json();
+        const info = data['subsonic-response'].artistInfo2 || {};
+        biographyField.value = info.biography || '';
+        if (info.largeImageUrl || info.mediumImageUrl || info.smallImageUrl) {
+            photoPreview.src = info.largeImageUrl || info.mediumImageUrl || info.smallImageUrl;
+        }
+    } catch (error) {
+        console.error('Error loading artist metadata:', error);
+    }
+}
+
+const artistPhotoInput = document.getElementById('artistPhoto');
+setupArtistAutocomplete(
+    document.getElementById('primaryArtist'),
+    document.getElementById('primary-artist-suggestions'),
+    {
+        suggestionsUrl: artistSuggestionsUrl,
+        onFocus: function(autocompleteState) {
+            activeArtistAutocomplete = autocompleteState;
+        },
+    }
+);
+artistPhotoInput.addEventListener('change', function() {
+    const photoPreview = document.getElementById('artistPhotoPreview');
+    const nextFile = artistPhotoInput.files[0];
+    const previousPreviewUrl = photoPreview.dataset.previewUrl;
+    if (previousPreviewUrl) {
+        URL.revokeObjectURL(previousPreviewUrl);
+        delete photoPreview.dataset.previewUrl;
+    }
+    if (!nextFile) {
+        return;
+    }
+    const previewUrl = URL.createObjectURL(nextFile);
+    photoPreview.src = previewUrl;
+    photoPreview.dataset.previewUrl = previewUrl;
+    photoPreview.style.display = 'block';
+});
+
+function renderPage(artistsDict) {
+    const container = document.getElementById('artist-wall');
+    container.innerHTML = '';
+
+    const artistsArray = Object.entries(artistsDict).map(([id, info]) => ({
+        id,
+        name: info.name || 'Unknown artist',
+        image: info.image
+    }));
+
+    artistsArray.sort((a, b) => a.name.localeCompare(b.name));
+
+    for (const artist of artistsArray) {
+        container.appendChild(createArtistCardElement(artist));
+    }
+}
+
+function createArtistCardElement(artist) {
+    const card = document.createElement('div');
+    card.className = 'artist-card';
+    card.dataset.artistCardId = artist.id;
+    card.dataset.artistName = artist.name;
+    card.dataset.artistImage = artist.image || '';
+    card.onclick = () => openEditModal({id: artist.id, name: artist.name, image: artist.image});
+
+    const imgContainer = document.createElement('div');
+    imgContainer.className = 'image-container';
+
+    const placeholder = document.createElement('div');
+    placeholder.className = 'placeholder';
+    const firstChar = (artist.name && artist.name.length > 0) ? artist.name[0].toUpperCase() : '?';
+    placeholder.textContent = firstChar;
+    imgContainer.appendChild(placeholder);
+
+    const img = document.createElement('img');
+    img.className = 'artist-image';
+    img.src = artist.image;
+    img.alt = artist.name;
+    img.onload = () => {
+        placeholder.style.display = 'none';
+    };
+    img.onerror = () => {
+        img.style.display = 'none';
+    };
+    imgContainer.appendChild(img);
+
+    const name = document.createElement('div');
+    name.className = 'artist-name';
+    name.textContent = artist.name;
+
+    card.appendChild(imgContainer);
+    card.appendChild(name);
+    return card;
+}
+
+function sortArtistCards() {
+    const container = document.getElementById('artist-wall');
+    const cards = Array.from(container.querySelectorAll('[data-artist-card-id]'));
+    cards.sort((leftCard, rightCard) => leftCard.dataset.artistName.localeCompare(rightCard.dataset.artistName));
+    cards.forEach((card) => container.appendChild(card));
+}
+
+function upsertArtistCard(artist) {
+    const container = document.getElementById('artist-wall');
+    const existingCard = container.querySelector(`[data-artist-card-id="${artist.id}"]`);
+    const nextCard = createArtistCardElement(artist);
+    if (existingCard) {
+        existingCard.replaceWith(nextCard);
+    } else {
+        container.appendChild(nextCard);
+    }
+    sortArtistCards();
+}
+
+function removeArtistCard(artistId) {
+    if (!artistId) {
+        return;
+    }
+    const existingCard = document.querySelector(`[data-artist-card-id="${artistId}"]`);
+    if (existingCard) {
+        existingCard.remove();
+    }
+}
+
+function applyArtistModalChanges(successData) {
+    if (successData.removed_artist_id && successData.artist && successData.removed_artist_id !== successData.artist.id) {
+        removeArtistCard(successData.removed_artist_id);
+    }
+    if (successData.artist) {
+        upsertArtistCard(successData.artist);
+    }
+}
+
+function openEditModal(artist) {
+    const modal = document.getElementById('editModal');
+    document.getElementById('artistId').value = artist.id;
+    document.getElementById('artistName').value = artist.name;
+    document.getElementById('primaryArtist').value = '';
+    document.getElementById('artistPhoto').value = '';
+    modal.classList.add('show');
+    loadArtistMetadataForModal(artist);
+}
+
+function showSuccessToast(message = 'Saved successfully.') {
+    const toast = document.getElementById('successToast');
+    const messageEl = toast.querySelector('.toast-message');
+    messageEl.textContent = message;
+    toast.style.display = 'block';
+    setTimeout(() => {
+        toast.style.animation = 'fadeOut 0.3s ease';
+        setTimeout(() => {
+            toast.style.display = 'none';
+            toast.style.animation = '';
+        }, 300);
+    }, 3000);
+}
+
+document.getElementById('editForm').onsubmit = async function(e) {
+    e.preventDefault();
+
+    const artistId = document.getElementById('artistId').value;
+    const artistName = document.getElementById('artistName').value;
+    const primaryArtist = document.getElementById('primaryArtist').value.trim();
+    const biography = document.getElementById('biography').value;
+    const artistPhoto = document.getElementById('artistPhoto').files[0];
+
+    try {
+        const requestData = new FormData();
+        requestData.append('action', 'change_primary_artist');
+        requestData.append('id', artistId);
+        requestData.append('name', artistName);
+        requestData.append('primary_name', primaryArtist || '');
+        requestData.append('biography', biography);
+        if (artistPhoto) {
+            requestData.append('artist_photo', artistPhoto);
+        }
+        const response = await fetch('/artists', {
+            method: 'POST',
+            body: requestData
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Save failed');
+        }
+        const successData = await response.json();
+        applyArtistModalChanges(successData);
+        closeModal();
+        showSuccessToast(successData.message);
+
+    } catch (error) {
+        console.error('Save failed:', error);
+        alert('Save failed: ' + error.message);
+    }
+};
+
+function closeModal() {
+    const photoPreview = document.getElementById('artistPhotoPreview');
+    const previewUrl = photoPreview.dataset.previewUrl;
+    if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+        delete photoPreview.dataset.previewUrl;
+    }
+    document.getElementById('editModal').classList.remove('show');
+}
+
+window.onclick = function(event) {
+    const modal = document.getElementById('editModal');
+    if (event.target === modal) {
+        closeModal();
+    }
+};
+
+loadData();
+</script>

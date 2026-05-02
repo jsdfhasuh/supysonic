@@ -1,0 +1,173 @@
+{#-
+ This file is part of Supysonic.
+ Supysonic is a Python implementation of the Subsonic server API.
+
+ Distributed under terms of the GNU AGPLv3 license.
+-#}
+{% extends "layout.html" %}
+{% block title %}Background Tasks · Emosonic Server{% endblock %}
+{% block navbar_admin_tasks %}
+<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.admin_tasks') }}"><span data-i18n-en="Tasks" data-i18n-zh="任务">Tasks</span></a>
+{% endblock %}
+{% block page_title %}<span data-i18n-en="Background tasks" data-i18n-zh="后台任务">Background tasks</span>{% endblock %}
+{% block page_subtitle %}<span data-i18n-en="Current process only. Results are in-memory and not persisted. Restarting the web process clears this history." data-i18n-zh="仅当前进程。结果存于内存，不持久化。重启 Web 进程后历史会清除。">Current process only. Results are in-memory and not persisted. Restarting the web process clears this history.</span>{% endblock %}
+{% block body %}
+<div class="row row-cols-1 row-cols-md-4 g-3 mb-3">
+  <div class="col">
+    <div class="card text-center h-100 console-metric-card">
+      <div class="card-header">Pending</div>
+      <div class="card-body">
+        <div class="console-metric-value" id="summary-pending">{{ summary.pending }}</div>
+        <div class="console-metric-caption">Submitted and waiting or running.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card text-center h-100 console-metric-card">
+      <div class="card-header">Completed</div>
+      <div class="card-body">
+        <div class="console-metric-value" id="summary-completed">{{ summary.completed }}</div>
+        <div class="console-metric-caption">Finished without errors.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card text-center h-100 console-metric-card">
+      <div class="card-header">Failed</div>
+      <div class="card-body">
+        <div class="console-metric-value" id="summary-failed">{{ summary.failed }}</div>
+        <div class="console-metric-caption">Terminated with an exception.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card text-center h-100 console-metric-card">
+      <div class="card-header">Total</div>
+      <div class="card-body">
+        <div class="console-metric-value" id="summary-total">{{ summary.total }}</div>
+        <div class="console-metric-caption mb-2">All known task results in this process.</div>
+        <div class="small text-body-secondary" id="last-refresh">just now</div>
+        <button type="button" class="btn btn-light btn-sm mt-2" id="refresh-now"><span data-i18n-en="Refresh now" data-i18n-zh="立即刷新">Refresh now</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>Tasks</span>
+    <small class="text-body-secondary">Auto-refresh every <span id="refresh-countdown">5</span>s</small>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Task ID</th>
+            <th>Status</th>
+            <th>Updated At</th>
+            <th>Result</th>
+            <th>Error</th>
+          </tr>
+        </thead>
+        <tbody id="tasks-tbody">
+          {% for task in tasks %}
+          <tr>
+            <td><code>{{ task.task_id }}</code></td>
+            <td><span class="console-chip text-uppercase">{{ task.status }}</span></td>
+            <td class="text-nowrap">{{ task.timestamp | float | round(0) | int if task.timestamp else "—" }}</td>
+            <td class="text-break">{{ task.result if task.result is not none else "—" }}</td>
+            <td class="text-break text-danger small">{{ task.error if task.error else "—" }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="5" class="text-center text-body-secondary py-4">No background tasks recorded yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var dataUrl = "{{ url_for('frontend.admin_tasks_data') }}";
+    var countdownEl = document.getElementById("refresh-countdown");
+    var lastRefreshEl = document.getElementById("last-refresh");
+    var tbody = document.getElementById("tasks-tbody");
+    var refreshSeconds = 5;
+    var countdown = refreshSeconds;
+    var timer = null;
+
+    function formatTimestamp(ts) {
+      if (!ts) return "\u2014";
+      var d = new Date(ts * 1000);
+      return d.toISOString().replace("T", " ").replace(/\.[0-9]+Z$/, "");
+    }
+
+    function fmtCell(val) {
+      if (val === null || val === undefined) return "\u2014";
+      return String(val);
+    }
+
+    function updateSummary(summary) {
+      document.getElementById("summary-pending").textContent = summary.pending;
+      document.getElementById("summary-completed").textContent = summary.completed;
+      document.getElementById("summary-failed").textContent = summary.failed;
+      document.getElementById("summary-total").textContent = summary.total;
+    }
+
+    function updateTable(tasks) {
+      if (!tasks.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-body-secondary py-4">No background tasks recorded yet.</td></tr>';
+        return;
+      }
+      var rows = "";
+      for (var i = 0; i < tasks.length; i++) {
+        var t = tasks[i];
+        rows +=
+          "<tr>" +
+          "<td><code>" + t.task_id + "</code></td>" +
+          "<td><span class=\"console-chip text-uppercase\">" + t.status + "</span></td>" +
+          "<td class=\"text-nowrap\">" + formatTimestamp(t.timestamp) + "</td>" +
+          "<td class=\"text-break\">" + fmtCell(t.result) + "</td>" +
+          "<td class=\"text-break text-danger small\">" + fmtCell(t.error) + "</td>" +
+          "</tr>";
+      }
+      tbody.innerHTML = rows;
+    }
+
+    function fetchData() {
+      countdown = refreshSeconds;
+      countdownEl.textContent = countdown;
+
+      fetch(dataUrl)
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          updateSummary(data.summary);
+          updateTable(data.tasks);
+          lastRefreshEl.textContent = "just now";
+        })
+        .catch(function () {
+          lastRefreshEl.textContent = "refresh failed";
+        });
+    }
+
+    function tick() {
+      countdown -= 1;
+      if (countdown <= 0) {
+        fetchData();
+      } else {
+        countdownEl.textContent = countdown;
+      }
+    }
+
+    timer = window.setInterval(tick, 1000);
+
+    document.getElementById("refresh-now").addEventListener("click", function () {
+      fetchData();
+    });
+  })();
+</script>
+{% endblock %}

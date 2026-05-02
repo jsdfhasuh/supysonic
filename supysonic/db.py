@@ -34,7 +34,7 @@ from uuid import UUID, uuid4
 from PIL import Image as PILImage
 from .tool import read_dict_from_json
 
-SCHEMA_VERSION = "20260327"
+SCHEMA_VERSION = "20260429"
 
 
 def now():
@@ -296,12 +296,15 @@ class Artist(_Model):
         if self.artist_info_json:
             try:
                 local_data = read_dict_from_json(self.artist_info_json)
+                image_data = local_data.get("image")
+                if not isinstance(image_data, dict):
+                    image_data = {}
                 info["biography"] = local_data.get("biography", "")
                 info["musicBrainzId"] = local_data.get("musicBrainzId", "")
                 info["lastFmUrl"] = local_data.get("lastFmUrl", "")
-                info["smallImageUrl"] = local_data['image'].get("small", "")
-                info["mediumImageUrl"] = local_data['image'].get("medium", "")
-                info["largeImageUrl"] = local_data['image'].get("large", "")
+                info["smallImageUrl"] = image_data.get("small", "")
+                info["mediumImageUrl"] = image_data.get("medium", "")
+                info["largeImageUrl"] = image_data.get("large", "")
                 return info
             except ValueError:
                 return info
@@ -442,6 +445,34 @@ class Album(_Model):
         StarredAlbum.delete().where(StarredAlbum.starred.not_in(albums)).execute()
         AlbumArtist.delete().where(AlbumArtist.album_id.not_in(albums)).execute()
         return cls.delete().where(cls.id.not_in(albums)).execute()
+
+
+class AlbumReviewTask(_Model):
+    id = PrimaryKeyField()
+    album = ForeignKeyField(Album, backref="review_tasks", on_delete="CASCADE")
+    task_type = CharField(max_length=64)
+    status = CharField(max_length=32)
+    reason = CharField(max_length=64)
+    pending_key = CharField(max_length=96, null=True)
+    snapshot_json = TextField(null=True)
+    created = DateTimeField(default=now)
+    updated = DateTimeField(default=now)
+    resolved_at = DateTimeField(null=True)
+
+    def save(self, *args, **kwargs):
+        if self.status == "pending" and self.album_id:
+            self.pending_key = f"{self.album_id}:pending"
+        elif self.status != "pending":
+            self.pending_key = None
+        return super().save(*args, **kwargs)
+
+    class Meta:
+        table_name = "album_review_task"
+        indexes = (
+            (("album", "status"), False),
+            (("status", "created"), False),
+            (("pending_key",), True),
+        )
 
 
 class AlbumArtist(_Model):

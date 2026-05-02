@@ -1,0 +1,441 @@
+{% extends "layout.html" %}
+{% block title %}Album Review Task - Emosonic Server{% endblock %}
+{% block page_title %}Album Review Task{% endblock %}
+{% block page_subtitle %}Review one album task at a time. Album, track, and artist edits stay scoped to the current review task.{% endblock %}
+{% block body %}
+<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/metadata.css') }}">
+<div class="console-section-spacer" data-review-editable="{{ 'true' if reviewIsEditable else 'false' }}">
+  <div class="metadata-review-return-bar">
+    <a href="{{ url_for('frontend.metadata', tab='inbox') }}" class="btn btn-primary metadata-review-back-link">
+      <span data-i18n-en="Back to Metadata Inbox" data-i18n-zh="返回 Metadata Inbox">Back to Metadata Inbox</span>
+    </a>
+    <span class="text-body-secondary">Return to the metadata inbox and review queue.</span>
+  </div>
+
+  <div class="card mb-4 metadata-review-hero-card">
+    <div class="card-body">
+      <p class="console-eyebrow mb-2">Metadata / Inbox / Review Task</p>
+      <div class="d-flex flex-wrap gap-4 align-items-start justify-content-between metadata-review-hero">
+        <div class="d-flex gap-3 align-items-start metadata-review-hero-main">
+          <img src="{{ reviewSummary.cover_art_url }}" alt="{{ reviewAlbum.name }} cover" class="metadata-review-cover">
+          <div>
+            <h2 class="h3 mb-1">{{ reviewAlbum.name }}</h2>
+            <p class="mb-2 text-body-secondary">{{ reviewAlbum.artist.get_artist_name() }}{% if reviewAlbum.year %} · {{ reviewAlbum.year }}{% endif %}</p>
+            <div class="d-flex flex-wrap gap-2 mb-3">
+              <span class="console-chip text-uppercase">{{ reviewTask.status }}</span>
+              <span class="console-chip">{{ reviewTask.reason.replace('_', ' ') }}</span>
+              <span class="console-chip">{{ reviewTracks|length }} tracks</span>
+            </div>
+            <div class="d-flex flex-wrap gap-2 metadata-review-issue-list">
+              {% for issue in reviewSummary.issues %}
+                <span class="console-chip metadata-review-issue-chip">{{ issue }}</span>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        <div class="text-body-secondary text-end metadata-review-hero-side">
+          <div>{{ reviewTracks|length }} tracks</div>
+          <div>{{ reviewArtists|length }} related artists</div>
+          <div>{{ reviewSummary.total_duration }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="alert alert-info mb-4 metadata-review-scope-alert">Edits are scoped to this album review task.</div>
+
+  <div class="row g-4 align-items-start">
+    <div class="col-xl-8">
+      <div class="card">
+        <div class="card-body metadata-review-main-card">
+          <div class="metadata-review-tabbar mb-4" role="tablist" aria-label="Review sections">
+            <button type="button" class="tab-btn{% if activeReviewTab == 'album' %} active{% endif %}" data-review-tab="album">Album</button>
+            <button type="button" class="tab-btn{% if activeReviewTab == 'tracks' %} active{% endif %}" data-review-tab="tracks">Tracks</button>
+            <button type="button" class="tab-btn{% if activeReviewTab == 'artists' %} active{% endif %}" data-review-tab="artists">Artists</button>
+          </div>
+
+          <div class="metadata-review-panel{% if activeReviewTab == 'album' %} active{% endif %}" data-review-panel="album">
+            {% include "partials/metadata-review-album-panel.html" %}
+          </div>
+          <div class="metadata-review-panel{% if activeReviewTab == 'tracks' %} active{% endif %}" data-review-panel="tracks">
+            {% include "partials/metadata-review-tracks-panel.html" %}
+          </div>
+          <div class="metadata-review-panel{% if activeReviewTab == 'artists' %} active{% endif %}" data-review-panel="artists">
+            {% include "partials/metadata-review-artists-panel.html" %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-4">
+      <div class="card metadata-review-summary-card">
+        <div class="card-header">Review summary</div>
+        <div class="card-body">
+          <ul class="console-info-list mb-4">
+            <li><span>Status</span><strong data-review-summary-status>{{ reviewTask.status }}</strong></li>
+            <li><span>Created</span><strong>{{ reviewTask.created.strftime('%Y-%m-%d %H:%M:%S') }}</strong></li>
+            <li><span>Track count</span><strong>{{ reviewTracks|length }}</strong></li>
+            <li><span>Related artists</span><strong>{{ reviewArtists|length }}</strong></li>
+            <li><span>Total duration</span><strong>{{ reviewSummary.total_duration }}</strong></li>
+          </ul>
+          <div class="mb-4">
+            <h3 class="h6 mb-2">Detected issues</h3>
+            <ul class="metadata-review-summary-issues mb-0">
+              {% for issue in reviewSummary.issues %}
+                <li>{{ issue }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          <div id="metadata-review-feedback" class="alert d-none" role="status"></div>
+          <div class="d-flex flex-wrap gap-2">
+            <button type="button" class="btn btn-primary" data-review-task-action="{{ url_for('frontend.confirm_metadata_review_task', task_id=reviewTask.id) }}" data-review-task-label="confirm"{% if not reviewIsEditable %} disabled{% endif %}>Confirm Task</button>
+            <button type="button" class="btn btn-outline-secondary" data-review-task-action="{{ url_for('frontend.dismiss_metadata_review_task', task_id=reviewTask.id) }}" data-review-task-label="dismiss"{% if not reviewIsEditable %} disabled{% endif %}>Dismiss Task</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/artist-autocomplete.js') }}"></script>
+<script>
+  (function() {
+    const tabButtons = document.querySelectorAll('[data-review-tab]');
+    const panels = document.querySelectorAll('[data-review-panel]');
+    const feedbackNode = document.getElementById('metadata-review-feedback');
+    const reviewContainer = document.querySelector('[data-review-editable]');
+    const reviewStatusSummary = document.querySelector('[data-review-summary-status]');
+    const reviewStatusChips = document.querySelectorAll('.metadata-review-hero .console-chip.text-uppercase');
+    const artistSuggestionsUrl = '{{ url_for("frontend.metadata_artist_suggestions") }}';
+    let activeArtistAutocomplete = null;
+
+    function isReviewEditable() {
+      return reviewContainer && reviewContainer.dataset.reviewEditable === 'true';
+    }
+
+    function getActiveReviewTab() {
+      const activeButton = document.querySelector('[data-review-tab].active');
+      return activeButton ? activeButton.dataset.reviewTab : 'album';
+    }
+
+    function updateReviewUrl(tabName) {
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.set('section', tabName);
+      window.history.replaceState({}, '', nextUrl);
+      return nextUrl.toString();
+    }
+
+    function reloadReviewPage(tabName) {
+      window.location.assign(updateReviewUrl(tabName));
+    }
+
+    function showReviewFeedback(message, isError) {
+      if (!feedbackNode) {
+        return;
+      }
+      feedbackNode.textContent = message;
+      feedbackNode.classList.remove('d-none', 'alert-success', 'alert-danger');
+      feedbackNode.classList.add(isError ? 'alert-danger' : 'alert-success');
+    }
+
+    function updateReviewSummaryStatus(taskStatus) {
+      if (reviewStatusSummary) {
+        reviewStatusSummary.textContent = taskStatus;
+      }
+      reviewStatusChips.forEach((chip) => {
+        chip.textContent = taskStatus;
+      });
+    }
+
+    function applyAlbumFormChanges(payload) {
+      const albumName = document.getElementById('review-album-name');
+      const albumArtist = document.getElementById('review-album-artist');
+      const albumYear = document.getElementById('review-album-year');
+      const heroTitle = document.querySelector('.metadata-review-hero-main h2');
+      const heroSubtitle = document.querySelector('.metadata-review-hero-main .text-body-secondary');
+      const trackContextTitle = document.querySelector('.metadata-review-track-context-body h3');
+      const trackAlbumNotes = document.querySelectorAll('[data-review-track-album-note]');
+      if (heroTitle && albumName) {
+        heroTitle.textContent = albumName.value;
+      }
+      if (trackContextTitle && albumName) {
+        trackContextTitle.textContent = albumName.value;
+      }
+      if (albumName) {
+        trackAlbumNotes.forEach((noteNode) => {
+          noteNode.textContent = albumName.value;
+        });
+      }
+      if (heroSubtitle && albumArtist && albumYear) {
+        heroSubtitle.textContent = albumYear.value ? `${albumArtist.value} · ${albumYear.value}` : albumArtist.value;
+      }
+    }
+
+    function applyTrackFormChanges(payload) {
+      const trackRows = Array.from(document.querySelectorAll('[data-review-track-row]'));
+      const heroTrackChips = Array.from(document.querySelectorAll('.metadata-review-hero .console-chip'));
+      const summaryTrackCount = document.querySelectorAll('.console-info-list strong')[2];
+      const heroTrackChip = heroTrackChips.find((chip) => chip.textContent.includes('tracks'));
+      if (summaryTrackCount) {
+        summaryTrackCount.textContent = String(trackRows.length);
+      }
+      if (heroTrackChip) {
+        heroTrackChip.textContent = `${trackRows.length} tracks`;
+      }
+    }
+
+    function applyArtistFormChanges(payload, artistForm) {
+      const primaryNameField = artistForm.querySelector('input[name="primary_name"]');
+      const readonlyNameField = artistForm.querySelector('input[readonly]');
+      const imageNode = artistForm.querySelector('img');
+      if (readonlyNameField && primaryNameField && primaryNameField.value.trim()) {
+        readonlyNameField.value = primaryNameField.value.trim();
+        imageNode.alt = primaryNameField.value.trim();
+      }
+    }
+
+    function applyResolvedReviewTaskState(taskStatus) {
+      if (!reviewContainer) {
+        return;
+      }
+      reviewContainer.dataset.reviewEditable = 'false';
+      updateReviewSummaryStatus(taskStatus);
+      document.querySelectorAll('#review-album-form input, #review-tracks-form input, [data-review-artist-form] textarea, [data-review-artist-form] input[name="primary_name"]').forEach((field) => {
+        field.disabled = true;
+      });
+      document.querySelectorAll('[data-review-task-action]').forEach((button) => {
+        button.disabled = true;
+      });
+      document.querySelectorAll('#review-album-form button[type="submit"], #review-tracks-form button[type="submit"], [data-review-artist-form] button[type="submit"]').forEach((button) => {
+        button.remove();
+      });
+      if (!document.querySelector('.metadata-review-panel .alert.alert-secondary')) {
+        const albumPanel = document.querySelector('[data-review-panel="album"] section');
+        if (albumPanel) {
+          const alertNode = document.createElement('div');
+          alertNode.className = 'alert alert-secondary';
+          alertNode.textContent = 'This review task is resolved and now read-only.';
+          albumPanel.insertBefore(alertNode, albumPanel.querySelector('form'));
+        }
+      }
+    }
+
+    async function parseReviewResponse(response, fallbackMessage) {
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.status === 'error') {
+        throw new Error(payload.message || fallbackMessage);
+      }
+      return payload;
+    }
+
+    function activateReviewTab(tabName) {
+      tabButtons.forEach((button) => {
+        button.classList.toggle('active', button.dataset.reviewTab === tabName);
+      });
+      panels.forEach((panel) => {
+        panel.classList.toggle('active', panel.dataset.reviewPanel === tabName);
+      });
+      updateReviewUrl(tabName);
+    }
+
+    tabButtons.forEach((button) => {
+      button.addEventListener('click', () => activateReviewTab(button.dataset.reviewTab));
+    });
+
+    function getTrackPanelById(trackId) {
+      return document.querySelector(`[data-review-track-panel="${trackId}"]`);
+    }
+
+    function getTrackPickerById(trackId) {
+      return document.querySelector(`[data-review-track-target="${trackId}"]`);
+    }
+
+    function activateTrackWorkspace(trackId) {
+      const trackPickers = document.querySelectorAll('[data-review-track-sequence-item]');
+      const trackPanels = document.querySelectorAll('[data-review-track-editor-panel]');
+      if (!trackPickers.length || !trackPanels.length) {
+        return;
+      }
+
+      trackPickers.forEach((picker) => {
+        const isActive = picker.dataset.reviewTrackTarget === trackId;
+        picker.classList.toggle('is-active', isActive);
+        picker.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      });
+
+      trackPanels.forEach((panel) => {
+        const isActive = panel.dataset.reviewTrackPanel === trackId;
+        panel.classList.toggle('is-active', isActive);
+        panel.hidden = !isActive;
+      });
+    }
+
+    function syncTrackWorkspaceRow(row) {
+      if (!row) {
+        return;
+      }
+
+      const trackId = row.dataset.reviewTrackRow;
+      const trackPicker = getTrackPickerById(trackId);
+      const trackPanel = getTrackPanelById(trackId);
+      const numberInput = row.querySelector('[data-track-number]');
+      const titleInput = row.querySelector('[data-track-title]');
+      const artistInput = row.querySelector('[data-track-artist]');
+      const trackNumber = String(numberInput.value || '').padStart(2, '0');
+
+      if (trackPicker) {
+        const numberNode = trackPicker.querySelector('[data-review-track-sequence-number]');
+        const titleNode = trackPicker.querySelector('[data-review-track-sequence-title]');
+        const artistNode = trackPicker.querySelector('[data-review-track-sequence-artist]');
+        if (numberNode) {
+          numberNode.textContent = trackNumber;
+        }
+        if (titleNode) {
+          titleNode.textContent = titleInput.value || 'Untitled track';
+        }
+        if (artistNode) {
+          artistNode.textContent = artistInput.value || 'Unknown artist';
+        }
+      }
+
+      if (trackPanel) {
+        const panelTitle = trackPanel.querySelector('[data-review-track-panel-title]');
+        if (panelTitle) {
+          panelTitle.textContent = titleInput.value || 'Untitled track';
+        }
+      }
+    }
+
+    document.querySelectorAll('[data-review-track-sequence-item]').forEach((button) => {
+      button.addEventListener('click', function() {
+        activateTrackWorkspace(button.dataset.reviewTrackTarget);
+      });
+    });
+
+    const initialTrackPicker = document.querySelector('[data-review-track-sequence-item].is-active') || document.querySelector('[data-review-track-sequence-item]');
+    if (initialTrackPicker) {
+      activateTrackWorkspace(initialTrackPicker.dataset.reviewTrackTarget);
+    }
+
+    const albumForm = document.getElementById('review-album-form');
+    if (albumForm && isReviewEditable()) {
+      setupArtistAutocomplete(
+        document.getElementById('review-album-artist'),
+        document.getElementById('review-album-artist-suggestions'),
+        {
+          suggestionsUrl: artistSuggestionsUrl,
+          onFocus: function(autocompleteState) {
+            activeArtistAutocomplete = autocompleteState;
+          },
+        }
+      );
+      albumForm.addEventListener('submit', async function(event) {
+        event.preventDefault();
+        const payload = {
+          name: document.getElementById('review-album-name').value,
+          artist_name: document.getElementById('review-album-artist').value,
+          year: document.getElementById('review-album-year').value,
+        };
+
+        const response = await fetch(albumForm.action, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload),
+        });
+        try {
+          const payload = await parseReviewResponse(response, 'Failed to save album changes');
+          applyAlbumFormChanges(payload);
+          if (activeArtistAutocomplete && typeof activeArtistAutocomplete.clear === 'function') {
+            activeArtistAutocomplete.clear();
+          }
+          showReviewFeedback(payload.message || 'Album changes saved', false);
+        } catch (error) {
+          showReviewFeedback(error.message, true);
+        }
+      });
+    }
+
+    const tracksForm = document.getElementById('review-tracks-form');
+    if (tracksForm && isReviewEditable()) {
+      document.querySelectorAll('[data-review-track-row]').forEach((row) => {
+        syncTrackWorkspaceRow(row);
+        row.querySelectorAll('[data-track-number], [data-track-title], [data-track-artist]').forEach((inputNode) => {
+          inputNode.addEventListener('input', function() {
+            syncTrackWorkspaceRow(row);
+          });
+        });
+      });
+      document.querySelectorAll('[data-track-artist]').forEach((inputNode) => {
+        setupArtistAutocomplete(inputNode, inputNode.parentElement.querySelector('[data-track-artist-suggestions]'), {
+          suggestionsUrl: artistSuggestionsUrl,
+          onFocus: function(autocompleteState) {
+            activeArtistAutocomplete = autocompleteState;
+          },
+        });
+      });
+      tracksForm.addEventListener('submit', async function(event) {
+        event.preventDefault();
+        const tracks = Array.from(document.querySelectorAll('[data-review-track-row]')).map((row) => ({
+          id: row.dataset.reviewTrackRow,
+          number: Number(row.querySelector('[data-track-number]').value),
+          title: row.querySelector('[data-track-title]').value,
+          artist_name: row.querySelector('[data-track-artist]').value,
+        }));
+
+        const response = await fetch(tracksForm.action, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({tracks}),
+        });
+        try {
+          const payload = await parseReviewResponse(response, 'Failed to save track changes');
+          applyTrackFormChanges(payload);
+          showReviewFeedback(payload.message || 'Track changes saved', false);
+        } catch (error) {
+          showReviewFeedback(error.message, true);
+        }
+      });
+    }
+
+    if (isReviewEditable()) {
+      document.querySelectorAll('[data-review-artist-form]').forEach((artistForm) => {
+        artistForm.addEventListener('submit', async function(event) {
+        event.preventDefault();
+        const requestData = new FormData(artistForm);
+        const response = await fetch(artistForm.action, {
+          method: 'POST',
+          body: requestData,
+        });
+        try {
+          const payload = await parseReviewResponse(response, 'Failed to save artist changes');
+          applyArtistFormChanges(payload, artistForm);
+          showReviewFeedback(payload.message || 'Artist changes saved', false);
+        } catch (error) {
+          showReviewFeedback(error.message, true);
+        }
+      });
+      });
+    }
+
+    document.querySelectorAll('[data-review-task-action]').forEach((button) => {
+      button.addEventListener('click', async function() {
+        if (!isReviewEditable()) {
+          return;
+        }
+        const activeTab = getActiveReviewTab();
+        const response = await fetch(`${button.dataset.reviewTaskAction}?section=${activeTab}`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+        });
+        try {
+          const payload = await parseReviewResponse(response, `Failed to ${button.dataset.reviewTaskLabel} task`);
+          showReviewFeedback(payload.message || 'Review task updated', false);
+          applyResolvedReviewTaskState(payload.task_status || button.dataset.reviewTaskLabel);
+        } catch (error) {
+          showReviewFeedback(error.message, true);
+        }
+      });
+    });
+  })();
+</script>
+{% endblock %}

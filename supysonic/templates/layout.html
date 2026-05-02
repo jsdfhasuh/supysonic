@@ -65,10 +65,22 @@
                 {% endblock %}
               </li>
               <li class="nav-item">
+                {% block navbar_metadata %}
+                <a class="nav-link" href="{{ url_for('frontend.metadata') }}"><span data-i18n-en="Metadata" data-i18n-zh="元数据">Metadata</span></a>
+                {% endblock %}
+              </li>
+              <li class="nav-item">
+                {% block navbar_admin_tasks %}
+                <a class="nav-link" href="{{ url_for('frontend.admin_tasks') }}"><span data-i18n-en="Tasks" data-i18n-zh="任务">Tasks</span></a>
+                {% endblock %}
+              </li>
+              {% if config['WEBAPP'].get('mount_emosonic') %}
+              <li class="nav-item">
                 {% block navbar_logs %}
                 <a class="nav-link" href="{{ url_for('emo.list_logs') }}"><span data-i18n-en="Logs" data-i18n-zh="日志">Logs</span></a>
                 {% endblock %}
               </li>
+              {% endif %}
               {% endif %}
             </ul>
             <div class="console-toolbar ms-xl-auto">

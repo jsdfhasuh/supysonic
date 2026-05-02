@@ -1,0 +1,38 @@
+<section>
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h3 class="h5 mb-1">Artists and roles</h3>
+      <p class="mb-0 text-body-secondary">Review only the artists connected to this album task.</p>
+    </div>
+  </div>
+  <div class="d-grid gap-3">
+    {% for artist in reviewArtistCards %}
+      <form class="card metadata-review-artist-card" data-review-artist-form action="{{ url_for('frontend.update_metadata_review_task_artist', task_id=reviewTask.id, artist_id=artist.id) }}">
+        <div class="card-body d-flex gap-3 align-items-start">
+          <img src="{{ artist.image_url }}" alt="{{ artist.display_name }}" class="metadata-review-artist-image">
+          <div class="flex-grow-1">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">Artist name</label>
+                <input class="form-control" type="text" value="{{ artist.name }}" readonly>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Primary artist mapping</label>
+                <input class="form-control" name="primary_name" type="text" value="{{ artist.display_name if artist.display_name != artist.name else '' }}" placeholder="Primary artist name"{% if not reviewIsEditable %} disabled{% endif %}>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Biography</label>
+                <textarea class="form-control" name="biography" rows="4" placeholder="Artist biography"{% if not reviewIsEditable %} disabled{% endif %}>{{ artist.biography }}</textarea>
+              </div>
+            </div>
+            {% if reviewIsEditable %}
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Save artist changes</button>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </form>
+    {% endfor %}
+  </div>
+</section>

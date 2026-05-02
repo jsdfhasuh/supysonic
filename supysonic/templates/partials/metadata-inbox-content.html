@@ -1,0 +1,60 @@
+{% if inboxTasks %}
+  <div class="row g-4 align-items-start">
+    <div class="col-xl-8">
+      <div class="d-flex flex-wrap gap-2 mb-4">
+        <a class="btn btn-sm {% if selectedInboxStatus == 'pending' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="{{ url_for('frontend.metadata', tab='inbox', status='pending') }}">Pending</a>
+        <a class="btn btn-sm {% if selectedInboxStatus == 'confirmed' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="{{ url_for('frontend.metadata', tab='inbox', status='confirmed') }}">Confirmed</a>
+        <a class="btn btn-sm {% if selectedInboxStatus == 'dismissed' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="{{ url_for('frontend.metadata', tab='inbox', status='dismissed') }}">Dismissed</a>
+        <a class="btn btn-sm {% if selectedInboxStatus == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="{{ url_for('frontend.metadata', tab='inbox', status='all') }}">All</a>
+      </div>
+
+      <div class="d-grid gap-3">
+        {% for task in inboxTasks %}
+          <div class="card">
+            <div class="card-body d-flex gap-3 align-items-start">
+              <img src="{{ task.cover_art_url }}" alt="{{ task.album_name }} cover" class="artist-photo-preview" style="width: 96px; min-width: 96px;">
+              <div class="flex-grow-1">
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                  <h5 class="mb-0">{{ task.album_name }}</h5>
+                  <span class="console-chip text-uppercase">{{ task.status }}</span>
+                </div>
+                <p class="mb-2 text-body-secondary">{{ task.artist_name }}{% if task.year %} · {{ task.year }}{% endif %} · {{ task.track_count }} tracks</p>
+                <p class="mb-3 text-body-secondary">New album metadata review created at {{ task.created.strftime('%Y-%m-%d %H:%M:%S') }}.</p>
+                <div class="d-flex flex-wrap gap-2">
+                  <a class="btn btn-sm btn-primary" href="/metadata/review-tasks/{{ task.id }}">Review</a>
+                  <form method="post" action="{{ url_for('frontend.confirm_metadata_review_task', task_id=task.id) }}">
+                    <button type="submit" class="btn btn-sm btn-outline-success">Confirm</button>
+                  </form>
+                  <form method="post" action="{{ url_for('frontend.dismiss_metadata_review_task', task_id=task.id) }}">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">Dismiss</button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="col-xl-4">
+      <div class="card">
+        <div class="card-header">Inbox summary</div>
+        <div class="card-body">
+          <ul class="console-info-list">
+            <li><span>Pending tasks</span><strong>{{ inboxSummary.pending }}</strong></li>
+            <li><span>Confirmed</span><strong>{{ inboxSummary.confirmed }}</strong></li>
+            <li><span>Dismissed</span><strong>{{ inboxSummary.dismissed }}</strong></li>
+            <li><span>Total tasks</span><strong>{{ inboxSummary.all }}</strong></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+{% else %}
+  <div class="card">
+    <div class="card-body border rounded-4 p-4 text-center text-body-secondary">
+      <h5 class="mb-2">Inbox</h5>
+      <p class="mb-0">No pending review tasks yet</p>
+    </div>
+  </div>
+{% endif %}

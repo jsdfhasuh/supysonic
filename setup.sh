@@ -1,5 +1,7 @@
 #!/bin/sh
 
+mkdir -p /log/web /log/daemon
+
 # 启动第一个 Python 程序，并将其放入后台执行
 python /app/run_daemon.py &
 # Check if the socket file exists and remove it

@@ -180,11 +180,7 @@ Sample configuration::
    ; supysonic.log, access.log, task.log, emo.log, scanner.log, api.log and
    ; metadata.log here. At DEBUG level it also writes web.debug.log.
    ; Default: none
-   log_dir = /var/supysonic/logs/web
-
-   ; Optional legacy log file setting. If log_dir is empty, the parent directory of
-   ; log_file is used for the structured web log files above. Default: none
-   ;log_file = /var/supysonic/supysonic.log
+   log_dir = /log/web
 
    ; Number of rotated log files to keep. Default: 7
    log_backup_count = 7
@@ -293,11 +289,7 @@ Sample configuration::
    ; Optional log directory for daemon logs. When set, Supysonic writes
    ; supysonic.log, daemon.log, watcher.log, scanner.log and, at DEBUG level,
    ; daemon.debug.log here. Default: none
-   log_dir = /var/supysonic/logs/daemon
-
-   ; Optional legacy log file for the scanner daemon. Used only when log_dir is
-   ; empty. Logs to stderr if empty. Default: none
-   ;log_file = /var/supysonic/supysonic-daemon.log
+   log_dir = /log/daemon
 
    ; Number of rotated log files to keep. Default: 7
    log_backup_count = 7

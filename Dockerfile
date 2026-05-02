@@ -4,6 +4,9 @@ FROM python:3.11-alpine
 # 设置工作目录
 WORKDIR /app
 
+# 预创建日志目录，方便非挂载场景直接运行
+RUN mkdir -p /log/web /log/daemon
+
 # 安装系统依赖
 RUN apk add --no-cache \
     # 音频处理相关

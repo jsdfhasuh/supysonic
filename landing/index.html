@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="Emosonic Server / Supysonic 分支的静态宣传页，展示自托管音乐流媒体、媒体库整理和 GitHub 项目入口。"
+    >
+    <title>Emosonic Server | 自托管音乐流媒体平台</title>
+    <link rel="preconnect" href="https://github.com">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="pageShell">
+      <header class="heroSection">
+        <div class="heroBackdrop heroBackdropLeft"></div>
+        <div class="heroBackdrop heroBackdropRight"></div>
+
+        <div class="heroTop">
+          <span class="eyebrow">Emosonic Server / Supysonic Branch</span>
+          <div class="tagRow" aria-label="项目标签">
+            <span class="tag">Self-hosted</span>
+            <span class="tag">Flask</span>
+            <span class="tag">Subsonic API</span>
+            <span class="tag">NFO Metadata</span>
+          </div>
+        </div>
+
+        <div class="heroContent">
+          <div class="heroText">
+            <h1>让你的音乐库不止能播放，还能被真正管理起来</h1>
+            <p class="heroLead">
+              Emosonic Server 是面向自托管场景的音乐流媒体与媒体库运维平台，源自 Supysonic，围绕流媒体、封面补全、年份修复、NFO 管理与扩展 API 持续演进。
+            </p>
+
+            <div class="actionRow">
+              <a
+                class="button buttonPrimary"
+                href="https://github.com/jsdfhasuh/supysonic"
+                target="_blank"
+                rel="noopener noreferrer"
+              >查看 Supysonic 分支仓库</a>
+              <a
+                class="button buttonSecondary"
+                href="https://github.com/jsdfhasuh/emosonic"
+                target="_blank"
+                rel="noopener noreferrer"
+              >查看 Emosonic 仓库</a>
+            </div>
+          </div>
+
+          <aside class="heroPanel" aria-label="项目概览">
+            <div class="panelLabel">Project Snapshot</div>
+            <div class="snapshotCard">
+              <span class="snapshotValue">Music</span>
+              <span class="snapshotText">浏览、播放、转码、播放列表与封面展示</span>
+            </div>
+            <div class="snapshotCard">
+              <span class="snapshotValue">Metadata</span>
+              <span class="snapshotText">Spotify / Last.fm / local nfo 驱动的资料补全</span>
+            </div>
+            <div class="snapshotCard">
+              <span class="snapshotValue">Control</span>
+              <span class="snapshotText">适合持续扩展的自托管服务端与运维向能力</span>
+            </div>
+          </aside>
+        </div>
+      </header>
+
+      <main>
+        <section class="factStrip" aria-label="项目事实">
+          <article class="factItem">
+            <span class="factLabel">Framework</span>
+            <strong>Flask</strong>
+            <p>服务端建立在 Flask 上，便于继续开发和扩展。</p>
+          </article>
+          <article class="factItem">
+            <span class="factLabel">Protocol</span>
+            <strong>Subsonic API</strong>
+            <p>可延续现有 Subsonic 生态中的客户端与接口习惯。</p>
+          </article>
+          <article class="factItem">
+            <span class="factLabel">Deploy</span>
+            <strong>Docker First</strong>
+            <p>当前 README 建议通过 Docker 部署，便于快速启动服务。</p>
+          </article>
+          <article class="factItem">
+            <span class="factLabel">Daemon</span>
+            <strong>Watcher Ready</strong>
+            <p>支持守护进程与文件变更监听，适合持续维护媒体库。</p>
+          </article>
+        </section>
+
+        <section class="contentSection">
+          <div class="sectionHeading">
+            <span class="sectionKick">核心能力</span>
+            <h2>围绕音乐库播放、整理和增强做持续扩展</h2>
+          </div>
+
+          <div class="featureGrid">
+            <article class="featureCard">
+              <h3>流媒体与转码</h3>
+              <p>支持音乐库浏览、音频流式播放，以及按需转码。</p>
+            </article>
+            <article class="featureCard">
+              <h3>播放与收藏</h3>
+              <p>提供播放列表、收藏、评分、封面展示等基础音乐服务能力。</p>
+            </article>
+            <article class="featureCard">
+              <h3>第三方集成</h3>
+              <p>可接入 Last.fm、ListenBrainz，并支持 Jukebox 模式。</p>
+            </article>
+            <article class="featureCard">
+              <h3>封面补全</h3>
+              <p>可从 Spotify、Last.fm 等来源补充专辑与艺术家相关图片资源。</p>
+            </article>
+            <article class="featureCard">
+              <h3>年份与资料修复</h3>
+              <p>可补全年份信息，并借助外部数据源与本地资料提升媒体库完整度。</p>
+            </article>
+            <article class="featureCard">
+              <h3>Local NFO 管理</h3>
+              <p>通过本地 NFO 组织专辑与艺术家信息，让媒体库更可控、更整洁。</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="contentSection">
+          <div class="sectionHeading compactHeading">
+            <span class="sectionKick">适用场景</span>
+            <h2>更适合这些明确需求，而不只是“搭一个播放器页面”</h2>
+          </div>
+
+          <div class="scenarioGrid">
+            <article class="scenarioCard">
+              <h3>你已经有本地音乐库</h3>
+              <p>希望把本地音频目录挂进服务端，统一浏览、播放、转码和管理。</p>
+            </article>
+            <article class="scenarioCard">
+              <h3>你希望资料更完整</h3>
+              <p>不仅要歌曲能播，还希望封面、年份、艺术家资料和专辑信息能被持续补全。</p>
+            </article>
+            <article class="scenarioCard">
+              <h3>你更看重可控性</h3>
+              <p>希望使用 local nfo、自定义配置和可扩展 API 管理自己的媒体库，而不是完全交给黑盒应用。</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="contentSection splitSection">
+          <div class="sectionHeading compactHeading">
+            <span class="sectionKick">为什么值得挂到你的栈里</span>
+            <h2>不是一个只会播歌的页面，而是一套面向自托管的音乐服务底座</h2>
+          </div>
+
+          <div class="valueGrid">
+            <article class="valueCard">
+              <span class="valueIndex">01</span>
+              <h3>建立在现成生态上</h3>
+              <p>基于 Flask 与 Subsonic API，方便延续现有客户端和服务端使用习惯。</p>
+            </article>
+            <article class="valueCard">
+              <span class="valueIndex">02</span>
+              <h3>媒体库维护不是附属功能</h3>
+              <p>封面、年份、艺术家资料和 NFO 组织能力被放进了主工作流里，而不是事后补丁。</p>
+            </article>
+            <article class="valueCard">
+              <span class="valueIndex">03</span>
+              <h3>更适合继续扩展</h3>
+              <p>在 Supysonic 基础上继续演进，围绕 API、扫描器、前端体验和运维能力持续扩展。</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="contentSection quickstartSection">
+          <div class="sectionHeading compactHeading">
+            <span class="sectionKick">快速开始</span>
+            <h2>如果你只想尽快跑起来，先从当前仓库里的 Docker 方式开始</h2>
+          </div>
+
+          <div class="quickstartLayout">
+            <div class="quickstartIntro">
+              <p>
+                仓库当前文档建议优先使用 Docker 部署。下面这组步骤适合第一次快速启动，再根据你的音乐目录、配置文件和端口需求继续调整。
+              </p>
+              <ol class="stepList">
+                <li>准备配置文件，把 <code>config.sample</code> 复制或改名为 <code>supysonic.conf</code>。</li>
+                <li>构建镜像。</li>
+                <li>挂载音乐目录与配置文件，启动容器。</li>
+                <li>按你的环境继续补充用户、媒体库和扫描配置。</li>
+              </ol>
+            </div>
+
+            <div class="codePanel" aria-label="Docker quickstart example">
+              <pre><code>git clone https://github.com/jsdfhasuh/supysonic
+cd supysonic
+cp config.sample supysonic.conf
+
+docker build -t supysonic .
+
+docker run -d \
+  -p 5000:5000 \
+  -v /path/to/your/music:/music \
+  -v /path/to/your/supysonic.conf:/app/supysonic.conf \
+  supysonic</code></pre>
+            </div>
+          </div>
+        </section>
+
+        <section class="contentSection">
+          <div class="sectionHeading compactHeading">
+            <span class="sectionKick">技术基底</span>
+            <h2>页面外观背后，是一组明确可见的服务能力与集成方向</h2>
+          </div>
+
+          <div class="stackGrid">
+            <div class="stackItem">Flask Web Server</div>
+            <div class="stackItem">Subsonic API</div>
+            <div class="stackItem">Scanner + Watcher</div>
+            <div class="stackItem">Docker Deployment</div>
+            <div class="stackItem">Last.fm</div>
+            <div class="stackItem">ListenBrainz</div>
+            <div class="stackItem">Spotify Metadata Enrichment</div>
+            <div class="stackItem">Local NFO Workflow</div>
+            <div class="stackItem">Jukebox Mode</div>
+          </div>
+        </section>
+
+        <section class="contentSection faqSection">
+          <div class="sectionHeading compactHeading">
+            <span class="sectionKick">FAQ</span>
+            <h2>先回答几个最容易在第一次了解项目时出现的问题</h2>
+          </div>
+
+          <div class="faqList">
+            <details class="faqItem" open>
+              <summary>这是一个自托管项目吗？</summary>
+              <div class="faqAnswer">
+                是。页面中的所有描述都围绕自托管场景展开，当前仓库也提供了配置文件、守护进程、扫描器和 Docker 部署方式。
+              </div>
+            </details>
+
+            <details class="faqItem">
+              <summary>可以直接用 Docker 部署吗？</summary>
+              <div class="faqAnswer">
+                可以。当前 README 明确建议优先通过 Docker 部署，仓库中也提供了 <code>Dockerfile</code> 与启动脚本。
+              </div>
+            </details>
+
+            <details class="faqItem">
+              <summary>它和 Subsonic 生态是什么关系？</summary>
+              <div class="faqAnswer">
+                当前项目建立在 Subsonic API 之上，源自 Supysonic，并在此基础上继续扩展服务端能力与 Emosonic 相关功能。
+              </div>
+            </details>
+
+            <details class="faqItem">
+              <summary>除了播放之外，它还重点解决什么问题？</summary>
+              <div class="faqAnswer">
+                重点还包括媒体库维护，例如封面补全、年份修复、艺术家资料补全、local nfo 组织，以及扫描与 watcher 驱动的目录维护流程。
+              </div>
+            </details>
+
+            <details class="faqItem">
+              <summary>项目源码和扩展仓库在哪里看？</summary>
+              <div class="faqAnswer">
+                页面里的两个 GitHub 按钮分别直达 <code>jsdfhasuh/supysonic</code> 和 <code>jsdfhasuh/emosonic</code>，适合查看源码、README 和提交记录。
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="contentSection updateSection">
+          <div class="sectionHeading compactHeading">
+            <span class="sectionKick">更新日志 / 路线图</span>
+            <h2>一边看最近做了什么，一边看项目接下来更可能往哪走</h2>
+          </div>
+
+          <div class="updateLayout">
+            <div>
+              <h3 class="subsectionTitle">近期更新</h3>
+              <div class="timelineList">
+                <article class="timelineItem">
+                  <div class="timelineMeta">0f04d13</div>
+                  <h4>注册流程问题修复</h4>
+                  <p>最近一次提交聚焦注册相关问题修复，说明用户接入链路仍在继续打磨。</p>
+                </article>
+                <article class="timelineItem">
+                  <div class="timelineMeta">d5c088e</div>
+                  <h4>运行时切换到 gevent</h4>
+                  <p>Emosonic Server 运行时已切换到 gevent，部署与运行模式继续朝可用性方向推进。</p>
+                </article>
+                <article class="timelineItem">
+                  <div class="timelineMeta">398d1c9</div>
+                  <h4>前端和管理工具刷新</h4>
+                  <p>近期提交包含 Emosonic 前端与管理工具刷新，说明项目并不只停留在 API 层。</p>
+                </article>
+                <article class="timelineItem">
+                  <div class="timelineMeta">b381247</div>
+                  <h4>实时队列与播放状态路由</h4>
+                  <p>实时队列和播放状态相关能力已经进入代码历史，说明控制与实时交互是当前扩展重点之一。</p>
+                </article>
+                <article class="timelineItem">
+                  <div class="timelineMeta">2cbc656 / 43c9de8</div>
+                  <h4>扩展 API 与 Emosonic 入口</h4>
+                  <p>较早一批提交已经开始引入 recommend API 和 emo API 方向，为后续功能扩展打下基础。</p>
+                </article>
+              </div>
+            </div>
+
+            <div>
+              <h3 class="subsectionTitle">路线图</h3>
+              <div class="roadmapGrid">
+                <article class="roadmapItem">
+                  <span class="roadmapState">README 待实现</span>
+                  <h4>Web 端音乐库管理</h4>
+                  <p>README 已明确写出这一方向，说明后续重点之一是让媒体库管理更多地在 Web 界面内完成。</p>
+                </article>
+                <article class="roadmapItem">
+                  <span class="roadmapState">README 待实现</span>
+                  <h4>Web 分享页面</h4>
+                  <p>分享页面仍在待实现列表中，意味着项目未来可能继续补足对外展示和链接分享能力。</p>
+                </article>
+                <article class="roadmapItem">
+                  <span class="roadmapState">README 待实现</span>
+                  <h4>专属播放软件</h4>
+                  <p>README 已列出 PC / 移动端专属播放软件方向，适合作为更完整客户端体验的长期目标。</p>
+                </article>
+                <article class="roadmapItem">
+                  <span class="roadmapState">持续推进</span>
+                  <h4>扫描器与元数据工作流增强</h4>
+                  <p>从当前代码结构整理、扫描器辅助模块拆分和资料补全过程来看，媒体库工作流仍会继续增强。</p>
+                </article>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="contentSection repoSection">
+          <div class="sectionHeading compactHeading">
+            <span class="sectionKick">GitHub</span>
+            <h2>两个项目入口，直接看源码、提交记录和说明</h2>
+          </div>
+
+          <div class="repoGrid">
+            <article class="repoCard">
+              <p class="repoLabel">Repository A</p>
+              <h3>jsdfhasuh / supysonic</h3>
+              <p>
+                查看 Emosonic Server 所依托的 Supysonic 分支实现，了解服务端能力、扫描逻辑、接口扩展和项目演进。
+              </p>
+              <a
+                class="textLink"
+                href="https://github.com/jsdfhasuh/supysonic"
+                target="_blank"
+                rel="noopener noreferrer"
+              >打开仓库</a>
+            </article>
+
+            <article class="repoCard repoCardAccent">
+              <p class="repoLabel">Repository B</p>
+              <h3>jsdfhasuh / emosonic</h3>
+              <p>
+                查看 Emosonic 项目仓库，直接跳转到 GitHub 获取源码、README、发布记录和后续更新。
+              </p>
+              <a
+                class="textLink"
+                href="https://github.com/jsdfhasuh/emosonic"
+                target="_blank"
+                rel="noopener noreferrer"
+              >打开仓库</a>
+            </article>
+          </div>
+        </section>
+      </main>
+
+      <footer class="siteFooter">
+        <p>
+          Emosonic Server 基于 Supysonic 演进，面向自托管音乐服务场景持续扩展。页面中的全部按钮均直接跳转到 GitHub 仓库，方便查看源码与项目说明。
+        </p>
+      </footer>
+    </div>
+  </body>
+</html>

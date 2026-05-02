@@ -1,0 +1,574 @@
+:root {
+  color-scheme: dark;
+  --pageBg: #07111f;
+  --pageBgAlt: #0d1830;
+  --panelBg: rgba(10, 18, 34, 0.82);
+  --panelBorder: rgba(124, 157, 255, 0.18);
+  --textMain: #f4f7ff;
+  --textMuted: #aab7d6;
+  --accentBlue: #78a8ff;
+  --accentPink: #ff6fcf;
+  --accentMint: #63f1d6;
+  --shadowMain: 0 24px 80px rgba(0, 0, 0, 0.34);
+  --radiusLarge: 28px;
+  --radiusMedium: 18px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: Inter, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  color: var(--textMain);
+  background:
+    radial-gradient(circle at top left, rgba(255, 111, 207, 0.18), transparent 28%),
+    radial-gradient(circle at top right, rgba(120, 168, 255, 0.22), transparent 32%),
+    linear-gradient(180deg, #08111f 0%, #0a1326 45%, #050b15 100%);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.pageShell {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 32px 0 56px;
+}
+
+.heroSection,
+.contentSection,
+.factStrip,
+.siteFooter {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--panelBorder);
+  background: var(--panelBg);
+  backdrop-filter: blur(20px);
+  box-shadow: var(--shadowMain);
+}
+
+.heroSection {
+  padding: 32px;
+  border-radius: 36px;
+}
+
+.factStrip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 24px;
+  padding: 16px;
+  border-radius: 26px;
+}
+
+.heroBackdrop {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(10px);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.heroBackdropLeft {
+  top: -80px;
+  left: -40px;
+  width: 240px;
+  height: 240px;
+  background: radial-gradient(circle, rgba(255, 111, 207, 0.42), transparent 70%);
+}
+
+.heroBackdropRight {
+  right: -20px;
+  bottom: -80px;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(99, 241, 214, 0.24), transparent 70%);
+}
+
+.heroTop,
+.heroContent,
+.contentSection,
+.siteFooter {
+  position: relative;
+  z-index: 1;
+}
+
+.eyebrow,
+.sectionKick,
+.panelLabel,
+.repoLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accentMint);
+}
+
+.tagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.tag {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(120, 168, 255, 0.18);
+  background: rgba(120, 168, 255, 0.08);
+  color: var(--textMuted);
+  font-size: 0.94rem;
+}
+
+.heroContent {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.8fr);
+  gap: 28px;
+  align-items: stretch;
+  margin-top: 28px;
+}
+
+.heroText h1 {
+  margin: 0;
+  max-width: 11ch;
+  font-size: clamp(2.8rem, 6vw, 5.6rem);
+  line-height: 0.94;
+  letter-spacing: -0.05em;
+}
+
+.heroLead {
+  max-width: 680px;
+  margin: 24px 0 0;
+  color: var(--textMuted);
+  font-size: 1.08rem;
+  line-height: 1.8;
+}
+
+.actionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 28px;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 0 20px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-weight: 700;
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.button:hover,
+.button:focus-visible,
+.textLink:hover,
+.textLink:focus-visible {
+  transform: translateY(-2px);
+}
+
+.button:focus-visible,
+.textLink:focus-visible {
+  outline: 2px solid rgba(99, 241, 214, 0.9);
+  outline-offset: 3px;
+}
+
+.buttonPrimary {
+  background: linear-gradient(135deg, var(--accentBlue), #8e8bff);
+  color: #08111f;
+}
+
+.buttonSecondary {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--textMain);
+}
+
+.heroPanel {
+  padding: 22px;
+  border-radius: var(--radiusLarge);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.03)),
+    rgba(12, 18, 32, 0.88);
+}
+
+.snapshotCard {
+  display: grid;
+  gap: 6px;
+  padding: 18px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.snapshotCard:first-of-type {
+  margin-top: 12px;
+}
+
+.snapshotValue {
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.snapshotText,
+.featureCard p,
+.valueCard p,
+.repoCard p,
+.siteFooter p {
+  color: var(--textMuted);
+  line-height: 1.75;
+}
+
+.contentSection {
+  margin-top: 24px;
+  padding: 28px;
+  border-radius: 30px;
+}
+
+.factItem,
+.scenarioCard,
+.codePanel,
+.stackItem {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.factItem {
+  padding: 18px;
+  border-radius: 18px;
+}
+
+.factLabel {
+  display: block;
+  color: var(--accentMint);
+  font-size: 0.76rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.factItem strong {
+  display: block;
+  margin-top: 12px;
+  font-size: 1.2rem;
+  letter-spacing: -0.03em;
+}
+
+.factItem p {
+  margin: 10px 0 0;
+  color: var(--textMuted);
+  line-height: 1.65;
+}
+
+.sectionHeading h2 {
+  margin: 10px 0 0;
+  font-size: clamp(1.7rem, 2.8vw, 2.8rem);
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+}
+
+.compactHeading h2 {
+  max-width: 16ch;
+}
+
+.featureGrid,
+.valueGrid,
+.repoGrid,
+.scenarioGrid,
+.stackGrid,
+.quickstartLayout,
+.updateLayout,
+.faqList,
+.timelineList,
+.roadmapGrid {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.featureGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.valueGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.repoGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.scenarioGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.quickstartLayout {
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  align-items: stretch;
+}
+
+.stackGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.updateLayout {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.faqList,
+.timelineList,
+.roadmapGrid {
+  grid-template-columns: 1fr;
+}
+
+.featureCard,
+.valueCard,
+.repoCard,
+.scenarioCard {
+  min-height: 100%;
+  padding: 22px;
+  border-radius: var(--radiusMedium);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.featureCard h3,
+.valueCard h3,
+.repoCard h3,
+.scenarioCard h3 {
+  margin: 0;
+  font-size: 1.18rem;
+  letter-spacing: -0.03em;
+}
+
+.featureCard p,
+.valueCard p,
+.repoCard p,
+.scenarioCard p,
+.quickstartIntro p {
+  margin: 12px 0 0;
+}
+
+.quickstartIntro {
+  padding-right: 8px;
+}
+
+.stepList {
+  margin: 18px 0 0;
+  padding-left: 20px;
+  color: var(--textMuted);
+  line-height: 1.8;
+}
+
+.stepList li + li {
+  margin-top: 8px;
+}
+
+.subsectionTitle {
+  margin: 0;
+  font-size: 1.22rem;
+  letter-spacing: -0.03em;
+}
+
+.faqItem,
+.timelineItem,
+.roadmapItem {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 18px;
+}
+
+.faqItem {
+  overflow: hidden;
+}
+
+.faqItem summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 18px 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.faqItem summary::-webkit-details-marker {
+  display: none;
+}
+
+.faqItem summary::after {
+  content: "+";
+  float: right;
+  color: var(--accentBlue);
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.faqItem[open] summary::after {
+  content: "-";
+}
+
+.faqAnswer {
+  padding: 0 22px 20px;
+  color: var(--textMuted);
+  line-height: 1.75;
+}
+
+.timelineItem,
+.roadmapItem {
+  padding: 20px;
+}
+
+.timelineMeta,
+.roadmapState {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(120, 168, 255, 0.1);
+  color: var(--accentMint);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.timelineItem h4,
+.roadmapItem h4 {
+  margin: 14px 0 0;
+  font-size: 1.08rem;
+  letter-spacing: -0.02em;
+}
+
+.timelineItem p,
+.roadmapItem p {
+  margin: 12px 0 0;
+  color: var(--textMuted);
+  line-height: 1.75;
+}
+
+.codePanel {
+  overflow: auto;
+  padding: 20px;
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(120, 168, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(11, 17, 31, 0.9);
+}
+
+.codePanel pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.codePanel code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  color: #dce7ff;
+  font-size: 0.96rem;
+  line-height: 1.85;
+}
+
+.stackItem {
+  display: flex;
+  align-items: center;
+  min-height: 84px;
+  padding: 18px;
+  border-radius: 18px;
+  color: var(--textMain);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.valueIndex {
+  display: inline-block;
+  margin-bottom: 18px;
+  color: var(--accentPink);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.repoCardAccent {
+  background:
+    linear-gradient(135deg, rgba(120, 168, 255, 0.1), rgba(255, 111, 207, 0.08)),
+    rgba(255, 255, 255, 0.03);
+}
+
+.textLink {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 20px;
+  color: var(--accentBlue);
+  font-weight: 700;
+}
+
+.siteFooter {
+  margin-top: 24px;
+  padding: 22px 26px;
+  border-radius: 24px;
+}
+
+.siteFooter p {
+  margin: 0;
+}
+
+@media (max-width: 980px) {
+  .factStrip,
+  .heroContent,
+  .featureGrid,
+  .valueGrid,
+  .repoGrid,
+  .scenarioGrid,
+  .stackGrid,
+  .quickstartLayout,
+  .updateLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .heroText h1 {
+    max-width: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .pageShell {
+    width: min(100% - 20px, 1180px);
+    padding: 18px 0 36px;
+  }
+
+  .heroSection,
+  .factStrip,
+  .contentSection,
+  .siteFooter {
+    padding: 20px;
+    border-radius: 22px;
+  }
+
+  .heroContent {
+    gap: 20px;
+    margin-top: 22px;
+  }
+
+  .heroLead {
+    font-size: 1rem;
+  }
+
+  .actionRow {
+    flex-direction: column;
+  }
+
+  .button {
+    width: 100%;
+  }
+}

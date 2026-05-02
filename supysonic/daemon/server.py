@@ -15,6 +15,7 @@ from .client import DaemonCommand
 from ..db import Folder, open_connection, close_connection
 from ..jukebox import Jukebox
 from ..logging_utils import format_log_event
+from ..recommend import getRecommendationDay, refreshDailyRecommendPlaylists
 from ..scanner import Scanner
 from ..utils import get_secret_key
 from ..watcher import SupysonicWatcher
@@ -31,6 +32,8 @@ class Daemon:
         self.__watcher = None
         self.__scanner = None
         self.__jukebox = None
+        self.__recommendRefreshThread = None
+        self.__lastRecommendRefreshDay = None
         self.__stopped = Event()
 
     watcher = property(lambda self: self.__watcher)
@@ -70,6 +73,19 @@ class Daemon:
         close_connection()
 
         Thread(target=self.__listen).start()
+        if self.__config.DAEMON.get("recommend_daily_refresh", True):
+            self.__recommendRefreshThread = Thread(
+                target=self.__run_recommend_refresh_loop,
+                daemon=True,
+            )
+            self.__recommendRefreshThread.start()
+            logger.info(
+                format_log_event(
+                    "daemon",
+                    "recommend_refresh_scheduler_started",
+                    interval=self.__get_recommend_refresh_interval(),
+                )
+            )
         while not self.__stopped.is_set():
             time.sleep(1)
             
@@ -81,6 +97,61 @@ class Daemon:
             self.__handle_connection(conn)
 
         self.__listener.close()
+
+    def __get_recommend_refresh_interval(self):
+        return max(60, int(self.__config.DAEMON.get("recommend_refresh_interval", 300)))
+
+    def __get_recommend_playlist_size(self):
+        return max(1, int(self.__config.DAEMON.get("recommend_playlist_size", 50)))
+
+    def __refresh_recommend_playlists_if_needed(self, current_day=None):
+        recommendationDay = getRecommendationDay() if current_day is None else current_day
+        if recommendationDay == self.__lastRecommendRefreshDay:
+            return False
+
+        opened = False
+        try:
+            opened = open_connection(True)
+            logger.info(
+                format_log_event(
+                    "daemon",
+                    "recommend_refresh_started",
+                    day=recommendationDay,
+                )
+            )
+            createdCount = refreshDailyRecommendPlaylists(
+                num_songs=self.__get_recommend_playlist_size(),
+                day=recommendationDay,
+            )
+            self.__lastRecommendRefreshDay = recommendationDay
+            logger.info(
+                format_log_event(
+                    "daemon",
+                    "recommend_refresh_completed",
+                    day=recommendationDay,
+                    created=createdCount,
+                )
+            )
+            return True
+        except Exception as exc:
+            logger.exception(
+                format_log_event(
+                    "daemon",
+                    "recommend_refresh_failed",
+                    day=recommendationDay,
+                    error_type=exc.__class__.__name__,
+                )
+            )
+            return False
+        finally:
+            if opened:
+                close_connection()
+
+    def __run_recommend_refresh_loop(self):
+        interval = self.__get_recommend_refresh_interval()
+        while not self.__stopped.is_set():
+            self.__refresh_recommend_playlists_if_needed()
+            self.__stopped.wait(interval)
 
     def start_scan(self, folders=[], force=False):
         logger.info(
@@ -154,5 +225,7 @@ class Daemon:
             self.__scanner.join()
         if self.__watcher is not None:
             self.__watcher.stop()
+        if self.__recommendRefreshThread is not None:
+            self.__recommendRefreshThread.join()
         if self.__jukebox is not None:
             self.__jukebox.terminate()

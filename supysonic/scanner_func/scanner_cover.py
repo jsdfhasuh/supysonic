@@ -170,7 +170,25 @@ def repairAlbumCover(
 
     trace_details.append("folder cover lookup: miss")
 
-    cover = mediafile.MediaFile(track.path).art
+    if not os.path.exists(track.path):
+        logTrace(
+            trace_logger,
+            "ALBUM_COVER_TRACE",
+            trace_header,
+            trace_details + ["embedded artwork: track path missing"],
+        )
+        return
+
+    try:
+        cover = mediafile.MediaFile(track.path).art
+    except mediafile.UnreadableFileError:
+        logTrace(
+            trace_logger,
+            "ALBUM_COVER_TRACE",
+            trace_header,
+            trace_details + ["embedded artwork: unreadable track file"],
+        )
+        return
     if cover:
         image_path = os.path.join(
             scanner.scan_config.BASE['tempdatafolder'], "album", f"{album.name}.png"

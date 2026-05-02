@@ -6,15 +6,19 @@
 # Distributed under terms of the GNU AGPLv3 license.
 
 import uuid
+import time
 
 from flask import request
 
 from ..db import Playlist, User, Track, db, StarredTrack, random
-from ..TaskManger import get_task_manager, TaskManager
-from ..recommend import create_recommend_playlist
+from ..recommend import (
+    LEGACY_RECOMMENDED_PLAYLIST_COMMENT,
+    RECOMMENDED_PLAYLIST_COMMENT,
+    getLatestRecommendedPlaylist,
+    getRecommendedPlaylistForDay,
+)
 from . import get_entity, api_routing
 from .exceptions import Forbidden, MissingParameter
-import time
 import logging
 
 logger = logging.getLogger(__name__)
@@ -63,7 +67,7 @@ def list_playlists():
     for playlist in temp_temp:
         comment = playlist.get("comment", "")
         # remove recommended playlist from the list if exist, since it will be returned by getRecommendedPlaylists API
-        if comment == "recommend":
+        if comment in (RECOMMENDED_PLAYLIST_COMMENT, LEGACY_RECOMMENDED_PLAYLIST_COMMENT):
             temp.remove(playlist)
     return request.formatter(
         "playlists",
@@ -193,37 +197,17 @@ def update_playlist():
 @api_routing("/getRecommendedPlaylists")
 def get_recommended_playlists():
     user = request.user
-    today = time.strftime('%Y-%m-%d', time.gmtime())
-    today_playlist = (
-        Playlist.select()
-        .where(
-            (Playlist.user == user)
-            & (Playlist.name == f"{user.name}'s {today} recommend playlist")
-        )
-        .first()
-    )
-    if not today_playlist and user:
-        logger.info(f"Submitting task to create recommend playlist for user {user.name}")
-        TaskManager_instance = get_task_manager()
-        task_id = f"create_recommend_playlist_{user.id}_{today}"
-        TaskManager_instance.submit_task(
-            task_id=task_id, func=create_recommend_playlist, num_songs=50, user=user
-        )
     if not user:
         raise Forbidden()
-    recommended_playlist = (
-        today_playlist
-        if today_playlist
-        else Playlist.select()
-        .where((Playlist.user == user) & (Playlist.comment == "recommended"))
-        .order_by(Playlist.created.desc())
-        .first()
-    )
+    recommended_playlist = getRecommendedPlaylistForDay(user)
+    if recommended_playlist is None:
+        recommended_playlist = getLatestRecommendedPlaylist(user)
     if recommended_playlist:
-        info = recommended_playlist.as_subsonic_playlist(request.user)
+        recommended_tracks = recommended_playlist.get_tracks()
+        info = recommended_playlist.as_subsonic_playlist(request.user, tracks=recommended_tracks)
         info["entry"] = [
             t.as_subsonic_child(request.user, request.client)
-            for t in recommended_playlist.get_tracks()
+            for t in recommended_tracks
         ]
         return request.formatter("playlist", info)
     else:

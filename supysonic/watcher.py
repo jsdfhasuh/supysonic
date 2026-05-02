@@ -153,9 +153,9 @@ class ScannerProcessingQueue(Thread):
         while self.__running:
             time.sleep(0.1)
             with self.__cond:
-                # Flag might have flipped during sleep. Check it again before waiting
-                # See issue #263
-                if self.__running:
+                # If a timer fired while the thread was still processing the previous
+                # batch, the notify is gone but the queue is already populated.
+                while self.__running and not self.__queue:
                     self.__cond.wait()
 
                 if not self.__queue:
@@ -165,19 +165,18 @@ class ScannerProcessingQueue(Thread):
             open_connection()
             scanner = Scanner()
 
-            item = self.__next_item()
             find_lost_information_flag = False
-            while item:
-                if item.operation & FLAG_COVER:
-                    self.__process_cover_item(scanner, item)
-                elif item.operation & FLAG_NFO:
-                    self.__process_nfo_item(scanner, item)
-                else:
-                    self.__process_regular_item(scanner, item)
-                    find_lost_information_flag = True
-                # 检查队列是否已空
-                with self.__cond:
-                    if not self.__queue and find_lost_information_flag:
+            while True:
+                item = self.__next_item()
+                if item is None:
+                    with self.__cond:
+                        queue_empty = not self.__queue
+
+                    if not queue_empty:
+                        time.sleep(0.05)
+                        continue
+
+                    if find_lost_information_flag:
                         logger.info("Beginging cover scan")
                         scanner.find_lost_information()
                         createAlbumReviewTasks(scanner)
@@ -199,7 +198,15 @@ class ScannerProcessingQueue(Thread):
                             logger.info(
                                 f"album lost year: {album} - {stats.lost_year_albums[album]}"
                             )
-                item = self.__next_item()
+                    break
+
+                if item.operation & FLAG_COVER:
+                    self.__process_cover_item(scanner, item)
+                elif item.operation & FLAG_NFO:
+                    self.__process_nfo_item(scanner, item)
+                else:
+                    self.__process_regular_item(scanner, item)
+                    find_lost_information_flag = True
             scanner.prune()
             close_connection()
             logger.debug("Freeing scanner")

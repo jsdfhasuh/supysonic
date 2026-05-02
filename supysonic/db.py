@@ -34,7 +34,7 @@ from uuid import UUID, uuid4
 from PIL import Image as PILImage
 from .tool import read_dict_from_json
 
-SCHEMA_VERSION = "20260429"
+SCHEMA_VERSION = "20260502"
 
 
 def now():
@@ -787,8 +787,8 @@ class Playlist(_Model):
     created = DateTimeField(default=now)
     tracks = TextField(null=True)
 
-    def as_subsonic_playlist(self, user):
-        tracks = self.get_tracks()
+    def as_subsonic_playlist(self, user, tracks=None):
+        tracks = self.get_tracks() if tracks is None else tracks
         first_track = tracks[0] if tracks else None
         first_album = first_track.album if first_track else None
         info = {

@@ -14,13 +14,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS index_folder_path ON folder(path_hash);
 
 CREATE TABLE IF NOT EXISTS artist (
     id CHAR(36) PRIMARY KEY,
-    name VARCHAR(256) NOT NULL COLLATE NOCASE
+    name VARCHAR(256) NOT NULL COLLATE NOCASE,
+    artist_info_json VARCHAR(4096),
+    real_artist_id CHAR(36) REFERENCES artist
 );
 
 CREATE TABLE IF NOT EXISTS album (
     id CHAR(36) PRIMARY KEY,
     name VARCHAR(256) NOT NULL COLLATE NOCASE,
-    artist_id CHAR(36) NOT NULL REFERENCES artist
+    artist_id CHAR(36) NOT NULL REFERENCES artist,
+    year VARCHAR(255)
 );
 CREATE INDEX IF NOT EXISTS index_album_artist_id_fk ON album(artist_id);
 
@@ -150,6 +153,15 @@ CREATE TABLE IF NOT EXISTS playlist (
     tracks TEXT
 );
 CREATE INDEX IF NOT EXISTS index_playlist_user_id_fk ON playlist(user_id);
+
+CREATE TABLE IF NOT EXISTS user_play_activity (
+    id CHAR(36) PRIMARY KEY,
+    track_id CHAR(36) NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    user_id CHAR(36) NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+    time DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS index_activity_user_id_fk ON user_play_activity(user_id);
+CREATE INDEX IF NOT EXISTS index_activity_track_id_fk ON user_play_activity(track_id);
 
 CREATE TABLE IF NOT EXISTS emo_session_queue (
     id CHAR(36) PRIMARY KEY,

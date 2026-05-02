@@ -251,7 +251,12 @@ class AudioWatcherTestCase(WatcherTestCase):
 
         newpath = self._temppath(".mp3")
         shutil.move(path, newpath)
-        self._sleep()
+        self.assertTrue(
+            self._wait_until(
+                lambda: Track.select().count() == 1
+                and Track.select().first().path == newpath
+            )
+        )
 
         track = Track.select().first()
         self.assertIsNotNone(track)
@@ -337,6 +342,12 @@ class AudioWatcherTestCase(WatcherTestCase):
 
 class CoverWatcherTestCase(WatcherTestCase):
     def assertAlbumCoverImageEqual(self, expected_path):
+        self.assertTrue(
+            self._wait_until(
+                lambda: Image.select().count() == 1
+                and Image.select().first().path == expected_path
+            )
+        )
         self.assertEqual(Image.select().count(), 1)
         self.assertEqual(Image.select().first().path, expected_path)
 

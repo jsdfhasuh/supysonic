@@ -12,6 +12,7 @@ import uuid
 from contextlib import closing
 from io import BytesIO
 from PIL import Image
+from unittest.mock import patch
 
 from supysonic.db import Folder, Artist, Album, Track
 
@@ -189,6 +190,16 @@ class MediaTestCase(ApiTestBase):
 
     def test_get_avatar(self):
         self._make_request("getAvatar", error=0)
+
+    def test_get_cover_art_does_not_print_debug_output(self):
+        args = {"u": "alice", "p": "Alic3", "c": "tests", "id": str(self.folderid)}
+
+        with patch("builtins.print") as print_mock, closing(
+            self.client.get("/rest/getCoverArt.view", query_string=args)
+        ) as rv:
+            self.assertEqual(rv.status_code, 200)
+
+        print_mock.assert_not_called()
 
 
 if __name__ == "__main__":

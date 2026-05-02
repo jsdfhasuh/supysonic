@@ -8,6 +8,8 @@
 import time
 import unittest
 
+from unittest.mock import patch
+
 from supysonic.db import Folder, Artist, Album, Track
 
 from .apitestbase import ApiTestBase
@@ -419,6 +421,15 @@ class SearchTestCase(ApiTestBase):
             "search3", {"query": "One", "musicFolderId": 2}, tag="searchResult3"
         )
         self.assertEqual(len(self._xpath(child, "./song")), 0)
+
+    def test_search3_does_not_print_debug_output(self):
+        with patch("builtins.print") as print_mock:
+            _, child = self._make_request(
+                "search3", {"query": "Artist"}, tag="searchResult3"
+            )
+
+        self.assertEqual(len(self._xpath(child, "./artist")), 1)
+        print_mock.assert_not_called()
 
 
 if __name__ == "__main__":

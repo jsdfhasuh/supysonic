@@ -83,7 +83,17 @@ class EmoWebSocketTestCase(unittest.TestCase):
 
   def get_messages(self, client):
     events = client.get_received("/emo")
-    return [item["args"][0] for item in events if item["name"] == "message"]
+    messages = []
+    for item in events:
+      if item["name"] != "message":
+        continue
+
+      args = item.get("args")
+      if isinstance(args, list):
+        messages.append(args[0])
+      else:
+        messages.append(args)
+    return messages
 
   def subscribe_session(self, client, session_id, request_id="subscribe-1"):
     client.emit(

@@ -59,6 +59,12 @@ def list_playlists():
         }
     temp = [p.as_subsonic_playlist(request.user) for p in query]
     temp.insert(0, favourite_playlist)
+    temp_temp = temp.copy()
+    for playlist in temp_temp:
+        comment = playlist.get("comment", "")
+        # remove recommended playlist from the list if exist, since it will be returned by getRecommendedPlaylists API
+        if comment == "recommend":
+            temp.remove(playlist)
     return request.formatter(
         "playlists",
         {"playlist": temp},

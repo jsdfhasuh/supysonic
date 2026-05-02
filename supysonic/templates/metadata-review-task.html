@@ -107,6 +107,8 @@
     const reviewStatusSummary = document.querySelector('[data-review-summary-status]');
     const reviewStatusChips = document.querySelectorAll('.metadata-review-hero .console-chip.text-uppercase');
     const artistSuggestionsUrl = '{{ url_for("frontend.metadata_artist_suggestions") }}';
+    const metadataInboxUrl = '{{ url_for("frontend.metadata", tab="inbox") }}';
+    const confirmWritebackMessage = 'Confirm this review task and write the current metadata to album.nfo?';
     let activeArtistAutocomplete = null;
 
     function isReviewEditable() {
@@ -422,6 +424,9 @@
         if (!isReviewEditable()) {
           return;
         }
+        if (button.dataset.reviewTaskLabel === 'confirm' && !window.confirm(confirmWritebackMessage)) {
+          return;
+        }
         const activeTab = getActiveReviewTab();
         const response = await fetch(`${button.dataset.reviewTaskAction}?section=${activeTab}`, {
           method: 'POST',
@@ -429,6 +434,10 @@
         });
         try {
           const payload = await parseReviewResponse(response, `Failed to ${button.dataset.reviewTaskLabel} task`);
+          if (button.dataset.reviewTaskLabel === 'confirm') {
+            window.location.assign(metadataInboxUrl);
+            return;
+          }
           showReviewFeedback(payload.message || 'Review task updated', false);
           applyResolvedReviewTaskState(payload.task_status || button.dataset.reviewTaskLabel);
         } catch (error) {

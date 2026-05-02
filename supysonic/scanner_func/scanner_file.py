@@ -17,6 +17,24 @@ if TYPE_CHECKING:
     from ..scanner import Scanner
 
 
+def _coerceArtistList(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        values = [value]
+    elif isinstance(value, (list, tuple, set)):
+        values = list(value)
+    else:
+        values = [value]
+
+    artists = []
+    for item in values:
+        artist = sanitizeString(item)
+        if artist:
+            artists.append(artist)
+    return artists
+
+
 def getScanTargetInfo(path_or_direntry: Union[str, os.DirEntry]) -> Optional[ScanTarget]:
     if isinstance(path_or_direntry, str):
         path = path_or_direntry
@@ -58,11 +76,17 @@ def resolveAlbumContext(
     album_info_path = os.path.join(os.path.dirname(path), "album.nfo")
     nfo_data = readNfo(album_info_path)
     raw = getattr(tag, "mgfile", {})
-    raw_artists = raw.get("artist", [])
-    raw_albumartists = raw.get("albumartist", [])
+    raw_artists = _coerceArtistList(raw.get("artist", [])) if hasattr(raw, "get") else []
+    raw_albumartists = _coerceArtistList(raw.get("albumartist", [])) if hasattr(raw, "get") else []
+    if not raw_artists:
+        raw_artists = _coerceArtistList(getattr(tag, "artists", None) or getattr(tag, "artist", None))
+    if not raw_albumartists:
+        raw_albumartists = _coerceArtistList(
+            getattr(tag, "albumartists", None) or getattr(tag, "albumartist", None)
+        )
     album_section = nfo_data.get("album", {})
-    album_artists = album_section.get("albumartist", []) or raw_albumartists or ["unknown"]
-    artists = album_section.get("artist", []) or raw_artists or ["unknown"]
+    album_artists = album_section.get("albumartist", []) or raw_albumartists or raw_artists or ["unknown"]
+    artists = album_section.get("artist", []) or raw_artists or raw_albumartists or ["unknown"]
     _, album_id, _ = recordAlbumArtists(scanner, album_artists, sanitizeString(tag.album))
     trace_context = {
         "album_artists": album_artists,
@@ -77,11 +101,15 @@ def resolveAlbumContext(
         trace_context["album_artist_source"] = "album.nfo albumartist"
     elif raw_albumartists:
         trace_context["album_artist_source"] = "tag albumartist"
+    elif raw_artists:
+        trace_context["album_artist_source"] = "tag artist fallback"
 
     if album_section.get("artist", []):
         trace_context["artist_source"] = "album.nfo artist"
     elif raw_artists:
         trace_context["artist_source"] = "tag artist"
+    elif raw_albumartists:
+        trace_context["artist_source"] = "tag albumartist fallback"
 
     return nfo_data, artists, album_id, trace_context
 

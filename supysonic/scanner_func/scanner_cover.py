@@ -8,7 +8,7 @@ from typing import List, Optional, TYPE_CHECKING
 
 import mediafile
 
-from ..covers import CoverFile, find_cover_in_folder
+from ..covers import find_cover_in_folder
 from ..db import Album, Folder, Image, Track
 from ..lastfm import LastFm
 from ..tool import download_image
@@ -20,6 +20,52 @@ if TYPE_CHECKING:
 
 
 module_logger = logging.getLogger(__name__)
+
+
+def _getAlbumCoverQuery(album: Album):
+    return Image.select().where(Image.related_id == album.id, Image.image_type == "album").order_by(Image.id)
+
+
+def _syncFolderCoverArt(folder: Folder, cover_name: Optional[str]) -> None:
+    if folder.cover_art == cover_name:
+        return
+
+    folder.cover_art = cover_name
+    folder.save()
+
+
+def _syncAlbumCoverImage(album: Album, image_path: Optional[str]) -> None:
+    covers = list(_getAlbumCoverQuery(album))
+    primary_cover = covers[0] if covers else None
+
+    for stale_cover in covers[1:]:
+        stale_cover.delete_instance()
+
+    if image_path is None:
+        if primary_cover is not None:
+            primary_cover.delete_instance()
+        return
+
+    if primary_cover is None:
+        Image.create(image_type="album", related_id=album.id, path=image_path)
+        return
+
+    if primary_cover.path != image_path:
+        primary_cover.path = image_path
+        primary_cover.save()
+
+
+def _syncFolderCover(folder: Folder, album: Optional[Album]) -> Optional[str]:
+    album_name = album.name if album is not None else None
+    cover = find_cover_in_folder(folder.path, album_name)
+    cover_name = cover.name if cover else None
+    _syncFolderCoverArt(folder, cover_name)
+
+    if album is not None:
+        image_path = os.path.join(folder.path, cover_name) if cover_name else None
+        _syncAlbumCoverImage(album, image_path)
+
+    return cover_name
 
 
 def collectAlbumsMissingCover(scanner: Scanner) -> List[Album]:
@@ -49,20 +95,10 @@ def findCover(scanner: Scanner, dirpath: str) -> None:
         return
 
     track = folder.tracks.select().first()
-    if track is None:
-        return
+    album = track.album if track is not None else None
 
     # This path handles folder-level cover discovery during scans and watcher updates.
-    album_name = track.album.name
-    album = track.album
-    cover = find_cover_in_folder(folder.path, album_name)
-    if cover:
-        image_path = os.path.join(folder.path, cover.name)
-        Image.get_or_create(
-            image_type="album",
-            related_id=album.id,
-            path=image_path,
-        )
+    _syncFolderCover(folder, album)
 
 
 def addCover(path: str, logger: logging.Logger) -> None:
@@ -75,37 +111,19 @@ def addCover(path: str, logger: logging.Logger) -> None:
         return
 
     track = folder.tracks.select().first()
+    album = None
     if track is not None:
         album = track.album
         if not album:
             logger.error(f"Track {track.path} has no album, cannot add cover")
             return
-    else:
-        logger.error(f"Folder {folder.path} has no tracks, cannot add cover")
-        return
 
     # This path handles a specific cover file being created or updated.
-    cover_name = os.path.basename(path)
-    album_name = track.album.name
-    old_cover = Image.get_or_none(image_type="album", related_id=album.id)
-    if old_cover and os.path.exists(old_cover.path):
-        current_cover = CoverFile(old_cover.path, album_name)
-        new_cover = CoverFile(cover_name, album_name)
-        if new_cover.score > current_cover.score:
-            old_cover.path = path
-            old_cover.save()
-            logger.info(f"Updated cover for album {album_name} with {cover_name}")
+    if not os.path.exists(path):
+        logger.error(f"Cover file {path} does not exist, cannot add cover")
         return
 
-    if os.path.exists(path):
-        Image.create(
-            image_type="album",
-            related_id=album.id,
-            path=path,
-        )
-        logger.info(f"Added cover for album {album_name} with {cover_name}")
-    else:
-        logger.error(f"Cover file {path} does not exist, cannot add cover")
+    _syncFolderCover(folder, album)
 
 
 def markAlbumCoverRestored(scanner: Scanner, album: Album) -> None:

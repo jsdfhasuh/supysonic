@@ -36,6 +36,19 @@ class RemoveWatchedFolder(WatcherCommand):
             daemon.watcher.remove_folder(self._folder)
 
 
+class SuppressNfoPathCommand(DaemonCommand):
+    def __init__(self, path, ttl):
+        self.__path = path
+        self.__ttl = ttl
+
+    def apply(self, connection, daemon):
+        if daemon.watcher is not None:
+            daemon.watcher.suppress_nfo_path(self.__path, self.__ttl)
+            connection.send(True)
+            return
+        connection.send(False)
+
+
 class ScannerCommand(DaemonCommand):
     pass
 
@@ -152,6 +165,13 @@ class DaemonClient:
             raise TypeError("Expecting string, got " + str(type(folder)))
         with self.__get_connection() as c:
             c.send(RemoveWatchedFolder(folder))
+
+    def suppress_nfo_path(self, path, ttl):
+        if not isinstance(path, str):
+            raise TypeError("Expecting string, got " + str(type(path)))
+        with self.__get_connection() as c:
+            c.send(SuppressNfoPathCommand(path, ttl))
+            return c.recv()
 
     def get_scanning_progress(self):
         with self.__get_connection() as c:

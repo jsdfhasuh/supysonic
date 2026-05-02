@@ -3,7 +3,11 @@ import shutil
 import tempfile
 import unittest
 
+from unittest.mock import patch
+
+from supysonic.daemon.exceptions import DaemonUnavailableError
 from supysonic.db import Album, AlbumArtist, AlbumReviewTask, Artist, Folder, Track, TrackArtist, User, db
+from supysonic.nfo.nfo import NfoHandler
 from supysonic.tool import read_dict_from_json
 
 from .frontendtestbase import FrontendTestBase
@@ -15,6 +19,9 @@ class MetadataReviewActionsTestCase(FrontendTestBase):
 
     def setUp(self):
         self.logDir = tempfile.mkdtemp()
+        self.mediaRootDir = tempfile.mkdtemp()
+        self.albumDir = os.path.join(self.mediaRootDir, "album")
+        os.makedirs(self.albumDir)
         TestConfig.WEBAPP = TestConfig.WEBAPP.copy()
         TestConfig.WEBAPP["log_dir"] = self.logDir
         TestConfig.WEBAPP["log_level"] = "INFO"
@@ -45,8 +52,8 @@ class MetadataReviewActionsTestCase(FrontendTestBase):
         with self.client.session_transaction() as session:
             session["userid"] = str(alice.id)
 
-        self.root = Folder.create(root=True, name="Root", path="/tmp/root")
-        self.folder = Folder.create(root=False, name="Album", path="/tmp/root/album", parent=self.root)
+        self.root = Folder.create(root=True, name="Root", path=self.mediaRootDir)
+        self.folder = Folder.create(root=False, name="Album", path=self.albumDir, parent=self.root)
         self.artist = Artist.create(name="Review Artist")
         self.album = Album.create(name="Review Album", artist=self.artist, year="2024")
         self.track = Track.create(
@@ -58,7 +65,7 @@ class MetadataReviewActionsTestCase(FrontendTestBase):
             album=self.album,
             artist=self.artist,
             bitrate=320,
-            path="/tmp/review-track.flac",
+            path=os.path.join(self.albumDir, "review-track.flac"),
             last_modification=1,
             root_folder=self.root,
             folder=self.folder,
@@ -78,6 +85,7 @@ class MetadataReviewActionsTestCase(FrontendTestBase):
     def tearDown(self):
         super().tearDown()
         shutil.rmtree(self.logDir)
+        shutil.rmtree(self.mediaRootDir)
 
     def readMetadataLog(self):
         with open(os.path.join(self.config.WEBAPP["log_dir"], "metadata.log"), "r", encoding="utf-8") as f:
@@ -263,7 +271,8 @@ class MetadataReviewActionsTestCase(FrontendTestBase):
         self.assertEqual(rv.json["status"], "error")
 
     def test_review_task_confirm_logs_success(self):
-        rv = self.client.post(f"/metadata/review-tasks/{self.task.id}/confirm")
+        with patch("supysonic.frontend.metadata.DaemonClient", return_value=FakeDaemonClient(), create=True):
+            rv = self.client.post(f"/metadata/review-tasks/{self.task.id}/confirm")
 
         self.assertEqual(rv.status_code, 200)
         self.assertEqual(rv.json["task_status"], "confirmed")
@@ -271,8 +280,65 @@ class MetadataReviewActionsTestCase(FrontendTestBase):
         log_content = self.readMetadataLog()
         self.assertIn("metadata event=review_task_confirm", log_content)
         self.assertIn("result=success", log_content)
+        self.assertIn("writeback=true", log_content)
         self.assertIn(f"task_id={self.task.id}", log_content)
         self.assertIn(f"album_id={self.album.id}", log_content)
+        self.assertIn(f"nfo_path={os.path.join(self.albumDir, 'album.nfo')}", log_content)
+
+    def test_review_task_confirm_writes_album_nfo_before_confirming(self):
+        with patch("supysonic.frontend.metadata.DaemonClient", return_value=FakeDaemonClient(), create=True):
+            rv = self.client.post(f"/metadata/review-tasks/{self.task.id}/confirm")
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertEqual(rv.json["task_status"], "confirmed")
+        self.assertEqual(AlbumReviewTask.get_by_id(self.task.id).status, "confirmed")
+
+        nfoPath = os.path.join(self.albumDir, "album.nfo")
+        self.assertTrue(os.path.exists(nfoPath))
+        writtenData = NfoHandler.read(nfoPath)
+        self.assertEqual(writtenData["album"]["title"], "Review Album")
+        self.assertEqual(writtenData["album"]["track"]["title"], "First Track")
+
+    def test_review_task_confirm_keeps_task_pending_when_nfo_write_fails(self):
+        with patch("supysonic.frontend.metadata.DaemonClient", return_value=FailingDaemonClient(), create=True):
+            rv = self.client.post(f"/metadata/review-tasks/{self.task.id}/confirm")
+
+        self.assertEqual(rv.status_code, 500)
+        self.assertEqual(rv.json["status"], "error")
+        self.assertIn("album.nfo", rv.json["message"])
+        self.assertEqual(AlbumReviewTask.get_by_id(self.task.id).status, "pending")
+        log_content = self.readMetadataLog()
+        self.assertIn("metadata event=review_task_confirm", log_content)
+        self.assertIn("result=failure", log_content)
+        self.assertIn('failure_reason="suppress failed"', log_content)
+
+    def test_review_task_confirm_succeeds_when_daemon_is_unavailable(self):
+        with patch("supysonic.frontend.metadata.DaemonClient", return_value=UnavailableDaemonClient(), create=True):
+            rv = self.client.post(f"/metadata/review-tasks/{self.task.id}/confirm")
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertEqual(rv.json["task_status"], "confirmed")
+        self.assertEqual(AlbumReviewTask.get_by_id(self.task.id).status, "confirmed")
+        self.assertTrue(os.path.exists(os.path.join(self.albumDir, "album.nfo")))
+        log_content = self.readMetadataLog()
+        self.assertIn("metadata event=review_task_confirm", log_content)
+        self.assertIn("result=success", log_content)
+        self.assertIn("suppression_mode=daemon_unavailable", log_content)
+
+
+class FakeDaemonClient:
+    def suppress_nfo_path(self, path, ttl):
+        return None
+
+
+class FailingDaemonClient:
+    def suppress_nfo_path(self, path, ttl):
+        raise RuntimeError("suppress failed")
+
+
+class UnavailableDaemonClient:
+    def suppress_nfo_path(self, path, ttl):
+        raise DaemonUnavailableError("unavailable")
 
 
 if __name__ == "__main__":

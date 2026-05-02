@@ -6,7 +6,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from ..db import Album, AlbumReviewTask, close_connection, open_connection
+from ..db import Album, AlbumReviewTask, close_connection, open_connection, now
 
 if TYPE_CHECKING:
     from ..scanner import Scanner
@@ -37,6 +37,10 @@ def buildAlbumReviewSnapshot(album: Album) -> str:
     return json.dumps(snapshot, ensure_ascii=False)
 
 
+def _getAlbumReviewReason(album: Album) -> str:
+    return MISSING_YEAR_REVIEW_REASON if not album.year else NEW_ALBUM_REVIEW_REASON
+
+
 def createAlbumReviewTasks(scanner: Scanner) -> int:
     album_ids = getattr(scanner, "review_task_album_ids", set())
     created = 0
@@ -45,18 +49,30 @@ def createAlbumReviewTasks(scanner: Scanner) -> int:
         if album is None:
             continue
 
-        _, was_created = AlbumReviewTask.get_or_create(
+        snapshot_json = buildAlbumReviewSnapshot(album)
+        reason = _getAlbumReviewReason(album)
+
+        task, was_created = AlbumReviewTask.get_or_create(
             pending_key=f"{album.id}:pending",
             defaults={
                 "album": album,
                 "task_type": METADATA_REVIEW_TASK_TYPE,
                 "status": PENDING_REVIEW_TASK_STATUS,
-                "reason": NEW_ALBUM_REVIEW_REASON,
-                "snapshot_json": buildAlbumReviewSnapshot(album),
+                "reason": reason,
+                "snapshot_json": snapshot_json,
             },
         )
         if was_created:
             created += 1
+            continue
+
+        if task.reason == reason and task.snapshot_json == snapshot_json:
+            continue
+
+        task.reason = reason
+        task.snapshot_json = snapshot_json
+        task.updated = now()
+        task.save()
     return created
 
 

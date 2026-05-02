@@ -79,9 +79,8 @@ def processScanFile(scanner: Scanner, path_or_direntry: Union[str, os.DirEntry])
 
     # Normalize metadata before persistence, then update artist relations last.
     nfo_data, artists, album_id, album_context = resolveAlbumContext(scanner, path, tag)
-    raw_tag = getattr(tag, "mgfile", {})
     track_data.update(buildTrackData(scanner, basename, mtime, tag))
-    track_data["_tag_artists"] = list(raw_tag.get("artist", []))
+    track_data["_tag_artists"] = list(album_context.get("raw_artists", []))
     track_artists, track_artist = resolveTrackArtists(scanner, nfo_data, track_data, artists)
     track = createOrUpdateTrack(
         scanner,

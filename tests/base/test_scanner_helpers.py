@@ -5,6 +5,7 @@ import os
 import shutil
 import tempfile
 import unittest
+import json
 
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -13,6 +14,7 @@ from supysonic import db
 from supysonic.scanner_func import scanner_folder
 from supysonic.scanner_func import scanner_runtime
 from supysonic.scanner_func import Stats
+from supysonic.scanner_func.scanner_file import resolveAlbumContext
 from supysonic.scanner_func.scanner_lookup import findRootFolder
 from supysonic.scanner_func.scanner_persist import resolveTrackArtists
 
@@ -64,6 +66,25 @@ class ScannerHelpersTestCase(unittest.TestCase):
 
         self.assertEqual(track_artists, ["Nfo Artist"])
         self.assertEqual(track_artist.name, "Nfo Artist")
+
+    def test_resolve_album_context_falls_back_to_scalar_tag_artist(self):
+        tag = SimpleNamespace(
+            album="Awesome album",
+            artist="Some artist",
+            artists=None,
+            albumartist=None,
+            albumartists=None,
+            mgfile={},
+        )
+
+        with patch("supysonic.scanner_func.scanner_file.readNfo", return_value={}), patch(
+            "supysonic.scanner_func.scanner_file.recordAlbumArtists",
+            return_value=([], "album-row", "artist-row"),
+        ):
+            _, artists, _, context = resolveAlbumContext(self.scanner, "/music/track.mp3", tag)
+
+        self.assertEqual(artists, ["Some artist"])
+        self.assertEqual(context["raw_artists"], ["Some artist"])
 
     def test_find_root_folder_does_not_match_by_partial_prefix(self):
         base_dir = tempfile.mkdtemp()
@@ -126,7 +147,7 @@ class ScannerHelpersTestCase(unittest.TestCase):
 
     def test_create_album_review_tasks_creates_one_pending_task_per_new_album(self):
         artist = db.Artist.create(name="Review Artist")
-        album = db.Album.create(name="Review Album", artist=artist)
+        album = db.Album.create(name="Review Album", artist=artist, year="2024")
 
         from supysonic.scanner_func.scanner_review_tasks import createAlbumReviewTasks, rememberNewAlbum
 
@@ -137,6 +158,39 @@ class ScannerHelpersTestCase(unittest.TestCase):
         self.assertEqual(len(tasks), 1)
         self.assertEqual(tasks[0].status, "pending")
         self.assertEqual(tasks[0].reason, "new_album")
+        self.assertEqual(json.loads(tasks[0].snapshot_json)["year"], "2024")
+
+    def test_create_album_review_tasks_marks_new_album_without_year_as_missing_year(self):
+        artist = db.Artist.create(name="Review Artist")
+        album = db.Album.create(name="Review Album", artist=artist, year=None)
+
+        from supysonic.scanner_func.scanner_review_tasks import createAlbumReviewTasks, rememberNewAlbum
+
+        rememberNewAlbum(self.scanner, album)
+        createAlbumReviewTasks(self.scanner)
+
+        task = db.AlbumReviewTask.get(db.AlbumReviewTask.album == album)
+        self.assertEqual(task.reason, "missing_year")
+
+    def test_create_album_review_tasks_refreshes_existing_pending_task_from_final_album_state(self):
+        artist = db.Artist.create(name="Review Artist")
+        album = db.Album.create(name="Review Album", artist=artist, year="2024")
+        task = db.AlbumReviewTask.create(
+            album=album,
+            task_type="metadata_review",
+            status="pending",
+            reason="missing_year",
+            snapshot_json='{"year": null}',
+        )
+
+        from supysonic.scanner_func.scanner_review_tasks import createAlbumReviewTasks, rememberNewAlbum
+
+        rememberNewAlbum(self.scanner, album)
+        createAlbumReviewTasks(self.scanner)
+
+        refreshed_task = db.AlbumReviewTask.get_by_id(task.id)
+        self.assertEqual(refreshed_task.reason, "new_album")
+        self.assertEqual(json.loads(refreshed_task.snapshot_json)["year"], "2024")
 
     def test_create_album_review_tasks_skips_when_pending_task_exists(self):
         artist = db.Artist.create(name="Review Artist")

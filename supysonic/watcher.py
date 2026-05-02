@@ -17,6 +17,7 @@ from . import covers
 from .db import Folder, open_connection, close_connection
 from .logging_utils import format_log_event
 from .scanner import Scanner
+from .scanner_func.scanner_review_tasks import createAlbumReviewTasks
 from .nfo.nfo import NfoHandler
 
 OP_SCAN = 1 # 1
@@ -139,6 +140,7 @@ class ScannerProcessingQueue(Thread):
         self.__timer = None
         self.__queue = {}
         self.__running = True
+        self.__suppressed_nfo_paths = {}
 
     def run(self):
         try:
@@ -178,6 +180,7 @@ class ScannerProcessingQueue(Thread):
                     if not self.__queue and find_lost_information_flag:
                         logger.info("Beginging cover scan")
                         scanner.find_lost_information()
+                        createAlbumReviewTasks(scanner)
                         logger.info("Cover scan finished")
                         find_lost_information_flag = False
                         stats = scanner.stats()
@@ -255,11 +258,34 @@ class ScannerProcessingQueue(Thread):
             self.__running = False
             self.__cond.notify()
 
+    def __prune_suppressed_nfo_paths(self, now=None):
+        current_time = time.time() if now is None else now
+        for path, expires_at in list(self.__suppressed_nfo_paths.items()):
+            if expires_at < current_time:
+                del self.__suppressed_nfo_paths[path]
+
+    def suppress_nfo_path(self, path, ttl):
+        with self.__cond:
+            self.__prune_suppressed_nfo_paths()
+            self.__suppressed_nfo_paths[path] = time.time() + ttl
+
+    def __is_suppressed_nfo_path(self, path):
+        expires_at = self.__suppressed_nfo_paths.get(path)
+        if expires_at is None:
+            return False
+        if expires_at < time.time():
+            del self.__suppressed_nfo_paths[path]
+            return False
+        return True
+
     def put(self, path, operation, **kwargs):
         if not self.__running:
             raise RuntimeError("Trying to put an item in a stopped queue")
 
         with self.__cond:
+            self.__prune_suppressed_nfo_paths()
+            if operation & FLAG_NFO and self.__is_suppressed_nfo_path(path):
+                return
             if path in self.__queue:
                 event = self.__queue[path]
                 event.set(operation, **kwargs)
@@ -391,6 +417,10 @@ class SupysonicWatcher:
         self.__observer = None
         self.__queue = None
         self.__handler.queue = None
+
+    def suppress_nfo_path(self, path, ttl):
+        if self.__queue is not None:
+            self.__queue.suppress_nfo_path(path, ttl)
 
     @property
     def running(self):

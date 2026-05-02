@@ -123,6 +123,17 @@ class MetadataReviewWorkspaceTestCase(FrontendTestBase):
         self.assertIn("metadata-review-return-bar", rv.data)
         self.assertIn("metadata-review-back-link", rv.data)
 
+    def test_review_workspace_confirm_button_includes_nfo_write_warning(self):
+        rv = self.client.get(f"/metadata/review-tasks/{self.task.id}")
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn("Confirm Task", rv.data)
+        self.assertIn("album.nfo", rv.data)
+        self.assertIn("window.confirm", rv.data)
+        self.assertIn("button.dataset.reviewTaskLabel === 'confirm'", rv.data)
+        self.assertIn("window.location.assign(metadataInboxUrl)", rv.data)
+        self.assertIn('/metadata?tab=inbox', rv.data)
+
     def test_review_workspace_includes_guest_relation_artists(self):
         guest_artist = Artist.create(name="Guest Relation Artist")
         AlbumArtist.create(album_id=self.album, artist_id=guest_artist, position=2)

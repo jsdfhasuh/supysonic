@@ -6,12 +6,16 @@ from flask import current_app
 from functools import wraps
 from peewee import fn
 
+from ..config import get_current_config
+from ..daemon.client import DaemonClient
+from ..daemon.exceptions import DaemonUnavailableError
 from ..db import AlbumArtist, ClientPrefs, User, Artist, Album, Track, TrackArtist, db
 from ..lastfm import LastFm
 from ..listenbrainz import ListenBrainz
 from ..logging_utils import format_log_event
 from ..managers.user import UserManager
 from .metadata_actions import assignPrimaryArtist, resolvePrimaryArtist, updateArtistMetadata
+from .metadata_nfo import writeReviewAlbumNfo
 from .metadata_review import (
     confirmMetadataReviewTask,
     dismissMetadataReviewTask,
@@ -468,10 +472,11 @@ def update_metadata_review_task_artist(task_id, artist_id):
 @admin_only
 def confirm_metadata_review_task(task_id):
     task = None
+    nfo_path = "-"
+    suppression_mode = "daemon"
     try:
         task = getMetadataReviewTask(task_id)
         previous_status = task.status
-        confirmMetadataReviewTask(task)
     except ValueError as exc:
         logMetadataEvent(logging.WARNING, "review_task_confirm", result="bad_request", task_id=task_id)
         return {"status": "error", "message": str(exc)}, 400
@@ -479,12 +484,55 @@ def confirm_metadata_review_task(task_id):
         logMetadataEvent(logging.WARNING, "review_task_confirm", result="not_found", task_id=task_id)
         return {"status": "error", "message": str(exc)}, 404
 
+    try:
+        suppress_ttl = max(2, int(get_current_config().DAEMON["wait_delay"]) + 2)
+        try:
+            nfo_path = writeReviewAlbumNfo(
+                task,
+                daemonClient=DaemonClient(),
+                suppressTtl=suppress_ttl,
+            )
+        except DaemonUnavailableError:
+            suppression_mode = "daemon_unavailable"
+            nfo_path = writeReviewAlbumNfo(
+                task,
+                daemonClient=None,
+                suppressTtl=suppress_ttl,
+            )
+        confirmMetadataReviewTask(task)
+    except ValueError as exc:
+        logMetadataEvent(
+            logging.WARNING,
+            "review_task_confirm",
+            result="bad_request",
+            task_id=task.id,
+            album_id=task.album.id,
+            failure_reason=str(exc),
+        )
+        return {"status": "error", "message": str(exc)}, 400
+    except Exception as exc:
+        logMetadataEvent(
+            logging.ERROR,
+            "review_task_confirm",
+            result="failure",
+            task_id=task.id,
+            album_id=task.album.id,
+            writeback=True,
+            suppression_mode=suppression_mode,
+            nfo_path=nfo_path,
+            failure_reason=str(exc),
+        )
+        return {"status": "error", "message": f"Failed to write album.nfo: {exc}"}, 500
+
     logMetadataEvent(
         logging.INFO,
         "review_task_confirm",
         result="success",
         task_id=task.id,
         album_id=task.album.id,
+        writeback=True,
+        suppression_mode=suppression_mode,
+        nfo_path=nfo_path,
         from_status=previous_status,
         to_status=task.status,
     )

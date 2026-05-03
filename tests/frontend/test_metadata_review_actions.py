@@ -1,9 +1,12 @@
+import io
 import os
 import shutil
 import tempfile
 import unittest
 
 from unittest.mock import patch
+
+from PIL import Image
 
 from supysonic.daemon.exceptions import DaemonUnavailableError
 from supysonic.db import Album, AlbumArtist, AlbumReviewTask, Artist, Folder, ReviewTask, Track, TrackArtist, User, db
@@ -87,6 +90,12 @@ class MetadataReviewActionsTestCase(FrontendTestBase):
     def readMetadataLog(self):
         with open(os.path.join(self.config.WEBAPP["log_dir"], "metadata.log"), "r", encoding="utf-8") as f:
             return f.read()
+
+    def createImageUpload(self, color=(20, 40, 60)):
+        imageBuffer = io.BytesIO()
+        Image.new("RGB", (900, 900), color=color).save(imageBuffer, format="PNG")
+        imageBuffer.seek(0)
+        return imageBuffer
 
     def test_review_task_album_update(self):
         rv = self.client.post(
@@ -203,6 +212,25 @@ class MetadataReviewActionsTestCase(FrontendTestBase):
         self.assertIn("result=success", log_content)
         self.assertIn(f"task_id={self.task.id}", log_content)
         self.assertIn(f"requested_artist_id={self.artist.id}", log_content)
+
+    def test_review_task_artist_update_persists_uploaded_photo(self):
+        rv = self.client.post(
+            f"/metadata/review-tasks/{self.task.id}/artists/{self.artist.id}",
+            data={
+                "biography": "Updated biography",
+                "artist_photo": (self.createImageUpload(), "artist.png"),
+            },
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(rv.status_code, 200)
+        saved_artist = Artist.get_by_id(self.artist.id)
+        info = read_dict_from_json(saved_artist.artist_info_json)
+        self.assertEqual(info["biography"], "Updated biography")
+        self.assertEqual(sorted(info["image"].keys()), ["large", "medium", "small"])
+        log_content = self.readMetadataLog()
+        self.assertIn("metadata event=review_artist_update", log_content)
+        self.assertIn("photo_updated=true", log_content)
 
     def test_review_task_confirm_rejects_invalid_task_id(self):
         rv = self.client.post("/metadata/review-tasks/not-a-uuid/confirm")

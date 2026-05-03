@@ -207,6 +207,11 @@ class MetadataReviewWorkspaceTestCase(FrontendTestBase):
         self.assertIn("missing image", rv.data.lower())
         self.assertNotIn("Tracks", rv.data)
         self.assertIn(f"/rest/getCoverArt?id=ar-{self.artist.id}&amp;v=1.15.0&amp;c=web", rv.data)
+        self.assertIn('name="artist_photo"', rv.data)
+        self.assertIn('accept="image/*"', rv.data)
+        self.assertIn("data-review-artist-image-preview", rv.data)
+        self.assertIn("URL.createObjectURL", rv.data)
+        self.assertIn("new FormData(artistForm)", rv.data)
 
     def test_review_workspace_shows_album_cover_fallback_notice_for_artist_task(self):
         fallback_artist = Artist.create(name="Fallback Artist")

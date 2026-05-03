@@ -67,6 +67,7 @@
               {% endfor %}
             </ul>
           </div>
+          <div id="metadata-review-feedback" class="alert d-none" role="status"></div>
           <div class="d-flex flex-wrap gap-2">
             <form method="post" action="{{ url_for('frontend.confirm_metadata_review_task', task_id=reviewTask.id) }}">
               <button type="submit" class="btn btn-primary"{% if not reviewIsEditable %} disabled{% endif %}>Confirm Task</button>
@@ -80,4 +81,101 @@
     </div>
   </div>
 </div>
+
+<script>
+  (function() {
+    const reviewContainer = document.querySelector('[data-review-editable]');
+    const feedbackNode = document.getElementById('metadata-review-feedback');
+
+    function isReviewEditable() {
+      return reviewContainer && reviewContainer.dataset.reviewEditable === 'true';
+    }
+
+    function showReviewFeedback(message, isError) {
+      if (!feedbackNode) {
+        return;
+      }
+      feedbackNode.textContent = message;
+      feedbackNode.classList.remove('d-none', 'alert-success', 'alert-danger');
+      feedbackNode.classList.add(isError ? 'alert-danger' : 'alert-success');
+    }
+
+    async function parseReviewResponse(response, fallbackMessage) {
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.status === 'error') {
+        throw new Error(payload.message || fallbackMessage);
+      }
+      return payload;
+    }
+
+    function bindArtistPhotoPreview(artistForm) {
+      const imageInput = artistForm.querySelector('input[name="artist_photo"]');
+      const imagePreview = artistForm.querySelector('[data-review-artist-image-preview]');
+      if (!imageInput || !imagePreview) {
+        return;
+      }
+      imageInput.addEventListener('change', function() {
+        const nextFile = imageInput.files[0];
+        const previousPreviewUrl = imagePreview.dataset.previewUrl;
+        if (previousPreviewUrl) {
+          URL.revokeObjectURL(previousPreviewUrl);
+          delete imagePreview.dataset.previewUrl;
+        }
+        if (!nextFile) {
+          return;
+        }
+        const previewUrl = URL.createObjectURL(nextFile);
+        imagePreview.src = previewUrl;
+        imagePreview.dataset.previewUrl = previewUrl;
+      });
+      artistForm.addEventListener('reset', function() {
+        const previewUrl = imagePreview.dataset.previewUrl;
+        if (!previewUrl) {
+          return;
+        }
+        URL.revokeObjectURL(previewUrl);
+        delete imagePreview.dataset.previewUrl;
+      });
+    }
+
+    function applyArtistFormChanges(artistForm) {
+      const primaryNameField = artistForm.querySelector('input[name="primary_name"]');
+      const readonlyNameField = artistForm.querySelector('input[readonly]');
+      const imageInput = artistForm.querySelector('input[name="artist_photo"]');
+      const imagePreview = artistForm.querySelector('[data-review-artist-image-preview]');
+      if (readonlyNameField && primaryNameField && primaryNameField.value.trim()) {
+        readonlyNameField.value = primaryNameField.value.trim();
+        if (imagePreview) {
+          imagePreview.alt = primaryNameField.value.trim();
+        }
+      }
+      if (imageInput) {
+        imageInput.value = '';
+      }
+    }
+
+    if (!isReviewEditable()) {
+      return;
+    }
+
+    document.querySelectorAll('[data-review-artist-form]').forEach((artistForm) => {
+      bindArtistPhotoPreview(artistForm);
+      artistForm.addEventListener('submit', async function(event) {
+        event.preventDefault();
+        const requestData = new FormData(artistForm);
+        const response = await fetch(artistForm.action, {
+          method: 'POST',
+          body: requestData,
+        });
+        try {
+          const payload = await parseReviewResponse(response, 'Failed to save artist changes');
+          applyArtistFormChanges(artistForm);
+          showReviewFeedback(payload.message || 'Artist changes saved', false);
+        } catch (error) {
+          showReviewFeedback(error.message, true);
+        }
+      });
+    });
+  })();
+</script>
 {% endblock %}

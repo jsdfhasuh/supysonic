@@ -202,7 +202,7 @@
       }
       reviewContainer.dataset.reviewEditable = 'false';
       updateReviewSummaryStatus(taskStatus);
-      document.querySelectorAll('#review-album-form input, #review-tracks-form input, [data-review-artist-form] textarea, [data-review-artist-form] input[name="primary_name"]').forEach((field) => {
+      document.querySelectorAll('#review-album-form input, #review-tracks-form input, [data-review-artist-form] textarea, [data-review-artist-form] input[name="primary_name"], [data-review-artist-form] input[name="artist_photo"]').forEach((field) => {
         field.disabled = true;
       });
       document.querySelectorAll('[data-review-task-action]').forEach((button) => {

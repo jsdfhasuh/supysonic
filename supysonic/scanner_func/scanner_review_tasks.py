@@ -337,6 +337,25 @@ def expirePendingNewArtistTasks() -> int:
     return updated
 
 
+def backfillPendingNewAlbumTaskExpiries() -> int:
+    updated = 0
+    query = ReviewTask.select().where(
+        ReviewTask.entity_type == "album",
+        ReviewTask.status == PENDING_REVIEW_TASK_STATUS,
+        ReviewTask.reason == NEW_ALBUM_REVIEW_REASON,
+        ReviewTask.expires_at.is_null(True),
+    )
+    for task in query:
+        album = task.get_album()
+        if album is None or getAlbumReviewIssues(album):
+            continue
+        task.expires_at = task.created + timedelta(days=NEW_ALBUM_REVIEW_TTL_DAYS)
+        task.updated = now()
+        task.save()
+        updated += 1
+    return updated
+
+
 def confirmCleanNewAlbumTasks() -> int:
     updated = 0
     current_time = now()
@@ -374,7 +393,11 @@ def runReviewTaskBootstrap() -> int:
 
 
 def createReviewTaskMaintenance() -> int:
-    return expirePendingNewArtistTasks() + confirmCleanNewAlbumTasks()
+    return (
+        expirePendingNewArtistTasks()
+        + backfillPendingNewAlbumTaskExpiries()
+        + confirmCleanNewAlbumTasks()
+    )
 
 
 def runReviewTaskMaintenance() -> int:

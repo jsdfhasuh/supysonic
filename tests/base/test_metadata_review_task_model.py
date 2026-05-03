@@ -213,6 +213,10 @@ class MetadataReviewTaskModelTestCase(unittest.TestCase):
         namespace = {}
         exec(migration_20260503, namespace)
         namespace["apply"]({"database": os.path.join(self._db_dir, 'metadata-review.db')})
+        migration_20260504 = (migration_dir / "20260504.sql").read_text(encoding="utf-8")
+        for statement in migration_20260504.split(";"):
+            if statement.strip():
+                db.db.execute_sql(statement)
 
         columns = {row[1] for row in db.db.execute_sql("PRAGMA table_info(review_task)").fetchall()}
         self.assertIn("pending_key", columns)
@@ -227,10 +231,39 @@ class MetadataReviewTaskModelTestCase(unittest.TestCase):
             / "schema"
             / "migration"
             / "postgres"
-            / "20260503.sql"
+            / "20260504.sql"
         )
 
         statements = [statement.strip() for statement in migration_path.read_text(encoding="utf-8").split(";") if statement.strip()]
 
         self.assertTrue(statements)
         self.assertTrue(all("$$" not in statement for statement in statements))
+
+    def test_sqlite_new_album_expiry_backfill_migration_updates_pending_tasks(self):
+        migration_path = (
+            Path(__file__).resolve().parents[2]
+            / "supysonic"
+            / "schema"
+            / "migration"
+            / "sqlite"
+            / "20260504.sql"
+        )
+
+        artist = db.Artist.create(name="Migration Artist")
+        album = db.Album.create(artist=artist, name="Migration Album", year="2024")
+        task = db.ReviewTask.create(
+            entity_type="album",
+            entity_id=str(album.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="new_album",
+            snapshot_json="{}",
+            expires_at=None,
+        )
+
+        for statement in migration_path.read_text(encoding="utf-8").split(";"):
+            if statement.strip():
+                db.db.execute_sql(statement)
+
+        refreshed_task = db.ReviewTask.get_by_id(task.id)
+        self.assertIsNotNone(refreshed_task.expires_at)

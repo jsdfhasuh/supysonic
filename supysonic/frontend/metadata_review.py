@@ -1,12 +1,12 @@
 import uuid
 
-from ..db import AlbumArtist, AlbumReviewTask, TrackArtist, now
+from ..db import AlbumArtist, ReviewTask, TrackArtist, now
 
 
 def listMetadataReviewTasks(status=None):
-    query = AlbumReviewTask.select().order_by(AlbumReviewTask.created.desc())
+    query = ReviewTask.select().order_by(ReviewTask.created.desc())
     if status:
-        query = query.where(AlbumReviewTask.status == status)
+        query = query.where(ReviewTask.status == status)
     return query
 
 
@@ -16,7 +16,7 @@ def getMetadataReviewTask(taskId):
     except ValueError as exc:
         raise ValueError("Invalid review task id") from exc
 
-    task = AlbumReviewTask.get_or_none(AlbumReviewTask.id == task_uuid)
+    task = ReviewTask.get_or_none(ReviewTask.id == task_uuid)
     if task is None:
         raise LookupError("Review task not found")
     return task
@@ -42,6 +42,10 @@ def dismissMetadataReviewTask(task):
 
 
 def getTaskRelatedArtists(task):
+    if task.is_artist_task():
+        artist = task.artist
+        return [artist] if artist is not None else []
+
     artists = []
     seen_artist_ids = set()
     track_rows = list(task.album.tracks)

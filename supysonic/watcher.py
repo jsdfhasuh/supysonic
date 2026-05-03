@@ -17,7 +17,7 @@ from . import covers
 from .db import Folder, open_connection, close_connection
 from .logging_utils import format_log_event
 from .scanner import Scanner
-from .scanner_func.scanner_review_tasks import createAlbumReviewTasks
+from .scanner_func.scanner_review_tasks import createReviewTasks
 from .nfo.nfo import NfoHandler
 
 OP_SCAN = 1 # 1
@@ -179,7 +179,7 @@ class ScannerProcessingQueue(Thread):
                     if find_lost_information_flag:
                         logger.info("Beginging cover scan")
                         scanner.find_lost_information()
-                        createAlbumReviewTasks(scanner)
+                        createReviewTasks(scanner)
                         logger.info("Cover scan finished")
                         find_lost_information_flag = False
                         stats = scanner.stats()

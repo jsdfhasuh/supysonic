@@ -201,9 +201,10 @@ CREATE TABLE IF NOT EXISTS shared_track_link (
     created_at DATETIME NOT NULL
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS album_review_task (
+CREATE TABLE IF NOT EXISTS review_task (
     id CHAR(32) PRIMARY KEY,
-    album_id CHAR(32) NOT NULL,
+    entity_type VARCHAR(32) NOT NULL,
+    entity_id CHAR(36) NOT NULL,
     task_type VARCHAR(64) NOT NULL,
     status VARCHAR(32) NOT NULL,
     reason VARCHAR(64) NOT NULL,
@@ -212,11 +213,11 @@ CREATE TABLE IF NOT EXISTS album_review_task (
     created DATETIME NOT NULL,
     updated DATETIME NOT NULL,
     resolved_at DATETIME,
-    FOREIGN KEY (album_id) REFERENCES album(id) ON DELETE CASCADE
+    expires_at DATETIME
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE INDEX index_album_review_task_album_status ON album_review_task(album_id, status);
-CREATE INDEX index_album_review_task_status_created ON album_review_task(status, created);
-CREATE UNIQUE INDEX index_album_review_task_pending_key ON album_review_task(pending_key);
+CREATE INDEX index_review_task_entity_status ON review_task(entity_type, entity_id, status);
+CREATE INDEX index_review_task_status_created ON review_task(status, created);
+CREATE UNIQUE INDEX index_review_task_pending_key ON review_task(pending_key);
 
 
 CREATE TABLE  album_artist (

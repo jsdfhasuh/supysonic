@@ -2,7 +2,7 @@ import unittest
 
 from flask import current_app
 
-from supysonic.db import Album, AlbumReviewTask, Artist, User, db
+from supysonic.db import Album, AlbumReviewTask, Artist, ReviewTask, User, db
 
 from .frontendtestbase import FrontendTestBase
 from ..testbase import TestConfig
@@ -15,9 +15,6 @@ class MetadataInboxTestCase(FrontendTestBase):
         TestConfig.WEBAPP = TestConfig.WEBAPP.copy()
         TestConfig.WEBAPP["log_dir"] = ""
         super().setUp()
-        db.execute_sql("ALTER TABLE artist ADD COLUMN artist_info_json VARCHAR(4096)")
-        db.execute_sql("ALTER TABLE artist ADD COLUMN real_artist_id INTEGER")
-        db.execute_sql("ALTER TABLE album ADD COLUMN year VARCHAR(255)")
 
         alice = User.get(User.name == "alice")
         with self.client.session_transaction() as session:
@@ -54,6 +51,43 @@ class MetadataInboxTestCase(FrontendTestBase):
 
         self.assertEqual(rv.status_code, 200)
         self.assertIn("No pending review tasks yet", rv.data)
+
+    def test_metadata_inbox_renders_pending_artist_review_task(self):
+        artist = Artist.create(name="Image Less Artist")
+        ReviewTask.create(
+            entity_type="artist",
+            entity_id=str(artist.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="missing_image",
+            snapshot_json='{"artist_name": "Image Less Artist"}',
+        )
+
+        rv = self.client.get("/metadata?tab=inbox")
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn("Image Less Artist", rv.data)
+        self.assertIn("missing image", rv.data.lower())
+        self.assertIn(f"/rest/getCoverArt?id=ar-{artist.id}&amp;v=1.15.0&amp;c=web", rv.data)
+
+    def test_metadata_inbox_handles_orphaned_album_review_task(self):
+        artist = Artist.create(name="Deleted Album Artist")
+        album = Album.create(name="Deleted Album", artist=artist, year="2024")
+        task = ReviewTask.create(
+            entity_type="album",
+            entity_id=str(album.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="new_album",
+            snapshot_json='{"album_name": "Deleted Album", "artist_name": "Deleted Album Artist", "track_count": 0}',
+        )
+        album.delete_instance()
+
+        rv = self.client.get("/metadata?tab=inbox")
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn("Deleted Album", rv.data)
+        self.assertIn(f"/metadata/review-tasks/{task.id}", rv.data)
 
 
 if __name__ == "__main__":

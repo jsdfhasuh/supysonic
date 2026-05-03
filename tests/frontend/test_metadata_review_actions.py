@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from supysonic.daemon.exceptions import DaemonUnavailableError
-from supysonic.db import Album, AlbumArtist, AlbumReviewTask, Artist, Folder, Track, TrackArtist, User, db
+from supysonic.db import Album, AlbumArtist, AlbumReviewTask, Artist, Folder, ReviewTask, Track, TrackArtist, User, db
 from supysonic.nfo.nfo import NfoHandler
 from supysonic.tool import read_dict_from_json
 
@@ -26,9 +26,6 @@ class MetadataReviewActionsTestCase(FrontendTestBase):
         TestConfig.WEBAPP["log_dir"] = self.logDir
         TestConfig.WEBAPP["log_level"] = "INFO"
         super().setUp()
-        db.execute_sql("ALTER TABLE artist ADD COLUMN artist_info_json VARCHAR(4096)")
-        db.execute_sql("ALTER TABLE artist ADD COLUMN real_artist_id INTEGER")
-        db.execute_sql("ALTER TABLE album ADD COLUMN year VARCHAR(255)")
         db.execute_sql(
             "CREATE TABLE album_artist ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT, "
@@ -324,6 +321,76 @@ class MetadataReviewActionsTestCase(FrontendTestBase):
         self.assertIn("metadata event=review_task_confirm", log_content)
         self.assertIn("result=success", log_content)
         self.assertIn("suppression_mode=daemon_unavailable", log_content)
+
+    def test_review_task_confirm_for_artist_task_skips_album_nfo_writeback(self):
+        artist_task = ReviewTask.create(
+            entity_type="artist",
+            entity_id=str(self.artist.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="missing_image",
+            snapshot_json='{"artist_name": "Review Artist", "issues": ["missing_image"]}',
+        )
+
+        with patch("supysonic.frontend.metadata.writeReviewAlbumNfo") as write_review_album_nfo:
+            rv = self.client.post(f"/metadata/review-tasks/{artist_task.id}/confirm")
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertEqual(rv.json["task_status"], "confirmed")
+        self.assertEqual(ReviewTask.get_by_id(artist_task.id).status, "confirmed")
+        write_review_album_nfo.assert_not_called()
+
+    def test_review_task_confirm_rejects_orphaned_album_task_without_server_error(self):
+        orphan_task = ReviewTask.create(
+            entity_type="album",
+            entity_id="00000000-0000-0000-0000-000000000000",
+            task_type="metadata_review",
+            status="pending",
+            reason="new_album",
+            snapshot_json='{"album_name": "Missing Album", "artist_name": "Missing Artist", "issues": []}',
+        )
+
+        rv = self.client.post(f"/metadata/review-tasks/{orphan_task.id}/confirm")
+
+        self.assertEqual(rv.status_code, 404)
+        self.assertEqual(rv.json["status"], "error")
+        self.assertEqual(ReviewTask.get_by_id(orphan_task.id).status, "pending")
+
+    def test_artist_review_task_update_rejects_missing_artist_without_server_error(self):
+        artist_task = ReviewTask.create(
+            entity_type="artist",
+            entity_id=str(self.artist.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="missing_image",
+            snapshot_json='{"artist_name": "Review Artist", "issues": ["missing_image"]}',
+        )
+
+        rv = self.client.post(
+            f"/metadata/review-tasks/{artist_task.id}/artists/00000000-0000-0000-0000-000000000000",
+            json={"biography": "ghost"},
+        )
+
+        self.assertEqual(rv.status_code, 404)
+        self.assertEqual(rv.json["status"], "error")
+
+    def test_artist_review_task_update_rejects_unrelated_artist_without_server_error(self):
+        artist_task = ReviewTask.create(
+            entity_type="artist",
+            entity_id=str(self.artist.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="missing_image",
+            snapshot_json='{"artist_name": "Review Artist", "issues": ["missing_image"]}',
+        )
+
+        rv = self.client.post(
+            f"/metadata/review-tasks/{artist_task.id}/artists/{self.unrelated_artist.id}",
+            json={"biography": "Should fail"},
+        )
+
+        self.assertEqual(rv.status_code, 400)
+        self.assertEqual(rv.json["status"], "error")
 
 
 class FakeDaemonClient:

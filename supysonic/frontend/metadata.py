@@ -115,6 +115,80 @@ def buildMetadataArtistCardData(artist):
     }
 
 
+def getTaskDisplayIssues(task, tracks=None):
+    snapshot = json.loads(task.snapshot_json or "{}")
+    issue_codes = snapshot.get("issues") or []
+    issue_map = {
+        "missing_year": "Missing release year",
+        "track_artist_mapping_needs_review": "Track artist mapping needs review",
+        "missing_image": "Missing artist image",
+    }
+    issues = [issue_map.get(issue, issue.replace("_", " ")) for issue in issue_codes]
+    if issues:
+        return issues
+    if task.is_artist_task():
+        return ["Artist metadata review requested"]
+    return ["Metadata review requested for new album"]
+
+
+def buildInboxTaskData(task):
+    snapshot = json.loads(task.snapshot_json or "{}")
+    if task.is_artist_task():
+        artist = task.artist
+        artist_name = snapshot.get("artist_name") or (artist.get_artist_name() if artist is not None else "Unknown artist")
+        artist_id = getattr(artist, "id", task.entity_id)
+        return {
+            "id": str(task.id),
+            "entity_type": "artist",
+            "title": artist_name,
+            "subtitle": task.reason.replace("_", " "),
+            "description": f"Artist metadata review created at {task.created.strftime('%Y-%m-%d %H:%M:%S')}.",
+            "status": task.status,
+            "created": task.created,
+            "cover_art_url": getMetadataCoverArtUrl(f"ar-{artist_id}"),
+        }
+
+    album = task.album
+    if album is None:
+        return {
+            "id": str(task.id),
+            "entity_type": "album",
+            "title": snapshot.get("album_name") or "Unknown album",
+            "subtitle": snapshot.get("artist_name") or "Album no longer exists",
+            "description": f"Album metadata review created at {task.created.strftime('%Y-%m-%d %H:%M:%S')}.",
+            "status": task.status,
+            "created": task.created,
+            "cover_art_url": getMetadataCoverArtUrl(f"al-{task.entity_id}"),
+        }
+
+    year = snapshot.get("year") or album.year
+    subtitle = f"{snapshot.get('artist_name') or album.artist.get_artist_name()}"
+    if year:
+        subtitle += f" · {year}"
+    subtitle += f" · {snapshot.get('track_count', album.tracks.count())} tracks"
+    return {
+        "id": str(task.id),
+        "entity_type": "album",
+        "title": snapshot.get("album_name") or album.name,
+        "subtitle": subtitle,
+        "description": f"New album metadata review created at {task.created.strftime('%Y-%m-%d %H:%M:%S')}.",
+        "status": task.status,
+        "created": task.created,
+        "cover_art_url": getMetadataCoverArtUrl(f"al-{album.id}"),
+    }
+
+
+def buildArtistReviewCard(artist):
+    artist_info = artist.get_info()
+    return {
+        "id": str(artist.id),
+        "display_name": artist.get_artist_name(),
+        "name": artist.name,
+        "biography": artist_info.get("biography", ""),
+        "image_url": getReviewArtistImageUrl(artist, artist_info),
+    }
+
+
 def ensurePendingReviewTask(task):
     if task.status != "pending":
         raise ValueError("Only pending review tasks can be updated")
@@ -143,20 +217,7 @@ def metadata():
     if activeTab == "inbox":
         query_status = None if selected_status == "all" else selected_status
         for task in listMetadataReviewTasks(status=query_status):
-            snapshot = json.loads(task.snapshot_json or "{}")
-            inbox_tasks.append(
-                {
-                    "id": str(task.id),
-                    "album_name": snapshot.get("album_name") or task.album.name,
-                    "artist_name": snapshot.get("artist_name") or task.album.artist.get_artist_name(),
-                    "year": snapshot.get("year") or task.album.year,
-                    "track_count": snapshot.get("track_count", task.album.tracks.count()),
-                    "status": task.status,
-                    "reason": task.reason,
-                    "created": task.created,
-                    "cover_art_url": getMetadataCoverArtUrl(f"al-{task.album.id}"),
-                }
-            )
+            inbox_tasks.append(buildInboxTaskData(task))
 
         inbox_summary = {
             "pending": listMetadataReviewTasks(status="pending").count(),
@@ -184,31 +245,38 @@ def metadata_review_task(task_id):
     except LookupError as exc:
         return {"status": "error", "message": str(exc)}, 404
 
+    active_review_tab = getReviewSection()
+    if task.is_artist_task():
+        artist = task.artist
+        if artist is None:
+            return {"status": "error", "message": "Review task artist not found"}, 404
+
+        review_artist_cards = [buildArtistReviewCard(artist)]
+        review_summary = {
+            "status": task.status,
+            "created": task.created,
+            "track_count": 0,
+            "related_artist_count": 1,
+            "total_duration": formatDurationLabel(0),
+            "cover_art_url": getMetadataCoverArtUrl(f"ar-{artist.id}"),
+            "issues": getTaskDisplayIssues(task),
+        }
+        return render_template(
+            "metadata-review-artist-task.html",
+            reviewTask=task,
+            reviewArtist=artist,
+            reviewArtists=[artist],
+            reviewArtistCards=review_artist_cards,
+            reviewSummary=review_summary,
+            reviewIsEditable=(task.status == "pending"),
+        )
+
     album = task.album
+    if album is None:
+        return {"status": "error", "message": "Review task album not found"}, 404
     tracks = list(album.tracks.order_by(Track.disc, Track.number, Track.title))
     related_artists = getTaskRelatedArtists(task)
-    active_review_tab = getReviewSection()
-
-    review_issues = []
-    if not album.year:
-        review_issues.append("Missing release year")
-    if any(track.artist_id != album.artist_id for track in tracks):
-        review_issues.append("Track artist mapping needs review")
-    if not review_issues:
-        review_issues.append("Metadata review requested for new album")
-
-    review_artist_cards = []
-    for artist in related_artists:
-        artist_info = artist.get_info()
-        review_artist_cards.append(
-            {
-                "id": str(artist.id),
-                "display_name": artist.get_artist_name(),
-                "name": artist.name,
-                "biography": artist_info.get("biography", ""),
-                "image_url": getReviewArtistImageUrl(artist, artist_info),
-            }
-        )
+    review_artist_cards = [buildArtistReviewCard(artist) for artist in related_artists]
 
     review_summary = {
         "status": task.status,
@@ -217,7 +285,7 @@ def metadata_review_task(task_id):
         "related_artist_count": len(related_artists),
         "total_duration": formatDurationLabel(sum(track.duration for track in tracks)),
         "cover_art_url": getMetadataCoverArtUrl(f"al-{album.id}"),
-        "issues": review_issues,
+        "issues": getTaskDisplayIssues(task, tracks=tracks),
     }
 
     return render_template(
@@ -403,7 +471,7 @@ def update_metadata_review_task_artist(task_id, artist_id):
             "review_artist_update",
             result="not_found",
             task_id=task.id,
-            album_id=task.album.id,
+            album_id=task.album.id if task.album is not None else "-",
             requested_artist_id=artist_id,
         )
         return {"status": "error", "message": "artist not found"}, 404
@@ -413,7 +481,7 @@ def update_metadata_review_task_artist(task_id, artist_id):
             "review_artist_update",
             result="bad_request",
             task_id=task.id,
-            album_id=task.album.id,
+            album_id=task.album.id if task.album is not None else "-",
             requested_artist_id=artist_id,
             target_artist_id=target_artist.id,
         )
@@ -443,7 +511,7 @@ def update_metadata_review_task_artist(task_id, artist_id):
             "review_artist_update",
             result="bad_request",
             task_id=task.id,
-            album_id=task.album.id,
+            album_id=task.album.id if task.album is not None else "-",
             requested_artist_id=artist_id,
             target_artist_id=target_artist.id,
             primary_changed=primary_changed,
@@ -457,7 +525,7 @@ def update_metadata_review_task_artist(task_id, artist_id):
         "review_artist_update",
         result="success",
         task_id=task.id,
-        album_id=task.album.id,
+        album_id=task.album.id if task.album is not None else "-",
         requested_artist_id=artist_id,
         target_artist_id=target_artist.id,
         primary_changed=primary_changed,
@@ -485,20 +553,33 @@ def confirm_metadata_review_task(task_id):
         return {"status": "error", "message": str(exc)}, 404
 
     try:
-        suppress_ttl = max(2, int(get_current_config().DAEMON["wait_delay"]) + 2)
-        try:
-            nfo_path = writeReviewAlbumNfo(
-                task,
-                daemonClient=DaemonClient(),
-                suppressTtl=suppress_ttl,
-            )
-        except DaemonUnavailableError:
-            suppression_mode = "daemon_unavailable"
-            nfo_path = writeReviewAlbumNfo(
-                task,
-                daemonClient=None,
-                suppressTtl=suppress_ttl,
-            )
+        if task.is_album_task():
+            if task.album is None:
+                logMetadataEvent(
+                    logging.WARNING,
+                    "review_task_confirm",
+                    result="not_found",
+                    task_id=task.id,
+                    album_id="-",
+                    entity_type=task.entity_type,
+                )
+                return {"status": "error", "message": "Review task album not found"}, 404
+            suppress_ttl = max(2, int(get_current_config().DAEMON["wait_delay"]) + 2)
+            try:
+                nfo_path = writeReviewAlbumNfo(
+                    task,
+                    daemonClient=DaemonClient(),
+                    suppressTtl=suppress_ttl,
+                )
+            except DaemonUnavailableError:
+                suppression_mode = "daemon_unavailable"
+                nfo_path = writeReviewAlbumNfo(
+                    task,
+                    daemonClient=None,
+                    suppressTtl=suppress_ttl,
+                )
+        else:
+            suppression_mode = "not_applicable"
         confirmMetadataReviewTask(task)
     except ValueError as exc:
         logMetadataEvent(
@@ -506,7 +587,8 @@ def confirm_metadata_review_task(task_id):
             "review_task_confirm",
             result="bad_request",
             task_id=task.id,
-            album_id=task.album.id,
+            album_id=task.album.id if task.album is not None else "-",
+            entity_type=task.entity_type,
             failure_reason=str(exc),
         )
         return {"status": "error", "message": str(exc)}, 400
@@ -516,21 +598,25 @@ def confirm_metadata_review_task(task_id):
             "review_task_confirm",
             result="failure",
             task_id=task.id,
-            album_id=task.album.id,
-            writeback=True,
+            album_id=task.album.id if task.album is not None else "-",
+            entity_type=task.entity_type,
+            writeback=task.is_album_task(),
             suppression_mode=suppression_mode,
             nfo_path=nfo_path,
             failure_reason=str(exc),
         )
-        return {"status": "error", "message": f"Failed to write album.nfo: {exc}"}, 500
+        if task.is_album_task():
+            return {"status": "error", "message": f"Failed to write album.nfo: {exc}"}, 500
+        return {"status": "error", "message": str(exc)}, 500
 
     logMetadataEvent(
         logging.INFO,
         "review_task_confirm",
         result="success",
         task_id=task.id,
-        album_id=task.album.id,
-        writeback=True,
+        album_id=task.album.id if task.album is not None else "-",
+        entity_type=task.entity_type,
+        writeback=task.is_album_task(),
         suppression_mode=suppression_mode,
         nfo_path=nfo_path,
         from_status=previous_status,
@@ -564,7 +650,8 @@ def dismiss_metadata_review_task(task_id):
         "review_task_dismiss",
         result="success",
         task_id=task.id,
-        album_id=task.album.id,
+        album_id=task.album.id if task.album is not None else "-",
+        entity_type=task.entity_type,
         from_status=previous_status,
         to_status=task.status,
     )

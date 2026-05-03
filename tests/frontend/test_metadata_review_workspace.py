@@ -6,7 +6,7 @@ from flask import current_app
 from uuid import uuid4
 
 from supysonic.tool import write_dict_to_json
-from supysonic.db import Album, AlbumArtist, AlbumReviewTask, Artist, Folder, Track, TrackArtist, User, db
+from supysonic.db import Album, AlbumArtist, AlbumReviewTask, Artist, Folder, ReviewTask, Track, TrackArtist, User, db
 
 from .frontendtestbase import FrontendTestBase
 from ..testbase import TestConfig
@@ -19,9 +19,6 @@ class MetadataReviewWorkspaceTestCase(FrontendTestBase):
         TestConfig.WEBAPP = TestConfig.WEBAPP.copy()
         TestConfig.WEBAPP["log_dir"] = ""
         super().setUp()
-        db.execute_sql("ALTER TABLE artist ADD COLUMN artist_info_json VARCHAR(4096)")
-        db.execute_sql("ALTER TABLE artist ADD COLUMN real_artist_id INTEGER")
-        db.execute_sql("ALTER TABLE album ADD COLUMN year VARCHAR(255)")
         db.execute_sql(
             "CREATE TABLE album_artist ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT, "
@@ -192,6 +189,24 @@ class MetadataReviewWorkspaceTestCase(FrontendTestBase):
         self.assertIn("This review task is resolved and now read-only", rv.data)
         self.assertIn("disabled", rv.data)
         self.assertNotIn("Save album changes</button>", rv.data)
+
+    def test_review_workspace_renders_artist_review_task(self):
+        artist_task = ReviewTask.create(
+            entity_type="artist",
+            entity_id=str(self.artist.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="missing_image",
+            snapshot_json='{"artist_name": "Review Artist", "issues": ["missing_image"]}',
+        )
+
+        rv = self.client.get(f"/metadata/review-tasks/{artist_task.id}")
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn("Review Artist", rv.data)
+        self.assertIn("missing image", rv.data.lower())
+        self.assertNotIn("Tracks", rv.data)
+        self.assertIn(f"/rest/getCoverArt?id=ar-{self.artist.id}&amp;v=1.15.0&amp;c=web", rv.data)
 
 
 if __name__ == "__main__":

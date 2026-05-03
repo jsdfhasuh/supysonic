@@ -1,0 +1,80 @@
+{% extends "layout.html" %}
+{% block title %}Artist Review Task - Emosonic Server{% endblock %}
+{% block page_title %}Artist Review Task{% endblock %}
+{% block page_subtitle %}Review one artist task at a time. Artist edits stay scoped to the current review task.{% endblock %}
+{% block body %}
+<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/metadata.css') }}">
+<div class="console-section-spacer" data-review-editable="{{ 'true' if reviewIsEditable else 'false' }}">
+  <div class="metadata-review-return-bar">
+    <a href="{{ url_for('frontend.metadata', tab='inbox') }}" class="btn btn-primary metadata-review-back-link">
+      <span data-i18n-en="Back to Metadata Inbox" data-i18n-zh="返回 Metadata Inbox">Back to Metadata Inbox</span>
+    </a>
+    <span class="text-body-secondary">Return to the metadata inbox and review queue.</span>
+  </div>
+
+  <div class="card mb-4 metadata-review-hero-card">
+    <div class="card-body">
+      <p class="console-eyebrow mb-2">Metadata / Inbox / Artist Review Task</p>
+      <div class="d-flex flex-wrap gap-4 align-items-start justify-content-between metadata-review-hero">
+        <div class="d-flex gap-3 align-items-start metadata-review-hero-main">
+          <img src="{{ reviewSummary.cover_art_url }}" alt="{{ reviewArtist.get_artist_name() }} cover" class="metadata-review-cover">
+          <div>
+            <h2 class="h3 mb-1">{{ reviewArtist.get_artist_name() }}</h2>
+            <p class="mb-2 text-body-secondary">Artist metadata review</p>
+            <div class="d-flex flex-wrap gap-2 mb-3">
+              <span class="console-chip text-uppercase">{{ reviewTask.status }}</span>
+              <span class="console-chip">{{ reviewTask.reason.replace('_', ' ') }}</span>
+            </div>
+            <div class="d-flex flex-wrap gap-2 metadata-review-issue-list">
+              {% for issue in reviewSummary.issues %}
+                <span class="console-chip metadata-review-issue-chip">{{ issue }}</span>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="alert alert-info mb-4 metadata-review-scope-alert">Edits are scoped to this artist review task.</div>
+
+  <div class="row g-4 align-items-start">
+    <div class="col-xl-8">
+      <div class="card">
+        <div class="card-body metadata-review-main-card">
+          {% include "partials/metadata-review-artists-panel.html" %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-4">
+      <div class="card metadata-review-summary-card">
+        <div class="card-header">Review summary</div>
+        <div class="card-body">
+          <ul class="console-info-list mb-4">
+            <li><span>Status</span><strong>{{ reviewTask.status }}</strong></li>
+            <li><span>Created</span><strong>{{ reviewTask.created.strftime('%Y-%m-%d %H:%M:%S') }}</strong></li>
+            <li><span>Related artists</span><strong>{{ reviewSummary.related_artist_count }}</strong></li>
+          </ul>
+          <div class="mb-4">
+            <h3 class="h6 mb-2">Detected issues</h3>
+            <ul class="metadata-review-summary-issues mb-0">
+              {% for issue in reviewSummary.issues %}
+                <li>{{ issue }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            <form method="post" action="{{ url_for('frontend.confirm_metadata_review_task', task_id=reviewTask.id) }}">
+              <button type="submit" class="btn btn-primary"{% if not reviewIsEditable %} disabled{% endif %}>Confirm Task</button>
+            </form>
+            <form method="post" action="{{ url_for('frontend.dismiss_metadata_review_task', task_id=reviewTask.id) }}">
+              <button type="submit" class="btn btn-outline-secondary"{% if not reviewIsEditable %} disabled{% endif %}>Dismiss Task</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

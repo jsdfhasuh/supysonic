@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any, Dict, List, TYPE_CHECKING
 
 from ..db import Album, Artist, Folder
+from .scanner_review_tasks import rememberNewArtist
 
 if TYPE_CHECKING:
     from ..scanner import Scanner
@@ -31,7 +32,9 @@ def findArtist(scanner: Scanner, artist: str) -> Artist:
         return artistRow
     except Artist.DoesNotExist:
         scanner.stats().added.artists += 1
-        return Artist.create(name=artist)
+        artist_row = Artist.create(name=artist)
+        rememberNewArtist(scanner, artist_row)
+        return artist_row
 
 
 def findRootFolder(path: str) -> Folder:

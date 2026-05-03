@@ -6,7 +6,7 @@ import logging
 
 from ..db import Album, Artist, Folder, close_connection, open_connection
 from ..logging_utils import format_log_event
-from .scanner_review_tasks import createAlbumReviewTasks
+from .scanner_review_tasks import createReviewTasks
 
 from typing import TYPE_CHECKING
 
@@ -68,7 +68,7 @@ def runScanner(scanner: Scanner, logger: logging.Logger) -> None:
         pruneLibrary(scanner)
         logger.info(format_log_event("scanner", "repair_start"))
         scanner.find_lost_information()
-        created_review_tasks = createAlbumReviewTasks(scanner)
+        created_review_tasks = createReviewTasks(scanner)
         logger.info(
             format_log_event("scanner", "review_tasks_created", count=created_review_tasks)
         )

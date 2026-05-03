@@ -34,7 +34,7 @@ from uuid import UUID, uuid4
 from PIL import Image as PILImage
 from .tool import read_dict_from_json
 
-SCHEMA_VERSION = "20260502"
+SCHEMA_VERSION = "20260503"
 
 
 def now():
@@ -447,9 +447,10 @@ class Album(_Model):
         return cls.delete().where(cls.id.not_in(albums)).execute()
 
 
-class AlbumReviewTask(_Model):
+class ReviewTask(_Model):
     id = PrimaryKeyField()
-    album = ForeignKeyField(Album, backref="review_tasks", on_delete="CASCADE")
+    entity_type = CharField(max_length=32)
+    entity_id = CharField(max_length=36)
     task_type = CharField(max_length=64)
     status = CharField(max_length=32)
     reason = CharField(max_length=64)
@@ -458,21 +459,74 @@ class AlbumReviewTask(_Model):
     created = DateTimeField(default=now)
     updated = DateTimeField(default=now)
     resolved_at = DateTimeField(null=True)
+    expires_at = DateTimeField(null=True)
+
+    def is_album_task(self):
+        return self.entity_type == "album"
+
+    def is_artist_task(self):
+        return self.entity_type == "artist"
+
+    def get_album(self):
+        if not self.is_album_task():
+            return None
+        return Album.get_or_none(Album.id == self.entity_id)
+
+    def get_artist(self):
+        if not self.is_artist_task():
+            return None
+        return Artist.get_or_none(Artist.id == self.entity_id)
+
+    @property
+    def album(self):
+        return self.get_album()
+
+    @album.setter
+    def album(self, value):
+        self.entity_type = "album"
+        self.entity_id = str(getattr(value, "id", value))
+
+    @property
+    def artist(self):
+        return self.get_artist()
+
+    @artist.setter
+    def artist(self, value):
+        self.entity_type = "artist"
+        self.entity_id = str(getattr(value, "id", value))
+
+    @property
+    def album_id(self):
+        if not self.is_album_task():
+            return None
+        return UUID(self.entity_id)
+
+    @property
+    def artist_id(self):
+        if not self.is_artist_task():
+            return None
+        return UUID(self.entity_id)
 
     def save(self, *args, **kwargs):
-        if self.status == "pending" and self.album_id:
-            self.pending_key = f"{self.album_id}:pending"
+        if self.status == "pending" and self.entity_type and self.entity_id:
+            if self.entity_type == "artist":
+                self.pending_key = f"artist:{self.entity_id}:pending:{self.reason}"
+            else:
+                self.pending_key = f"{self.entity_type}:{self.entity_id}:pending"
         elif self.status != "pending":
             self.pending_key = None
         return super().save(*args, **kwargs)
 
     class Meta:
-        table_name = "album_review_task"
+        table_name = "review_task"
         indexes = (
-            (("album", "status"), False),
+            (("entity_type", "entity_id", "status"), False),
             (("status", "created"), False),
             (("pending_key",), True),
         )
+
+
+AlbumReviewTask = ReviewTask
 
 
 class AlbumArtist(_Model):

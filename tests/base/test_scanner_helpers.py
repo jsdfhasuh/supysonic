@@ -36,9 +36,6 @@ class ScannerHelpersTestCase(unittest.TestCase):
         db.db.execute_sql(
             "CREATE UNIQUE INDEX IF NOT EXISTS track_artist_track_id_artist_id ON track_artist(track_id, artist_id)"
         )
-        db.db.execute_sql("ALTER TABLE artist ADD COLUMN artist_info_json VARCHAR(4096)")
-        db.db.execute_sql("ALTER TABLE artist ADD COLUMN real_artist_id INTEGER")
-        db.db.execute_sql("ALTER TABLE album ADD COLUMN year VARCHAR(255)")
         self.stats = Stats()
         self.scanner = SimpleNamespace(stats=lambda: self.stats)
 
@@ -149,46 +146,122 @@ class ScannerHelpersTestCase(unittest.TestCase):
         artist = db.Artist.create(name="Review Artist")
         album = db.Album.create(name="Review Album", artist=artist, year="2024")
 
-        from supysonic.scanner_func.scanner_review_tasks import createAlbumReviewTasks, rememberNewAlbum
+        from supysonic.scanner_func.scanner_review_tasks import createReviewTasks, rememberNewAlbum
 
         rememberNewAlbum(self.scanner, album)
-        createAlbumReviewTasks(self.scanner)
+        createReviewTasks(self.scanner)
 
-        tasks = list(db.AlbumReviewTask.select().where(db.AlbumReviewTask.album == album))
+        tasks = list(
+            db.ReviewTask.select().where(
+                db.ReviewTask.entity_type == "album",
+                db.ReviewTask.entity_id == str(album.id),
+            )
+        )
         self.assertEqual(len(tasks), 1)
         self.assertEqual(tasks[0].status, "pending")
         self.assertEqual(tasks[0].reason, "new_album")
         self.assertEqual(json.loads(tasks[0].snapshot_json)["year"], "2024")
 
+    def test_create_review_tasks_creates_pending_task_for_new_artist(self):
+        artist = db.Artist.create(name="New Review Artist")
+
+        from supysonic.scanner_func.scanner_review_tasks import createReviewTasks, rememberNewArtist
+
+        rememberNewArtist(self.scanner, artist)
+        createReviewTasks(self.scanner)
+
+        task = db.ReviewTask.get(
+            db.ReviewTask.entity_type == "artist",
+            db.ReviewTask.entity_id == str(artist.id),
+            db.ReviewTask.reason == "new_artist",
+        )
+        self.assertEqual(task.status, "pending")
+        self.assertIsNotNone(task.expires_at)
+
+    def test_create_review_tasks_creates_missing_image_task_for_new_artist_without_image(self):
+        artist = db.Artist.create(name="Image Less Artist")
+
+        from supysonic.scanner_func.scanner_review_tasks import createReviewTasks, rememberNewArtist
+
+        rememberNewArtist(self.scanner, artist)
+        createReviewTasks(self.scanner)
+
+        task = db.ReviewTask.get(
+            db.ReviewTask.entity_type == "artist",
+            db.ReviewTask.entity_id == str(artist.id),
+            db.ReviewTask.reason == "missing_image",
+        )
+        self.assertEqual(task.status, "pending")
+        self.assertIsNone(task.expires_at)
+
+    def test_create_review_tasks_confirms_missing_image_task_after_artist_image_is_added(self):
+        artist = db.Artist.create(name="Recovered Image Artist")
+        task = db.ReviewTask.create(
+            entity_type="artist",
+            entity_id=str(artist.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="missing_image",
+            snapshot_json='{"artist_name": "Recovered Image Artist", "issues": ["missing_image"]}',
+        )
+        info_path = os.path.join(self._db_dir, "artist-info.json")
+        with open(info_path, "w", encoding="utf-8") as info_file:
+            json.dump(
+                {
+                    "biography": "",
+                    "image": {
+                        "small": "/tmp/small.png",
+                        "medium": "/tmp/medium.png",
+                        "large": "/tmp/large.png",
+                    },
+                },
+                info_file,
+            )
+        artist.artist_info_json = info_path
+        artist.save()
+
+        from supysonic.scanner_func.scanner_review_tasks import createReviewTasks, rememberNewArtist
+
+        rememberNewArtist(self.scanner, artist)
+        createReviewTasks(self.scanner)
+
+        refreshed_task = db.ReviewTask.get_by_id(task.id)
+        self.assertEqual(refreshed_task.status, "confirmed")
+        self.assertIsNotNone(refreshed_task.resolved_at)
+
     def test_create_album_review_tasks_marks_new_album_without_year_as_missing_year(self):
         artist = db.Artist.create(name="Review Artist")
         album = db.Album.create(name="Review Album", artist=artist, year=None)
 
-        from supysonic.scanner_func.scanner_review_tasks import createAlbumReviewTasks, rememberNewAlbum
+        from supysonic.scanner_func.scanner_review_tasks import createReviewTasks, rememberNewAlbum
 
         rememberNewAlbum(self.scanner, album)
-        createAlbumReviewTasks(self.scanner)
+        createReviewTasks(self.scanner)
 
-        task = db.AlbumReviewTask.get(db.AlbumReviewTask.album == album)
+        task = db.ReviewTask.get(
+            db.ReviewTask.entity_type == "album",
+            db.ReviewTask.entity_id == str(album.id),
+        )
         self.assertEqual(task.reason, "missing_year")
 
     def test_create_album_review_tasks_refreshes_existing_pending_task_from_final_album_state(self):
         artist = db.Artist.create(name="Review Artist")
         album = db.Album.create(name="Review Album", artist=artist, year="2024")
-        task = db.AlbumReviewTask.create(
-            album=album,
+        task = db.ReviewTask.create(
+            entity_type="album",
+            entity_id=str(album.id),
             task_type="metadata_review",
             status="pending",
             reason="missing_year",
             snapshot_json='{"year": null}',
         )
 
-        from supysonic.scanner_func.scanner_review_tasks import createAlbumReviewTasks, rememberNewAlbum
+        from supysonic.scanner_func.scanner_review_tasks import createReviewTasks, rememberNewAlbum
 
         rememberNewAlbum(self.scanner, album)
-        createAlbumReviewTasks(self.scanner)
+        createReviewTasks(self.scanner)
 
-        refreshed_task = db.AlbumReviewTask.get_by_id(task.id)
+        refreshed_task = db.ReviewTask.get_by_id(task.id)
         self.assertEqual(refreshed_task.reason, "new_album")
         self.assertEqual(json.loads(refreshed_task.snapshot_json)["year"], "2024")
 
@@ -196,28 +269,33 @@ class ScannerHelpersTestCase(unittest.TestCase):
         artist = db.Artist.create(name="Review Artist")
         album = db.Album.create(name="Review Album", artist=artist)
 
-        db.AlbumReviewTask.create(
-            album=album,
+        db.ReviewTask.create(
+            entity_type="album",
+            entity_id=str(album.id),
             task_type="metadata_review",
             status="pending",
             reason="new_album",
             snapshot_json="{}",
         )
 
-        from supysonic.scanner_func.scanner_review_tasks import createAlbumReviewTasks, rememberNewAlbum
+        from supysonic.scanner_func.scanner_review_tasks import createReviewTasks, rememberNewAlbum
 
         rememberNewAlbum(self.scanner, album)
-        createAlbumReviewTasks(self.scanner)
+        createReviewTasks(self.scanner)
 
-        task_count = db.AlbumReviewTask.select().where(db.AlbumReviewTask.album == album).count()
+        task_count = db.ReviewTask.select().where(
+            db.ReviewTask.entity_type == "album",
+            db.ReviewTask.entity_id == str(album.id),
+        ).count()
         self.assertEqual(task_count, 1)
 
     def test_create_album_review_tasks_allows_new_task_after_closed_task(self):
         artist = db.Artist.create(name="Review Artist")
         album = db.Album.create(name="Review Album", artist=artist)
 
-        db.AlbumReviewTask.create(
-            album=album,
+        db.ReviewTask.create(
+            entity_type="album",
+            entity_id=str(album.id),
             task_type="metadata_review",
             status="dismissed",
             reason="new_album",
@@ -225,15 +303,18 @@ class ScannerHelpersTestCase(unittest.TestCase):
             resolved_at=db.now(),
         )
 
-        from supysonic.scanner_func.scanner_review_tasks import createAlbumReviewTasks, rememberNewAlbum
+        from supysonic.scanner_func.scanner_review_tasks import createReviewTasks, rememberNewAlbum
 
         rememberNewAlbum(self.scanner, album)
-        createAlbumReviewTasks(self.scanner)
+        createReviewTasks(self.scanner)
 
         tasks = list(
-            db.AlbumReviewTask.select()
-            .where(db.AlbumReviewTask.album == album)
-            .order_by(db.AlbumReviewTask.created)
+            db.ReviewTask.select()
+            .where(
+                db.ReviewTask.entity_type == "album",
+                db.ReviewTask.entity_id == str(album.id),
+            )
+            .order_by(db.ReviewTask.created)
         )
         self.assertEqual(len(tasks), 2)
         self.assertEqual(tasks[-1].status, "pending")
@@ -329,7 +410,7 @@ class ScannerHelpersTestCase(unittest.TestCase):
         ), patch.object(scanner_runtime, "Folder") as folder_model, patch.object(
             scanner_runtime, "pruneLibrary"
         ) as prune_library, patch.object(
-            scanner_runtime, "createAlbumReviewTasks"
+            scanner_runtime, "createReviewTasks"
         ) as create_review_tasks:
             folder_model.get.return_value = "folder-row"
             create_review_tasks.return_value = 3

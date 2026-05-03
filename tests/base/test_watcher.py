@@ -352,6 +352,7 @@ class CoverWatcherTestCase(WatcherTestCase):
         self.assertEqual(Image.select().first().path, expected_path)
 
     def assertAlbumCoverImageMissing(self):
+        self.assertTrue(self._wait_until(lambda: Image.select().count() == 0))
         self.assertEqual(Image.select().count(), 0)
 
     def test_add_file_then_cover(self):
@@ -376,7 +377,7 @@ class CoverWatcherTestCase(WatcherTestCase):
         self._sleep()
 
         os.unlink(path)
-        self._sleep()
+        self.assertTrue(self._wait_until(lambda: Folder.select().first().cover_art is None))
 
         self.assertIsNone(Folder.select().first().cover_art)
         self.assertAlbumCoverImageMissing()

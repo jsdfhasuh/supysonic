@@ -17,9 +17,6 @@ class MetadataReviewTestCase(FrontendTestBase):
         self.albumDir = os.path.join(self.mediaRootDir, "album")
         os.makedirs(self.albumDir)
         super().setUp()
-        db.execute_sql("ALTER TABLE artist ADD COLUMN artist_info_json VARCHAR(4096)")
-        db.execute_sql("ALTER TABLE artist ADD COLUMN real_artist_id INTEGER")
-        db.execute_sql("ALTER TABLE album ADD COLUMN year VARCHAR(255)")
 
         alice = User.get(User.name == "alice")
         with self.client.session_transaction() as session:

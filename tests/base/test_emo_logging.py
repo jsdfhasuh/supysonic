@@ -3,6 +3,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from supysonic.db import release_database
 from supysonic.emo.ws import socketio
@@ -175,6 +176,39 @@ class EmoLoggingTestCase(unittest.TestCase):
         self.assertIn("emo event=upload_log_failed", content)
         self.assertIn("result=bad_request", content)
         self.assertIn("reason=empty_filename", content)
+
+    def test_logs_upload_log_success(self):
+        rv = self.client.post(
+            "/emo/upload_log?u=alice&p=Alic3",
+            data={"file": (io.BytesIO(b"test"), "mobile.log")},
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(rv.status_code, 200)
+        content = self.readEmoLog()
+
+        self.assertIn("emo event=upload_log_succeeded", content)
+        self.assertIn("result=success", content)
+        self.assertIn("user=alice", content)
+        self.assertIn("filename=mobile.log", content)
+        self.assertIn("path=/emo/upload_log", content)
+
+    def test_logs_upload_log_save_failure(self):
+        with patch("werkzeug.datastructures.FileStorage.save", side_effect=OSError("disk full")):
+            rv = self.client.post(
+                "/emo/upload_log?u=alice&p=Alic3",
+                data={"file": (io.BytesIO(b"test"), "mobile.log")},
+                content_type="multipart/form-data",
+            )
+
+        self.assertEqual(rv.status_code, 500)
+        content = self.readEmoLog()
+
+        self.assertIn("emo event=upload_log_failed", content)
+        self.assertIn("result=server_error", content)
+        self.assertIn("reason=save_failed", content)
+        self.assertIn("user=alice", content)
+        self.assertIn("filename=mobile.log", content)
 
     def test_logs_view_log_missing_file(self):
         rv = self.client.get("/emo/viewlog?u=alice&p=Alic3&filename=missing.log")

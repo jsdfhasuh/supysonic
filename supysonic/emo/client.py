@@ -44,12 +44,14 @@ def get_log_path(filename):
 
 @api_routing('/upload_log')
 def upload_log():
+    userName = getattr(getattr(request, "user", None), "name", "-") or "-"
     # 检查 HTTP 请求中是否有 "file"
     if 'file' not in request.files:
         log_emo_event(
             logging.WARNING,
             "upload_log_failed",
             result="bad_request",
+            user=userName,
             reason="no_file_part",
         )
         return jsonify({'status': 'error', 'message': 'No file part'}), 400
@@ -60,6 +62,7 @@ def upload_log():
             logging.WARNING,
             "upload_log_failed",
             result="bad_request",
+            user=userName,
             reason="empty_filename",
         )
         return jsonify({'status': 'error', 'message': 'No selected file'}), 400
@@ -69,6 +72,14 @@ def upload_log():
     
     try:
         file.save(file_path)
+        log_emo_event(
+            logging.INFO,
+            "upload_log_succeeded",
+            result="success",
+            user=userName,
+            filename=file.filename,
+            saved_path=file_path,
+        )
         return jsonify({'status': 'success', 'message': 'File uploaded successfully', 'path': file_path})
     except Exception as e:
         logger.exception(
@@ -78,8 +89,10 @@ def upload_log():
                 request_id=getattr(g, "supysonic_request_id", "-"),
                 path=request.path,
                 result="server_error",
+                user=userName,
                 reason="save_failed",
                 filename=file.filename,
+                saved_path=file_path,
             )
         )
         return jsonify({'status': 'error', 'message': str(e)}), 500

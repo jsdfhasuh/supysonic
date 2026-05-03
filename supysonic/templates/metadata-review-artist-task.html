@@ -30,6 +30,9 @@
                 <span class="console-chip metadata-review-issue-chip">{{ issue }}</span>
               {% endfor %}
             </div>
+            {% if reviewSummary.is_cover_art_fallback %}
+              <p class="mt-3 mb-0 text-warning-emphasis">Showing album cover fallback. Artist image is still missing.</p>
+            {% endif %}
           </div>
         </div>
       </div>

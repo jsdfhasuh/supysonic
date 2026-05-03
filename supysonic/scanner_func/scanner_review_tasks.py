@@ -159,6 +159,47 @@ def _getPendingTaskExpiryPolicy(task: ReviewTask) -> str:
     return "no_expiry_policy"
 
 
+def _getCanonicalAlbumPendingKey(album: Album) -> str:
+    return f"album:{album.id}:pending"
+
+
+def _getLegacyAlbumPendingKey(album: Album) -> str:
+    return f"{album.id}:pending"
+
+
+def removeLegacyDuplicateAlbumPendingTasks() -> int:
+    removed = 0
+    pending_album_tasks = list(
+        ReviewTask.select().where(
+            ReviewTask.entity_type == "album",
+            ReviewTask.status == PENDING_REVIEW_TASK_STATUS,
+        )
+    )
+    canonical_pending_keys = {task.pending_key for task in pending_album_tasks if task.pending_key.startswith("album:")}
+
+    for task in pending_album_tasks:
+        if task.pending_key.startswith("album:"):
+            continue
+        album = task.get_album()
+        if album is None:
+            continue
+        legacy_pending_key = _getLegacyAlbumPendingKey(album)
+        canonical_pending_key = _getCanonicalAlbumPendingKey(album)
+        if task.pending_key != legacy_pending_key or canonical_pending_key not in canonical_pending_keys:
+            continue
+        logger.info(
+            "Removed legacy duplicate album review task: id=%s album_id=%s old_pending_key=%s canonical_pending_key=%s",
+            task.id,
+            album.id,
+            task.pending_key,
+            canonical_pending_key,
+        )
+        task.delete_instance()
+        removed += 1
+
+    return removed
+
+
 def logPendingReviewTasks(context: str) -> int:
     pending_tasks = list(
         ReviewTask.select()
@@ -379,7 +420,7 @@ def confirmCleanNewAlbumTasks() -> int:
 
 
 def createReviewTaskBootstrap() -> int:
-    return createMissingYearAlbumReviewTasks() + createMissingImageArtistReviewTasks()
+    return createMissingYearAlbumReviewTasks() + createMissingImageArtistReviewTasks() + removeLegacyDuplicateAlbumPendingTasks()
 
 
 def runReviewTaskBootstrap() -> int:
@@ -394,6 +435,8 @@ def runReviewTaskBootstrap() -> int:
 
 def createReviewTaskMaintenance() -> int:
     return (
+        removeLegacyDuplicateAlbumPendingTasks()
+        +
         expirePendingNewArtistTasks()
         + backfillPendingNewAlbumTaskExpiries()
         + confirmCleanNewAlbumTasks()

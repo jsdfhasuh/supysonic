@@ -107,6 +107,16 @@ def getReviewArtistImageUrl(artist, artistInfo):
     return getMetadataCoverArtUrl(f"ar-{artist.id}")
 
 
+def hasDedicatedArtistImage(artistInfo):
+    return any(artistInfo.get(key) for key in ("largeImageUrl", "mediumImageUrl", "smallImageUrl"))
+
+
+def hasAlbumCoverFallback(artist):
+    if artist is None:
+        return False
+    return Album.select().where(Album.artist == artist).exists()
+
+
 def buildMetadataArtistCardData(artist):
     return {
         "id": str(artist.id),
@@ -115,15 +125,77 @@ def buildMetadataArtistCardData(artist):
     }
 
 
-def getTaskDisplayIssues(task, tracks=None):
+def getTaskIssueCodes(task):
     snapshot = json.loads(task.snapshot_json or "{}")
     issue_codes = snapshot.get("issues") or []
+    if issue_codes:
+        return issue_codes
+
+    if task.is_artist_task():
+        if task.reason == "missing_image":
+            return ["missing_image"]
+        return []
+
+    issue_codes = []
+    album = task.album
+    if album is not None:
+        if not album.year:
+            issue_codes.append("missing_year")
+        if any(track.artist_id != album.artist_id for track in album.tracks):
+            issue_codes.append("track_artist_mapping_needs_review")
+    if issue_codes:
+        return issue_codes
+
+    if task.reason == "missing_year":
+        return ["missing_year"]
+    return []
+
+
+def getInboxTaskPrefix(task):
+    if task.is_artist_task():
+        return "Artist metadata review"
+    album_reason_map = {
+        "new_album": "New album metadata review",
+    }
+    return album_reason_map.get(task.reason, "Album metadata review")
+
+
+def getInboxTaskDescription(task):
+    created_at = task.created.strftime("%Y-%m-%d %H:%M:%S")
+    issues = getTaskIssueLabels(task)
+    prefix = getInboxTaskPrefix(task)
+    if len(issues) == 1:
+        return f"Current issue: {issues[0]}. {prefix} created at {created_at}."
+    if len(issues) > 1:
+        return f"Current issues: {', '.join(issues)}. {prefix} created at {created_at}."
+    return f"{prefix} created at {created_at}."
+
+
+def getTaskIssueLabels(task):
+    issue_codes = getTaskIssueCodes(task)
     issue_map = {
         "missing_year": "Missing release year",
         "track_artist_mapping_needs_review": "Track artist mapping needs review",
         "missing_image": "Missing artist image",
     }
-    issues = [issue_map.get(issue, issue.replace("_", " ")) for issue in issue_codes]
+    return [issue_map.get(issue, issue.replace("_", " ")) for issue in issue_codes]
+
+
+def getAlbumInboxTaskPriority(task_data):
+    issue_codes = task_data.get("issue_codes", [])
+    if len(issue_codes) > 1:
+        return 0
+    if "missing_year" in issue_codes:
+        return 1
+    if "track_artist_mapping_needs_review" in issue_codes:
+        return 2
+    if issue_codes:
+        return 3
+    return 4
+
+
+def getTaskDisplayIssues(task, tracks=None):
+    issues = getTaskIssueLabels(task)
     if issues:
         return issues
     if task.is_artist_task():
@@ -137,15 +209,18 @@ def buildInboxTaskData(task):
         artist = task.artist
         artist_name = snapshot.get("artist_name") or (artist.get_artist_name() if artist is not None else "Unknown artist")
         artist_id = getattr(artist, "id", task.entity_id)
+        artist_info = artist.get_info() if artist is not None else {}
+        is_cover_art_fallback = (not hasDedicatedArtistImage(artist_info)) and hasAlbumCoverFallback(artist)
         return {
             "id": str(task.id),
             "entity_type": "artist",
             "title": artist_name,
             "subtitle": task.reason.replace("_", " "),
-            "description": f"Artist metadata review created at {task.created.strftime('%Y-%m-%d %H:%M:%S')}.",
+            "description": getInboxTaskDescription(task),
             "status": task.status,
             "created": task.created,
             "cover_art_url": getMetadataCoverArtUrl(f"ar-{artist_id}"),
+            "is_cover_art_fallback": is_cover_art_fallback,
         }
 
     album = task.album
@@ -155,7 +230,7 @@ def buildInboxTaskData(task):
             "entity_type": "album",
             "title": snapshot.get("album_name") or "Unknown album",
             "subtitle": snapshot.get("artist_name") or "Album no longer exists",
-            "description": f"Album metadata review created at {task.created.strftime('%Y-%m-%d %H:%M:%S')}.",
+            "description": getInboxTaskDescription(task),
             "status": task.status,
             "created": task.created,
             "cover_art_url": getMetadataCoverArtUrl(f"al-{task.entity_id}"),
@@ -171,7 +246,7 @@ def buildInboxTaskData(task):
         "entity_type": "album",
         "title": snapshot.get("album_name") or album.name,
         "subtitle": subtitle,
-        "description": f"New album metadata review created at {task.created.strftime('%Y-%m-%d %H:%M:%S')}.",
+        "description": getInboxTaskDescription(task),
         "status": task.status,
         "created": task.created,
         "cover_art_url": getMetadataCoverArtUrl(f"al-{album.id}"),
@@ -186,6 +261,7 @@ def buildArtistReviewCard(artist):
         "name": artist.name,
         "biography": artist_info.get("biography", ""),
         "image_url": getReviewArtistImageUrl(artist, artist_info),
+        "is_cover_art_fallback": (not hasDedicatedArtistImage(artist_info)) and hasAlbumCoverFallback(artist),
     }
 
 
@@ -212,12 +288,19 @@ def metadata():
         activeTab = "inbox"
 
     inbox_tasks = []
+    album_inbox_tasks = []
+    artist_inbox_tasks = []
     inbox_summary = None
     selected_status = request.args.get("status", "pending")
     if activeTab == "inbox":
         query_status = None if selected_status == "all" else selected_status
         for task in listMetadataReviewTasks(status=query_status):
             inbox_tasks.append(buildInboxTaskData(task))
+
+        album_inbox_tasks = [task for task in inbox_tasks if task["entity_type"] == "album"]
+        artist_inbox_tasks = [task for task in inbox_tasks if task["entity_type"] == "artist"]
+        album_inbox_tasks.sort(key=lambda task: (getAlbumInboxTaskPriority(task), task["created"]))
+        artist_inbox_tasks.sort(key=lambda task: task["created"])
 
         inbox_summary = {
             "pending": listMetadataReviewTasks(status="pending").count(),
@@ -230,6 +313,8 @@ def metadata():
         "metadata-workspace.html",
         activeTab=activeTab,
         inboxTasks=inbox_tasks,
+        albumInboxTasks=album_inbox_tasks,
+        artistInboxTasks=artist_inbox_tasks,
         inboxSummary=inbox_summary,
         selectedInboxStatus=selected_status,
     )
@@ -260,6 +345,7 @@ def metadata_review_task(task_id):
             "total_duration": formatDurationLabel(0),
             "cover_art_url": getMetadataCoverArtUrl(f"ar-{artist.id}"),
             "issues": getTaskDisplayIssues(task),
+            "is_cover_art_fallback": review_artist_cards[0]["is_cover_art_fallback"],
         }
         return render_template(
             "metadata-review-artist-task.html",

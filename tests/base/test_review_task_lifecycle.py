@@ -121,6 +121,39 @@ class ReviewTaskLifecycleTestCase(unittest.TestCase):
         self.assertEqual(updated_count, 0)
         self.assertEqual(db.ReviewTask.get_by_id(task.id).status, "pending")
 
+    def test_run_review_task_maintenance_removes_legacy_duplicate_album_pending_task(self):
+        from supysonic.scanner_func.scanner_review_tasks import runReviewTaskMaintenance
+
+        artist = db.Artist.create(name="Duplicate Artist")
+        album = db.Album.create(name="Duplicate Album", artist=artist, year=None)
+        legacy_task = db.ReviewTask.create(
+            entity_type="album",
+            entity_id=str(album.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="missing_year",
+            snapshot_json='{"album_name": "Duplicate Album", "artist_name": "Duplicate Artist", "track_count": 1}',
+        )
+        db.ReviewTask.update(
+            entity_id=str(album.id).replace("-", ""),
+            pending_key=f"{album.id}:pending",
+        ).where(db.ReviewTask.id == legacy_task.id).execute()
+        canonical_task = db.ReviewTask.create(
+            entity_type="album",
+            entity_id=str(album.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="missing_year",
+            pending_key=f"album:{album.id}:pending",
+            snapshot_json='{"album_name": "Duplicate Album", "artist_name": "Duplicate Artist", "track_count": 1, "issues": ["missing_year"]}',
+        )
+
+        updated_count = runReviewTaskMaintenance()
+
+        self.assertEqual(updated_count, 1)
+        self.assertIsNone(db.ReviewTask.get_or_none(db.ReviewTask.id == legacy_task.id))
+        self.assertIsNotNone(db.ReviewTask.get_or_none(db.ReviewTask.id == canonical_task.id))
+
     def test_run_review_task_maintenance_logs_pending_task_details(self):
         from supysonic.scanner_func.scanner_review_tasks import runReviewTaskMaintenance
 

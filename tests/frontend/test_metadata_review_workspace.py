@@ -208,6 +208,39 @@ class MetadataReviewWorkspaceTestCase(FrontendTestBase):
         self.assertNotIn("Tracks", rv.data)
         self.assertIn(f"/rest/getCoverArt?id=ar-{self.artist.id}&amp;v=1.15.0&amp;c=web", rv.data)
 
+    def test_review_workspace_shows_album_cover_fallback_notice_for_artist_task(self):
+        fallback_artist = Artist.create(name="Fallback Artist")
+        Album.create(name="Fallback Album", artist=fallback_artist, year="2024")
+        artist_task = ReviewTask.create(
+            entity_type="artist",
+            entity_id=str(fallback_artist.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="missing_image",
+            snapshot_json='{"artist_name": "Fallback Artist", "issues": ["missing_image"]}',
+        )
+
+        rv = self.client.get(f"/metadata/review-tasks/{artist_task.id}")
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn("Showing album cover fallback", rv.data)
+        self.assertIn("Artist image is still missing", rv.data)
+
+    def test_review_workspace_hides_fallback_notice_when_artist_has_dedicated_image(self):
+        artist_task = ReviewTask.create(
+            entity_type="artist",
+            entity_id=str(self.artist.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="missing_image",
+            snapshot_json='{"artist_name": "Review Artist", "issues": ["missing_image"]}',
+        )
+
+        rv = self.client.get(f"/metadata/review-tasks/{artist_task.id}")
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertNotIn("Showing album cover fallback", rv.data)
+
 
 if __name__ == "__main__":
     unittest.main()

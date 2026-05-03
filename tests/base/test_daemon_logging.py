@@ -176,7 +176,13 @@ class DaemonLoggingTestCase(unittest.TestCase):
         )
 
         config = SimpleNamespace(
-            DAEMON={"socket": "daemon.sock", "run_watcher": True, "jukebox_command": None},
+            DAEMON={
+                "socket": "daemon.sock",
+                "run_watcher": True,
+                "jukebox_command": None,
+                "recommend_daily_refresh": False,
+                "review_task_maintenance": False,
+            },
             BASE={},
         )
         fake_listener = SimpleNamespace(address="daemon.sock", close=Mock())

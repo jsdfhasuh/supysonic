@@ -60,6 +60,11 @@ class DefaultConfig:
         "log_backup_count": 7,
         "log_level": "WARNING",
         "log_rotate": True,
+        "recommend_daily_refresh": True,
+        "recommend_refresh_interval": 300,
+        "recommend_playlist_size": 50,
+        "review_task_maintenance": True,
+        "review_task_maintenance_interval": 300,
     }
     LASTFM = {"api_key": None, "secret": None}
     LISTENBRAINZ = {"api_url": "https://api.listenbrainz.org"}

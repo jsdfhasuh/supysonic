@@ -95,11 +95,11 @@ def create_application(config=None):
     logger.info("Task Manager initialized: %s", TaskManger_instance)
 
     if not app.testing:
-        from .scanner_func.scanner_review_tasks import runMissingYearAlbumReviewBootstrap
+        from .scanner_func.scanner_review_tasks import runReviewTaskBootstrap
 
         TaskManger_instance.submit_task(
-            "bootstrap-missing-year-review-tasks",
-            runMissingYearAlbumReviewBootstrap,
+            "bootstrap-review-tasks",
+            runReviewTaskBootstrap,
         )
     
     

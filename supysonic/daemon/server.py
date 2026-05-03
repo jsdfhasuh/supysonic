@@ -16,7 +16,9 @@ from ..db import Folder, open_connection, close_connection
 from ..jukebox import Jukebox
 from ..logging_utils import format_log_event
 from ..recommend import getRecommendationDay, refreshDailyRecommendPlaylists
+from ..scheduler import IntervalScheduler
 from ..scanner import Scanner
+from ..scanner_func.scanner_review_tasks import runReviewTaskMaintenance
 from ..utils import get_secret_key
 from ..watcher import SupysonicWatcher
 
@@ -32,7 +34,7 @@ class Daemon:
         self.__watcher = None
         self.__scanner = None
         self.__jukebox = None
-        self.__recommendRefreshThread = None
+        self.__scheduler = IntervalScheduler()
         self.__lastRecommendRefreshDay = None
         self.__stopped = Event()
 
@@ -73,23 +75,19 @@ class Daemon:
         close_connection()
 
         Thread(target=self.__listen).start()
-        if self.__config.DAEMON.get("recommend_daily_refresh", True):
-            self.__recommendRefreshThread = Thread(
-                target=self.__run_recommend_refresh_loop,
-                daemon=True,
-            )
-            self.__recommendRefreshThread.start()
+        self.__configure_scheduler()
+        jobs = [job for job in self.__scheduler.list_jobs() if job["enabled"]]
+        if jobs:
+            self.__scheduler.start()
             logger.info(
                 format_log_event(
                     "daemon",
-                    "recommend_refresh_scheduler_started",
-                    interval=self.__get_recommend_refresh_interval(),
+                    "scheduler_started",
+                    jobs=len(jobs),
                 )
             )
         while not self.__stopped.is_set():
             time.sleep(1)
-            
-    
 
     def __listen(self):
         while not self.__stopped.is_set():
@@ -103,6 +101,26 @@ class Daemon:
 
     def __get_recommend_playlist_size(self):
         return max(1, int(self.__config.DAEMON.get("recommend_playlist_size", 50)))
+
+    def __get_review_task_maintenance_interval(self):
+        return max(60, int(self.__config.DAEMON.get("review_task_maintenance_interval", 300)))
+
+    def __configure_scheduler(self):
+        self.__scheduler.register(
+            "review-task-maintenance",
+            self.__run_review_task_maintenance,
+            self.__get_review_task_maintenance_interval(),
+            enabled=self.__config.DAEMON.get("review_task_maintenance", True),
+        )
+        self.__scheduler.register(
+            "recommend-refresh",
+            self.__refresh_recommend_playlists_if_needed,
+            self.__get_recommend_refresh_interval(),
+            enabled=self.__config.DAEMON.get("recommend_daily_refresh", True),
+        )
+
+    def __run_review_task_maintenance(self):
+        return runReviewTaskMaintenance()
 
     def __refresh_recommend_playlists_if_needed(self, current_day=None):
         recommendationDay = getRecommendationDay() if current_day is None else current_day
@@ -146,12 +164,6 @@ class Daemon:
         finally:
             if opened:
                 close_connection()
-
-    def __run_recommend_refresh_loop(self):
-        interval = self.__get_recommend_refresh_interval()
-        while not self.__stopped.is_set():
-            self.__refresh_recommend_playlists_if_needed()
-            self.__stopped.wait(interval)
 
     def start_scan(self, folders=[], force=False):
         logger.info(
@@ -225,7 +237,7 @@ class Daemon:
             self.__scanner.join()
         if self.__watcher is not None:
             self.__watcher.stop()
-        if self.__recommendRefreshThread is not None:
-            self.__recommendRefreshThread.join()
+        self.__scheduler.stop()
+        self.__scheduler.join()
         if self.__jukebox is not None:
             self.__jukebox.terminate()

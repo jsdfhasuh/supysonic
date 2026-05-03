@@ -1,7 +1,7 @@
 import unittest
 
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from supysonic.daemon.server import Daemon
 
@@ -72,6 +72,29 @@ class DaemonRecommendRefreshTestCase(unittest.TestCase):
             )
 
         refresh_daily.assert_called_once_with(num_songs=10, day="2026-05-02")
+
+    def test_configure_scheduler_registers_maintenance_and_recommend_jobs(self):
+        daemon = self.createDaemon(
+            recommend_daily_refresh=True,
+            recommend_refresh_interval=120,
+            review_task_maintenance=True,
+            review_task_maintenance_interval=900,
+        )
+        scheduler = Mock()
+        daemon._Daemon__scheduler = scheduler
+
+        daemon._Daemon__configure_scheduler()
+
+        first_call = scheduler.register.call_args_list[0]
+        second_call = scheduler.register.call_args_list[1]
+
+        self.assertEqual(first_call.args[0], "review-task-maintenance")
+        self.assertEqual(first_call.args[2], 900)
+        self.assertTrue(first_call.kwargs["enabled"])
+
+        self.assertEqual(second_call.args[0], "recommend-refresh")
+        self.assertEqual(second_call.args[2], 120)
+        self.assertTrue(second_call.kwargs["enabled"])
 
 
 if __name__ == "__main__":

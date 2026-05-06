@@ -1,12 +1,13 @@
 import unittest
 import tempfile
 import os
+from datetime import timedelta
 
 from flask import current_app
 from uuid import uuid4
 
 from supysonic.tool import write_dict_to_json
-from supysonic.db import Album, AlbumArtist, AlbumReviewTask, Artist, Folder, ReviewTask, Track, TrackArtist, User, db
+from supysonic.db import Album, AlbumArtist, AlbumReviewTask, Artist, Folder, ReviewTask, Track, TrackArtist, User, db, now
 
 from .frontendtestbase import FrontendTestBase
 from ..testbase import TestConfig
@@ -105,11 +106,29 @@ class MetadataReviewWorkspaceTestCase(FrontendTestBase):
         self.assertIn("/metadata/artist-suggestions", rv.data)
         self.assertNotIn("reloadReviewPage('album')", rv.data)
         self.assertNotIn("reloadReviewPage('tracks')", rv.data)
-        self.assertNotIn("reloadReviewPage('artists')", rv.data)
+        self.assertIn("reloadReviewPage('artists')", rv.data)
         self.assertIn(f"/rest/getCoverArt?id=al-{self.album.id}&amp;v=1.15.0&amp;c=web", rv.data)
         self.assertIn(f"/rest/getCoverArt?id=ar-{self.artist.id}&amp;v=1.15.0&amp;c=web", rv.data)
         self.assertNotIn("Loading album data...", rv.data)
         self.assertNotIn("Loading artist data...", rv.data)
+        self.assertIn("Expires", rv.data)
+        self.assertIn("No expiry", rv.data)
+        self.assertIn("Issue status", rv.data)
+        self.assertIn("Waiting for changes", rv.data)
+        self.assertIn("Ready to confirm", rv.data)
+        self.assertIn("data-review-issue-status-list", rv.data)
+        self.assertIn("data-review-ready-to-confirm", rv.data)
+        self.assertIn("evaluateAlbumIssueStatus", rv.data)
+        self.assertIn("renderIssueStatus", rv.data)
+
+    def test_review_workspace_shows_album_task_expiry_when_present(self):
+        self.task.expires_at = now() + timedelta(days=2)
+        self.task.save()
+
+        rv = self.client.get(f"/metadata/review-tasks/{self.task.id}")
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn(self.task.expires_at.strftime('%Y-%m-%d %H:%M:%S'), rv.data)
 
     def test_review_workspace_includes_back_to_metadata_button(self):
         rv = self.client.get(f"/metadata/review-tasks/{self.task.id}?section=tracks")
@@ -140,6 +159,31 @@ class MetadataReviewWorkspaceTestCase(FrontendTestBase):
 
         self.assertEqual(rv.status_code, 200)
         self.assertIn("Guest Relation Artist", rv.data)
+
+    def test_review_workspace_shows_remove_button_only_for_guest_artists(self):
+        guest_artist = Artist.create(name="Guest Relation Artist")
+        AlbumArtist.create(album_id=self.album, artist_id=guest_artist, position=2)
+        TrackArtist.create(track_id=self.album.tracks.get(), artist_id=guest_artist, position=2)
+
+        rv = self.client.get(f"/metadata/review-tasks/{self.task.id}?section=artists")
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn("Remove artist", rv.data)
+        self.assertIn(f"/metadata/review-tasks/{self.task.id}/artists/{guest_artist.id}/remove", rv.data)
+        self.assertNotIn(f"/metadata/review-tasks/{self.task.id}/artists/{self.artist.id}/remove", rv.data)
+
+    def test_review_workspace_enables_artist_suggestions_for_primary_artist_mapping(self):
+        guest_artist = Artist.create(name="Guest Relation Artist")
+        AlbumArtist.create(album_id=self.album, artist_id=guest_artist, position=2)
+        TrackArtist.create(track_id=self.album.tracks.get(), artist_id=guest_artist, position=2)
+
+        rv = self.client.get(f"/metadata/review-tasks/{self.task.id}?section=artists")
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn('data-review-primary-artist-suggestions', rv.data)
+        self.assertIn("input[name=\"primary_name\"]", rv.data)
+        self.assertIn("primaryArtistSuggestionsNode", rv.data)
+        self.assertIn("setupArtistAutocomplete(primaryNameField", rv.data)
 
     def test_review_workspace_handles_artist_metadata_without_image_key(self):
         image_less_artist = Artist.create(name="Image Less Artist")
@@ -189,6 +233,14 @@ class MetadataReviewWorkspaceTestCase(FrontendTestBase):
         self.assertIn("This review task is resolved and now read-only", rv.data)
         self.assertIn("disabled", rv.data)
         self.assertNotIn("Save album changes</button>", rv.data)
+        self.assertIn("Reopen Task", rv.data)
+        self.assertIn(f"/metadata/review-tasks/{self.task.id}/reopen?redirect=1&amp;section=album", rv.data)
+
+    def test_review_workspace_hides_reopen_button_for_pending_task(self):
+        rv = self.client.get(f"/metadata/review-tasks/{self.task.id}")
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertNotIn("Reopen Task", rv.data)
 
     def test_review_workspace_renders_artist_review_task(self):
         artist_task = ReviewTask.create(
@@ -212,6 +264,64 @@ class MetadataReviewWorkspaceTestCase(FrontendTestBase):
         self.assertIn("data-review-artist-image-preview", rv.data)
         self.assertIn("URL.createObjectURL", rv.data)
         self.assertIn("new FormData(artistForm)", rv.data)
+
+    def test_artist_review_workspace_enables_artist_suggestions_for_primary_artist_mapping(self):
+        artist_task = ReviewTask.create(
+            entity_type="artist",
+            entity_id=str(self.artist.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="missing_image",
+            snapshot_json='{"artist_name": "Review Artist", "issues": ["missing_image"]}',
+        )
+
+        rv = self.client.get(f"/metadata/review-tasks/{artist_task.id}")
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn('data-review-primary-artist-suggestions', rv.data)
+        self.assertIn("primaryArtistSuggestionsNode", rv.data)
+        self.assertIn("setupArtistAutocomplete(primaryNameField", rv.data)
+        self.assertIn("Expires", rv.data)
+        self.assertIn("No expiry", rv.data)
+        self.assertIn("Issue status", rv.data)
+        self.assertIn("Waiting for changes", rv.data)
+        self.assertIn("Ready to confirm", rv.data)
+        self.assertIn("data-review-issue-status-list", rv.data)
+        self.assertIn("data-review-ready-to-confirm", rv.data)
+        self.assertIn("evaluateArtistIssueStatus", rv.data)
+        self.assertIn("renderIssueStatus", rv.data)
+
+    def test_artist_review_workspace_shows_expiry_when_present(self):
+        artist_task = ReviewTask.create(
+            entity_type="artist",
+            entity_id=str(self.artist.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="missing_image",
+            snapshot_json='{"artist_name": "Review Artist", "issues": ["missing_image"]}',
+            expires_at=now() + timedelta(days=3),
+        )
+
+        rv = self.client.get(f"/metadata/review-tasks/{artist_task.id}")
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn(artist_task.expires_at.strftime('%Y-%m-%d %H:%M:%S'), rv.data)
+
+    def test_artist_review_workspace_shows_reopen_button_for_resolved_task(self):
+        artist_task = ReviewTask.create(
+            entity_type="artist",
+            entity_id=str(self.artist.id),
+            task_type="metadata_review",
+            status="dismissed",
+            reason="missing_image",
+            snapshot_json='{"artist_name": "Review Artist", "issues": ["missing_image"]}',
+        )
+
+        rv = self.client.get(f"/metadata/review-tasks/{artist_task.id}")
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn("Reopen Task", rv.data)
+        self.assertIn(f"/metadata/review-tasks/{artist_task.id}/reopen?redirect=1&amp;section=artists", rv.data)
 
     def test_review_workspace_shows_album_cover_fallback_notice_for_artist_task(self):
         fallback_artist = Artist.create(name="Fallback Artist")

@@ -164,6 +164,21 @@ class ScannerHelpersTestCase(unittest.TestCase):
 
     def test_create_review_tasks_creates_pending_task_for_new_artist(self):
         artist = db.Artist.create(name="New Review Artist")
+        info_path = os.path.join(self._db_dir, "new-review-artist.json")
+        with open(info_path, "w", encoding="utf-8") as info_file:
+            json.dump(
+                {
+                    "biography": "",
+                    "image": {
+                        "small": "/tmp/small.png",
+                        "medium": "/tmp/medium.png",
+                        "large": "/tmp/large.png",
+                    },
+                },
+                info_file,
+            )
+        artist.artist_info_json = info_path
+        artist.save()
 
         from supysonic.scanner_func.scanner_review_tasks import createReviewTasks, rememberNewArtist
 
@@ -193,6 +208,14 @@ class ScannerHelpersTestCase(unittest.TestCase):
         )
         self.assertEqual(task.status, "pending")
         self.assertIsNone(task.expires_at)
+        self.assertFalse(
+            db.ReviewTask.select().where(
+                db.ReviewTask.entity_type == "artist",
+                db.ReviewTask.entity_id == str(artist.id),
+                db.ReviewTask.reason == "new_artist",
+                db.ReviewTask.status == "pending",
+            ).exists()
+        )
 
     def test_create_review_tasks_confirms_missing_image_task_after_artist_image_is_added(self):
         artist = db.Artist.create(name="Recovered Image Artist")

@@ -74,6 +74,7 @@
           <ul class="console-info-list mb-4">
             <li><span>Status</span><strong data-review-summary-status>{{ reviewTask.status }}</strong></li>
             <li><span>Created</span><strong>{{ reviewTask.created.strftime('%Y-%m-%d %H:%M:%S') }}</strong></li>
+            <li><span>Expires</span><strong>{% if reviewSummary.expires_at %}{{ reviewSummary.expires_at.strftime('%Y-%m-%d %H:%M:%S') }}{% else %}No expiry{% endif %}</strong></li>
             <li><span>Track count</span><strong>{{ reviewTracks|length }}</strong></li>
             <li><span>Related artists</span><strong>{{ reviewArtists|length }}</strong></li>
             <li><span>Total duration</span><strong>{{ reviewSummary.total_duration }}</strong></li>
@@ -86,10 +87,22 @@
               {% endfor %}
             </ul>
           </div>
+          <div class="mb-4">
+            <h3 class="h6 mb-2">Issue status</h3>
+            <p class="text-body-secondary mb-2" data-review-ready-to-confirm>Waiting for changes</p>
+            <ul class="metadata-review-summary-issues mb-3" data-review-issue-status-list></ul>
+            <div class="alert alert-success{% if not reviewSummary.ready_to_confirm %} d-none{% endif %} mb-0" data-review-ready-to-confirm-banner>Ready to confirm</div>
+          </div>
           <div id="metadata-review-feedback" class="alert d-none" role="status"></div>
           <div class="d-flex flex-wrap gap-2">
-            <button type="button" class="btn btn-primary" data-review-task-action="{{ url_for('frontend.confirm_metadata_review_task', task_id=reviewTask.id) }}" data-review-task-label="confirm"{% if not reviewIsEditable %} disabled{% endif %}>Confirm Task</button>
-            <button type="button" class="btn btn-outline-secondary" data-review-task-action="{{ url_for('frontend.dismiss_metadata_review_task', task_id=reviewTask.id) }}" data-review-task-label="dismiss"{% if not reviewIsEditable %} disabled{% endif %}>Dismiss Task</button>
+            {% if reviewIsEditable %}
+              <button type="button" class="btn btn-primary" data-review-task-action="{{ url_for('frontend.confirm_metadata_review_task', task_id=reviewTask.id) }}" data-review-task-label="confirm">Confirm Task</button>
+              <button type="button" class="btn btn-outline-secondary" data-review-task-action="{{ url_for('frontend.dismiss_metadata_review_task', task_id=reviewTask.id) }}" data-review-task-label="dismiss">Dismiss Task</button>
+            {% else %}
+              <form method="post" action="{{ url_for('frontend.reopen_metadata_review_task', task_id=reviewTask.id) }}?redirect=1&amp;section={{ activeReviewTab }}">
+                <button type="submit" class="btn btn-warning">Reopen Task</button>
+              </form>
+            {% endif %}
           </div>
         </div>
       </div>
@@ -106,9 +119,14 @@
     const reviewContainer = document.querySelector('[data-review-editable]');
     const reviewStatusSummary = document.querySelector('[data-review-summary-status]');
     const reviewStatusChips = document.querySelectorAll('.metadata-review-hero .console-chip.text-uppercase');
+    const issueStatusListNode = document.querySelector('[data-review-issue-status-list]');
+    const readyToConfirmNode = document.querySelector('[data-review-ready-to-confirm]');
+    const readyToConfirmBanner = document.querySelector('[data-review-ready-to-confirm-banner]');
     const artistSuggestionsUrl = '{{ url_for("frontend.metadata_artist_suggestions") }}';
     const metadataInboxUrl = '{{ url_for("frontend.metadata", tab="inbox") }}';
     const confirmWritebackMessage = 'Confirm this review task and write the current metadata to album.nfo?';
+    const confirmRemoveArtistMessage = 'Remove this related artist from the current album task? Tracks credited to this artist on this album will be reassigned to the album primary artist.';
+    let issueStatusState = {{ reviewSummary.issue_status|tojson }};
     let activeArtistAutocomplete = null;
 
     function isReviewEditable() {
@@ -147,6 +165,93 @@
       reviewStatusChips.forEach((chip) => {
         chip.textContent = taskStatus;
       });
+    }
+
+    function normalizeReviewName(value) {
+      return String(value || '').trim().toLowerCase();
+    }
+
+    function renderIssueStatus(issueStatus, readyToConfirm) {
+      if (!issueStatusListNode || !readyToConfirmNode || !readyToConfirmBanner) {
+        return;
+      }
+      issueStatusListNode.innerHTML = '';
+      if (!issueStatus.length) {
+        const itemNode = document.createElement('li');
+        itemNode.textContent = 'No blocking issues detected.';
+        issueStatusListNode.appendChild(itemNode);
+      } else {
+        issueStatus.forEach((issue) => {
+          const itemNode = document.createElement('li');
+          let statusLabel = 'Waiting for changes';
+          if (issue.pending_save) {
+            statusLabel = 'Will resolve after save';
+          } else if (issue.resolved) {
+            statusLabel = 'Resolved';
+          }
+          itemNode.textContent = `${issue.label}: ${statusLabel}`;
+          issueStatusListNode.appendChild(itemNode);
+        });
+      }
+      readyToConfirmNode.textContent = readyToConfirm
+        ? 'All detected issues are resolved. You can confirm this task now.'
+        : 'Waiting for changes';
+      readyToConfirmBanner.classList.toggle('d-none', !readyToConfirm);
+    }
+
+    function getArtistMappingValue(artistName) {
+      let mappedName = artistName;
+      document.querySelectorAll('[data-review-artist-form]').forEach((artistForm) => {
+        const readonlyNameField = artistForm.querySelector('input[readonly]');
+        const primaryNameField = artistForm.querySelector('input[name="primary_name"]');
+        if (!readonlyNameField || normalizeReviewName(readonlyNameField.value) !== normalizeReviewName(artistName)) {
+          return;
+        }
+        if (primaryNameField && primaryNameField.value.trim()) {
+          mappedName = primaryNameField.value.trim();
+        }
+      });
+      return mappedName;
+    }
+
+    function evaluateAlbumIssueStatus() {
+      const albumArtistField = document.getElementById('review-album-artist');
+      const albumYearField = document.getElementById('review-album-year');
+      const albumArtistName = normalizeReviewName(albumArtistField ? albumArtistField.value : '');
+      const issueStatus = issueStatusState.map((issue) => {
+        if (issue.code === 'missing_year') {
+          return {
+            ...issue,
+            pending_save: false,
+            resolved: /^\d{4}$/.test(String(albumYearField ? albumYearField.value : '').trim()),
+          };
+        }
+        if (issue.code === 'track_artist_mapping_needs_review') {
+          const trackArtistInputs = Array.from(document.querySelectorAll('[data-track-artist]'));
+          const resolved = trackArtistInputs.every((inputNode) => {
+            const trackArtistName = inputNode.value.trim();
+            if (!trackArtistName) {
+              return false;
+            }
+            return normalizeReviewName(getArtistMappingValue(trackArtistName)) === albumArtistName;
+          });
+          return {
+            ...issue,
+            pending_save: false,
+            resolved,
+          };
+        }
+        return issue;
+      });
+      renderIssueStatus(issueStatus, issueStatus.every((issue) => issue.resolved));
+    }
+
+    function syncIssueStatusFromResponse(payload) {
+      if (!payload || !Array.isArray(payload.issue_status)) {
+        return;
+      }
+      issueStatusState = payload.issue_status;
+      renderIssueStatus(issueStatusState, Boolean(payload.ready_to_confirm));
     }
 
     function applyAlbumFormChanges(payload) {
@@ -208,7 +313,7 @@
       document.querySelectorAll('[data-review-task-action]').forEach((button) => {
         button.disabled = true;
       });
-      document.querySelectorAll('#review-album-form button[type="submit"], #review-tracks-form button[type="submit"], [data-review-artist-form] button[type="submit"]').forEach((button) => {
+      document.querySelectorAll('#review-album-form button[type="submit"], #review-tracks-form button[type="submit"], [data-review-artist-form] button[type="submit"], [data-review-artist-remove]').forEach((button) => {
         button.remove();
       });
       if (!document.querySelector('.metadata-review-panel .alert.alert-secondary')) {
@@ -321,6 +426,9 @@
 
     const albumForm = document.getElementById('review-album-form');
     if (albumForm && isReviewEditable()) {
+      document.getElementById('review-album-name').addEventListener('input', evaluateAlbumIssueStatus);
+      document.getElementById('review-album-artist').addEventListener('input', evaluateAlbumIssueStatus);
+      document.getElementById('review-album-year').addEventListener('input', evaluateAlbumIssueStatus);
       setupArtistAutocomplete(
         document.getElementById('review-album-artist'),
         document.getElementById('review-album-artist-suggestions'),
@@ -347,6 +455,7 @@
         try {
           const payload = await parseReviewResponse(response, 'Failed to save album changes');
           applyAlbumFormChanges(payload);
+          syncIssueStatusFromResponse(payload);
           if (activeArtistAutocomplete && typeof activeArtistAutocomplete.clear === 'function') {
             activeArtistAutocomplete.clear();
           }
@@ -364,6 +473,7 @@
         row.querySelectorAll('[data-track-number], [data-track-title], [data-track-artist]').forEach((inputNode) => {
           inputNode.addEventListener('input', function() {
             syncTrackWorkspaceRow(row);
+            evaluateAlbumIssueStatus();
           });
         });
       });
@@ -392,6 +502,7 @@
         try {
           const payload = await parseReviewResponse(response, 'Failed to save track changes');
           applyTrackFormChanges(payload);
+          syncIssueStatusFromResponse(payload);
           showReviewFeedback(payload.message || 'Track changes saved', false);
         } catch (error) {
           showReviewFeedback(error.message, true);
@@ -401,6 +512,17 @@
 
     if (isReviewEditable()) {
       document.querySelectorAll('[data-review-artist-form]').forEach((artistForm) => {
+        const primaryNameField = artistForm.querySelector('input[name="primary_name"]');
+        const primaryArtistSuggestionsNode = artistForm.querySelector('[data-review-primary-artist-suggestions]');
+        const primaryArtistAutocomplete = setupArtistAutocomplete(primaryNameField, primaryArtistSuggestionsNode, {
+          suggestionsUrl: artistSuggestionsUrl,
+          onFocus: function(autocompleteState) {
+            activeArtistAutocomplete = autocompleteState;
+          },
+        });
+        if (primaryNameField) {
+          primaryNameField.addEventListener('input', evaluateAlbumIssueStatus);
+        }
         artistForm.addEventListener('submit', async function(event) {
         event.preventDefault();
         const requestData = new FormData(artistForm);
@@ -411,12 +533,39 @@
         try {
           const payload = await parseReviewResponse(response, 'Failed to save artist changes');
           applyArtistFormChanges(payload, artistForm);
+          syncIssueStatusFromResponse(payload);
+          if (primaryArtistAutocomplete && typeof primaryArtistAutocomplete.clear === 'function') {
+            primaryArtistAutocomplete.clear();
+          }
           showReviewFeedback(payload.message || 'Artist changes saved', false);
         } catch (error) {
           showReviewFeedback(error.message, true);
         }
       });
       });
+      document.querySelectorAll('[data-review-artist-remove]').forEach((button) => {
+        button.addEventListener('click', async function() {
+          if (!window.confirm(confirmRemoveArtistMessage)) {
+            return;
+          }
+          const response = await fetch(button.dataset.reviewArtistRemoveAction, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+          });
+          try {
+            const payload = await parseReviewResponse(response, 'Failed to remove artist');
+            showReviewFeedback(payload.message || 'Artist removed', false);
+            reloadReviewPage('artists');
+          } catch (error) {
+            showReviewFeedback(error.message, true);
+          }
+        });
+      });
+    }
+
+    renderIssueStatus(issueStatusState, {{ 'true' if reviewSummary.ready_to_confirm else 'false' }});
+    if (isReviewEditable()) {
+      evaluateAlbumIssueStatus();
     }
 
     document.querySelectorAll('[data-review-task-action]').forEach((button) => {

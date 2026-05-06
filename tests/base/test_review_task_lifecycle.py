@@ -5,6 +5,7 @@ import unittest
 from datetime import timedelta
 
 from supysonic import db
+from supysonic.frontend.metadata_review import reopenMetadataReviewTask
 
 
 class ReviewTaskLifecycleTestCase(unittest.TestCase):
@@ -154,6 +155,35 @@ class ReviewTaskLifecycleTestCase(unittest.TestCase):
         self.assertIsNone(db.ReviewTask.get_or_none(db.ReviewTask.id == legacy_task.id))
         self.assertIsNotNone(db.ReviewTask.get_or_none(db.ReviewTask.id == canonical_task.id))
 
+    def test_run_review_task_maintenance_removes_superseded_new_artist_task(self):
+        from supysonic.scanner_func.scanner_review_tasks import runReviewTaskMaintenance
+
+        artist = db.Artist.create(name="Duplicate Artist")
+        new_artist_task = db.ReviewTask.create(
+            entity_type="artist",
+            entity_id=str(artist.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="new_artist",
+            snapshot_json='{"artist_name": "Duplicate Artist", "issues": ["missing_image"]}',
+            expires_at=db.now() + timedelta(days=2),
+        )
+        missing_image_task = db.ReviewTask.create(
+            entity_type="artist",
+            entity_id=str(artist.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="missing_image",
+            snapshot_json='{"artist_name": "Duplicate Artist", "issues": ["missing_image"]}',
+            expires_at=None,
+        )
+
+        updated_count = runReviewTaskMaintenance()
+
+        self.assertEqual(updated_count, 1)
+        self.assertIsNone(db.ReviewTask.get_or_none(db.ReviewTask.id == new_artist_task.id))
+        self.assertIsNotNone(db.ReviewTask.get_or_none(db.ReviewTask.id == missing_image_task.id))
+
     def test_run_review_task_maintenance_logs_pending_task_details(self):
         from supysonic.scanner_func.scanner_review_tasks import runReviewTaskMaintenance
 
@@ -179,6 +209,57 @@ class ReviewTaskLifecycleTestCase(unittest.TestCase):
         self.assertIn("title=Pending Album", combined_logs)
         self.assertIn("expiry_policy=awaiting_album_year", combined_logs)
 
+    def test_reopen_metadata_review_task_reopens_confirmed_task(self):
+        artist = db.Artist.create(name="Reopen Artist")
+        album = db.Album.create(name="Reopen Album", artist=artist, year="2024")
+        task = db.ReviewTask.create(
+            entity_type="album",
+            entity_id=str(album.id),
+            task_type="metadata_review",
+            status="confirmed",
+            reason="new_album",
+            snapshot_json='{"issues": []}',
+            resolved_at=db.now(),
+        )
+
+        reopened_task = reopenMetadataReviewTask(task)
+
+        self.assertEqual(reopened_task.status, "pending")
+        self.assertIsNone(reopened_task.resolved_at)
+        self.assertEqual(reopened_task.pending_key, f"album:{album.id}:pending")
+
+    def test_reopen_metadata_review_task_reopens_dismissed_task(self):
+        artist = db.Artist.create(name="Dismissed Artist")
+        task = db.ReviewTask.create(
+            entity_type="artist",
+            entity_id=str(artist.id),
+            task_type="metadata_review",
+            status="dismissed",
+            reason="missing_image",
+            snapshot_json='{"issues": ["missing_image"]}',
+            resolved_at=db.now(),
+        )
+
+        reopened_task = reopenMetadataReviewTask(task)
+
+        self.assertEqual(reopened_task.status, "pending")
+        self.assertIsNone(reopened_task.resolved_at)
+        self.assertEqual(reopened_task.pending_key, f"artist:{artist.id}:pending:missing_image")
+
+    def test_reopen_metadata_review_task_rejects_pending_task(self):
+        artist = db.Artist.create(name="Pending Artist")
+        task = db.ReviewTask.create(
+            entity_type="artist",
+            entity_id=str(artist.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="missing_image",
+            snapshot_json='{"issues": ["missing_image"]}',
+        )
+
+        with self.assertRaisesRegex(ValueError, "Only confirmed or dismissed review tasks can be reopened"):
+            reopenMetadataReviewTask(task)
+
     def test_run_review_task_bootstrap_logs_pending_task_expiry_details(self):
         from supysonic.scanner_func.scanner_review_tasks import runReviewTaskBootstrap
 
@@ -196,12 +277,12 @@ class ReviewTaskLifecycleTestCase(unittest.TestCase):
         with self.assertLogs("supysonic.scanner_func.scanner_review_tasks", level="INFO") as captured:
             created_count = runReviewTaskBootstrap()
 
-        self.assertEqual(created_count, 1)
+        self.assertEqual(created_count, 2)
         combined_logs = "\n".join(captured.output)
         self.assertIn("Pending review tasks after bootstrap:", combined_logs)
         self.assertIn("title=Bootstrap Artist", combined_logs)
-        self.assertIn("reason=new_artist", combined_logs)
-        self.assertIn("expires_at=", combined_logs)
+        self.assertIn("reason=missing_image", combined_logs)
+        self.assertIn("Removed superseded new-artist review task", combined_logs)
 
 
 if __name__ == "__main__":

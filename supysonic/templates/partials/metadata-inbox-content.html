@@ -12,6 +12,7 @@
         {% if task.entity_type == 'artist' and task.is_cover_art_fallback %}
           <p class="mb-3 text-warning-emphasis">Showing album cover fallback. Artist image is still missing.</p>
         {% endif %}
+        <p class="mb-3 text-body-secondary"><span>Expires</span> <strong>{% if task.expires_at %}{{ task.expires_at.strftime('%Y-%m-%d %H:%M:%S') }}{% else %}No expiry{% endif %}</strong></p>
         <div class="d-flex flex-wrap gap-2">
           <a class="btn btn-sm btn-primary" href="/metadata/review-tasks/{{ task.id }}">Review</a>
           <form method="post" action="{{ url_for('frontend.confirm_metadata_review_task', task_id=task.id) }}">

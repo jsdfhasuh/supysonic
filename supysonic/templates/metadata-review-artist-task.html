@@ -57,6 +57,7 @@
           <ul class="console-info-list mb-4">
             <li><span>Status</span><strong>{{ reviewTask.status }}</strong></li>
             <li><span>Created</span><strong>{{ reviewTask.created.strftime('%Y-%m-%d %H:%M:%S') }}</strong></li>
+            <li><span>Expires</span><strong>{% if reviewSummary.expires_at %}{{ reviewSummary.expires_at.strftime('%Y-%m-%d %H:%M:%S') }}{% else %}No expiry{% endif %}</strong></li>
             <li><span>Related artists</span><strong>{{ reviewSummary.related_artist_count }}</strong></li>
           </ul>
           <div class="mb-4">
@@ -67,14 +68,26 @@
               {% endfor %}
             </ul>
           </div>
+          <div class="mb-4">
+            <h3 class="h6 mb-2">Issue status</h3>
+            <p class="text-body-secondary mb-2" data-review-ready-to-confirm>Waiting for changes</p>
+            <ul class="metadata-review-summary-issues mb-3" data-review-issue-status-list></ul>
+            <div class="alert alert-success{% if not reviewSummary.ready_to_confirm %} d-none{% endif %} mb-0" data-review-ready-to-confirm-banner>Ready to confirm</div>
+          </div>
           <div id="metadata-review-feedback" class="alert d-none" role="status"></div>
           <div class="d-flex flex-wrap gap-2">
-            <form method="post" action="{{ url_for('frontend.confirm_metadata_review_task', task_id=reviewTask.id) }}">
-              <button type="submit" class="btn btn-primary"{% if not reviewIsEditable %} disabled{% endif %}>Confirm Task</button>
-            </form>
-            <form method="post" action="{{ url_for('frontend.dismiss_metadata_review_task', task_id=reviewTask.id) }}">
-              <button type="submit" class="btn btn-outline-secondary"{% if not reviewIsEditable %} disabled{% endif %}>Dismiss Task</button>
-            </form>
+            {% if reviewIsEditable %}
+              <form method="post" action="{{ url_for('frontend.confirm_metadata_review_task', task_id=reviewTask.id) }}">
+                <button type="submit" class="btn btn-primary">Confirm Task</button>
+              </form>
+              <form method="post" action="{{ url_for('frontend.dismiss_metadata_review_task', task_id=reviewTask.id) }}">
+                <button type="submit" class="btn btn-outline-secondary">Dismiss Task</button>
+              </form>
+            {% else %}
+              <form method="post" action="{{ url_for('frontend.reopen_metadata_review_task', task_id=reviewTask.id) }}?redirect=1&amp;section=artists">
+                <button type="submit" class="btn btn-warning">Reopen Task</button>
+              </form>
+            {% endif %}
           </div>
         </div>
       </div>
@@ -82,10 +95,17 @@
   </div>
 </div>
 
+<script src="{{ url_for('static', filename='js/artist-autocomplete.js') }}"></script>
 <script>
   (function() {
     const reviewContainer = document.querySelector('[data-review-editable]');
     const feedbackNode = document.getElementById('metadata-review-feedback');
+    const issueStatusListNode = document.querySelector('[data-review-issue-status-list]');
+    const readyToConfirmNode = document.querySelector('[data-review-ready-to-confirm]');
+    const readyToConfirmBanner = document.querySelector('[data-review-ready-to-confirm-banner]');
+    const artistSuggestionsUrl = '{{ url_for("frontend.metadata_artist_suggestions") }}';
+    let issueStatusState = {{ reviewSummary.issue_status|tojson }};
+    let activeArtistAutocomplete = null;
 
     function isReviewEditable() {
       return reviewContainer && reviewContainer.dataset.reviewEditable === 'true';
@@ -108,6 +128,58 @@
       return payload;
     }
 
+    function renderIssueStatus(issueStatus, readyToConfirm) {
+      if (!issueStatusListNode || !readyToConfirmNode || !readyToConfirmBanner) {
+        return;
+      }
+      issueStatusListNode.innerHTML = '';
+      if (!issueStatus.length) {
+        const itemNode = document.createElement('li');
+        itemNode.textContent = 'No blocking issues detected.';
+        issueStatusListNode.appendChild(itemNode);
+      } else {
+        issueStatus.forEach((issue) => {
+          const itemNode = document.createElement('li');
+          let statusLabel = 'Waiting for changes';
+          if (issue.pending_save) {
+            statusLabel = 'Will resolve after save';
+          } else if (issue.resolved) {
+            statusLabel = 'Resolved';
+          }
+          itemNode.textContent = `${issue.label}: ${statusLabel}`;
+          issueStatusListNode.appendChild(itemNode);
+        });
+      }
+      readyToConfirmNode.textContent = readyToConfirm
+        ? 'All detected issues are resolved. You can confirm this task now.'
+        : 'Waiting for changes';
+      readyToConfirmBanner.classList.toggle('d-none', !readyToConfirm);
+    }
+
+    function evaluateArtistIssueStatus() {
+      const issueStatus = issueStatusState.map((issue) => {
+        if (issue.code !== 'missing_image') {
+          return issue;
+        }
+        const imageInput = document.querySelector('input[name="artist_photo"]');
+        const hasSelectedFile = Boolean(imageInput && imageInput.files && imageInput.files[0]);
+        return {
+          ...issue,
+          resolved: false,
+          pending_save: hasSelectedFile,
+        };
+      });
+      renderIssueStatus(issueStatus, issueStatus.length === 0 || issueStatus.every((issue) => issue.resolved));
+    }
+
+    function syncIssueStatusFromResponse(payload) {
+      if (!payload || !Array.isArray(payload.issue_status)) {
+        return;
+      }
+      issueStatusState = payload.issue_status;
+      renderIssueStatus(issueStatusState, Boolean(payload.ready_to_confirm));
+    }
+
     function bindArtistPhotoPreview(artistForm) {
       const imageInput = artistForm.querySelector('input[name="artist_photo"]');
       const imagePreview = artistForm.querySelector('[data-review-artist-image-preview]');
@@ -127,6 +199,7 @@
         const previewUrl = URL.createObjectURL(nextFile);
         imagePreview.src = previewUrl;
         imagePreview.dataset.previewUrl = previewUrl;
+        evaluateArtistIssueStatus();
       });
       artistForm.addEventListener('reset', function() {
         const previewUrl = imagePreview.dataset.previewUrl;
@@ -135,6 +208,7 @@
         }
         URL.revokeObjectURL(previewUrl);
         delete imagePreview.dataset.previewUrl;
+        evaluateArtistIssueStatus();
       });
     }
 
@@ -152,6 +226,7 @@
       if (imageInput) {
         imageInput.value = '';
       }
+      evaluateArtistIssueStatus();
     }
 
     if (!isReviewEditable()) {
@@ -160,6 +235,17 @@
 
     document.querySelectorAll('[data-review-artist-form]').forEach((artistForm) => {
       bindArtistPhotoPreview(artistForm);
+      const primaryNameField = artistForm.querySelector('input[name="primary_name"]');
+      const primaryArtistSuggestionsNode = artistForm.querySelector('[data-review-primary-artist-suggestions]');
+      const primaryArtistAutocomplete = setupArtistAutocomplete(primaryNameField, primaryArtistSuggestionsNode, {
+          suggestionsUrl: artistSuggestionsUrl,
+          onFocus: function(autocompleteState) {
+            activeArtistAutocomplete = autocompleteState;
+          },
+      });
+      if (primaryNameField) {
+        primaryNameField.addEventListener('input', evaluateArtistIssueStatus);
+      }
       artistForm.addEventListener('submit', async function(event) {
         event.preventDefault();
         const requestData = new FormData(artistForm);
@@ -170,12 +256,19 @@
         try {
           const payload = await parseReviewResponse(response, 'Failed to save artist changes');
           applyArtistFormChanges(artistForm);
+          syncIssueStatusFromResponse(payload);
+          if (primaryArtistAutocomplete && typeof primaryArtistAutocomplete.clear === 'function') {
+            primaryArtistAutocomplete.clear();
+          }
           showReviewFeedback(payload.message || 'Artist changes saved', false);
         } catch (error) {
           showReviewFeedback(error.message, true);
         }
       });
     });
+
+    renderIssueStatus(issueStatusState, {{ 'true' if reviewSummary.ready_to_confirm else 'false' }});
+    evaluateArtistIssueStatus();
   })();
 </script>
 {% endblock %}

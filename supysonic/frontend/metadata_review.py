@@ -41,6 +41,17 @@ def dismissMetadataReviewTask(task):
     return _resolveMetadataReviewTask(task, "dismissed")
 
 
+def reopenMetadataReviewTask(task):
+    if task.status not in ("confirmed", "dismissed"):
+        raise ValueError("Only confirmed or dismissed review tasks can be reopened")
+
+    task.status = "pending"
+    task.updated = now()
+    task.resolved_at = None
+    task.save()
+    return task
+
+
 def getTaskRelatedArtists(task):
     if task.is_artist_task():
         artist = task.artist

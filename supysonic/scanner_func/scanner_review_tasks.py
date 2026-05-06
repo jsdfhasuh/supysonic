@@ -142,6 +142,20 @@ def _confirmPendingArtistTasks(artist, reason, snapshot_json):
     return updated
 
 
+def _deletePendingArtistTasks(artist, reason) -> int:
+    removed = 0
+    query = ReviewTask.select().where(
+        ReviewTask.entity_type == "artist",
+        ReviewTask.entity_id == str(artist.id),
+        ReviewTask.status == PENDING_REVIEW_TASK_STATUS,
+        ReviewTask.reason == reason,
+    )
+    for task in query:
+        task.delete_instance()
+        removed += 1
+    return removed
+
+
 def _getPendingTaskTitle(task: ReviewTask) -> str:
     snapshot = json.loads(task.snapshot_json or "{}")
     if task.is_artist_task():
@@ -193,6 +207,33 @@ def removeLegacyDuplicateAlbumPendingTasks() -> int:
             album.id,
             task.pending_key,
             canonical_pending_key,
+        )
+        task.delete_instance()
+        removed += 1
+
+    return removed
+
+
+def removeSupersededPendingNewArtistTasks() -> int:
+    removed = 0
+    pending_artist_tasks = list(
+        ReviewTask.select().where(
+            ReviewTask.entity_type == "artist",
+            ReviewTask.status == PENDING_REVIEW_TASK_STATUS,
+        )
+    )
+    artists_with_missing_image = {
+        task.entity_id for task in pending_artist_tasks if task.reason == MISSING_IMAGE_REVIEW_REASON
+    }
+
+    for task in pending_artist_tasks:
+        if task.reason != NEW_ARTIST_REVIEW_REASON or task.entity_id not in artists_with_missing_image:
+            continue
+        logger.info(
+            "Removed superseded new-artist review task: id=%s artist_id=%s superseded_by=%s",
+            task.id,
+            task.entity_id,
+            MISSING_IMAGE_REVIEW_REASON,
         )
         task.delete_instance()
         removed += 1
@@ -270,12 +311,6 @@ def createArtistReviewTasks(scanner: Scanner) -> int:
 
         snapshot_json = buildArtistReviewSnapshot(artist)
         issues = getArtistReviewIssues(artist)
-        created += _upsertArtistTask(
-            artist,
-            NEW_ARTIST_REVIEW_REASON,
-            snapshot_json,
-            now() + timedelta(days=NEW_ARTIST_REVIEW_TTL_DAYS),
-        )
         if MISSING_IMAGE_REVIEW_REASON in issues:
             created += _upsertArtistTask(
                 artist,
@@ -283,7 +318,14 @@ def createArtistReviewTasks(scanner: Scanner) -> int:
                 snapshot_json,
                 None,
             )
+            created += _deletePendingArtistTasks(artist, NEW_ARTIST_REVIEW_REASON)
         else:
+            created += _upsertArtistTask(
+                artist,
+                NEW_ARTIST_REVIEW_REASON,
+                snapshot_json,
+                now() + timedelta(days=NEW_ARTIST_REVIEW_TTL_DAYS),
+            )
             _confirmPendingArtistTasks(
                 artist,
                 MISSING_IMAGE_REVIEW_REASON,
@@ -420,7 +462,12 @@ def confirmCleanNewAlbumTasks() -> int:
 
 
 def createReviewTaskBootstrap() -> int:
-    return createMissingYearAlbumReviewTasks() + createMissingImageArtistReviewTasks() + removeLegacyDuplicateAlbumPendingTasks()
+    return (
+        createMissingYearAlbumReviewTasks()
+        + createMissingImageArtistReviewTasks()
+        + removeLegacyDuplicateAlbumPendingTasks()
+        + removeSupersededPendingNewArtistTasks()
+    )
 
 
 def runReviewTaskBootstrap() -> int:
@@ -436,6 +483,7 @@ def runReviewTaskBootstrap() -> int:
 def createReviewTaskMaintenance() -> int:
     return (
         removeLegacyDuplicateAlbumPendingTasks()
+        + removeSupersededPendingNewArtistTasks()
         +
         expirePendingNewArtistTasks()
         + backfillPendingNewAlbumTaskExpiries()

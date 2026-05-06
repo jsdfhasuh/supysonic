@@ -29,13 +29,15 @@ class MetadataInboxTestCase(FrontendTestBase):
     def test_metadata_inbox_renders_pending_review_task(self):
         artist = Artist.create(name="Review Artist")
         album = Album.create(name="Review Album", artist=artist, year="2024")
-        AlbumReviewTask.create(
+        task = AlbumReviewTask.create(
             album=album,
             task_type="metadata_review",
             status="pending",
             reason="new_album",
             snapshot_json='{"album_name": "Review Album", "track_count": 0}',
         )
+        task.expires_at = now() + timedelta(days=2)
+        task.save()
 
         rv = self.client.get("/metadata?tab=inbox")
 
@@ -45,6 +47,9 @@ class MetadataInboxTestCase(FrontendTestBase):
         self.assertIn("Confirm", rv.data)
         self.assertIn("Dismiss", rv.data)
         self.assertIn(f"/rest/getCoverArt?id=al-{album.id}&amp;v=1.15.0&amp;c=web", rv.data)
+        self.assertIn("Expires", rv.data)
+        self.assertIn(task.expires_at.strftime('%Y-%m-%d %H:%M:%S'), rv.data)
+        self.assertNotIn("Expires:", rv.data)
         self.assertNotIn("No pending review tasks yet", rv.data)
 
     def test_metadata_inbox_keeps_empty_state_without_tasks(self):
@@ -91,6 +96,9 @@ class MetadataInboxTestCase(FrontendTestBase):
         self.assertIn("Image Less Artist", rv.data)
         self.assertIn("missing image", rv.data.lower())
         self.assertIn(f"/rest/getCoverArt?id=ar-{artist.id}&amp;v=1.15.0&amp;c=web", rv.data)
+        self.assertIn("Expires", rv.data)
+        self.assertIn("No expiry", rv.data)
+        self.assertNotIn("Expires:", rv.data)
 
     def test_metadata_inbox_shows_album_cover_fallback_notice_for_artist_task(self):
         artist = Artist.create(name="Fallback Artist")
@@ -245,6 +253,33 @@ class MetadataInboxTestCase(FrontendTestBase):
         self.assertIn("Artist tasks (1)", body)
         self.assertLess(body.index("Album tasks (1)"), body.index("Artist tasks (1)"))
         self.assertLess(body.index("Album First"), body.index("Artist Second"))
+
+    def test_metadata_inbox_hides_superseded_new_artist_task_when_missing_image_exists(self):
+        artist = Artist.create(name="Gracie Abrams")
+        ReviewTask.create(
+            entity_type="artist",
+            entity_id=str(artist.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="new_artist",
+            snapshot_json='{"artist_name": "Gracie Abrams", "issues": ["missing_image"]}',
+        )
+        ReviewTask.create(
+            entity_type="artist",
+            entity_id=str(artist.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="missing_image",
+            snapshot_json='{"artist_name": "Gracie Abrams", "issues": ["missing_image"]}',
+        )
+
+        rv = self.client.get("/metadata?tab=inbox")
+        body = rv.data
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn("Artist tasks (1)", body)
+        self.assertIn("missing image", body.lower())
+        self.assertNotIn("new artist", body.lower())
 
     def test_metadata_inbox_sorts_album_tasks_by_priority(self):
         artist = Artist.create(name="Priority Artist")

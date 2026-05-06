@@ -22,6 +22,7 @@ from .metadata_review import (
     getMetadataReviewTask,
     getTaskRelatedArtists,
     listMetadataReviewTasks,
+    reopenMetadataReviewTask,
 )
 
 from . import admin_only, frontend
@@ -141,7 +142,8 @@ def getTaskIssueCodes(task):
     if album is not None:
         if not album.year:
             issue_codes.append("missing_year")
-        if any(track.artist_id != album.artist_id for track in album.tracks):
+        album_primary_id = resolvePrimaryArtist(album.artist).id
+        if any(resolvePrimaryArtist(track.artist).id != album_primary_id for track in album.tracks):
             issue_codes.append("track_artist_mapping_needs_review")
     if issue_codes:
         return issue_codes
@@ -173,12 +175,70 @@ def getInboxTaskDescription(task):
 
 def getTaskIssueLabels(task):
     issue_codes = getTaskIssueCodes(task)
+    return [getIssueLabel(issue) for issue in issue_codes]
+
+
+def getIssueLabel(issueCode):
     issue_map = {
         "missing_year": "Missing release year",
         "track_artist_mapping_needs_review": "Track artist mapping needs review",
         "missing_image": "Missing artist image",
     }
-    return [issue_map.get(issue, issue.replace("_", " ")) for issue in issue_codes]
+    return issue_map.get(issueCode, issueCode.replace("_", " "))
+
+
+def getCurrentTaskIssueCodes(task):
+    if task.is_artist_task():
+        artist = task.artist
+        if artist is None:
+            return []
+        artist_info = artist.get_info()
+        if not hasDedicatedArtistImage(artist_info):
+            return ["missing_image"]
+        return []
+
+    issue_codes = []
+    album = task.album
+    if album is not None:
+        if not album.year:
+            issue_codes.append("missing_year")
+        album_primary_id = resolvePrimaryArtist(album.artist).id
+        if any(resolvePrimaryArtist(track.artist).id != album_primary_id for track in album.tracks):
+            issue_codes.append("track_artist_mapping_needs_review")
+    return issue_codes
+
+
+def getTrackedTaskIssueCodes(task):
+    snapshot = json.loads(task.snapshot_json or "{}")
+    issue_codes = snapshot.get("issues") or []
+    if issue_codes:
+        return issue_codes
+
+    if task.is_artist_task():
+        if task.reason == "missing_image":
+            return ["missing_image"]
+        return getCurrentTaskIssueCodes(task)
+
+    if task.reason == "missing_year":
+        return ["missing_year"]
+    return getCurrentTaskIssueCodes(task)
+
+
+def buildTaskIssueStatus(task):
+    tracked_issue_codes = getTrackedTaskIssueCodes(task)
+    current_issue_codes = set(getCurrentTaskIssueCodes(task))
+    issue_status = [
+        {
+            "code": issue_code,
+            "label": getIssueLabel(issue_code),
+            "resolved": issue_code not in current_issue_codes,
+        }
+        for issue_code in tracked_issue_codes
+    ]
+    return {
+        "issue_status": issue_status,
+        "ready_to_confirm": len(current_issue_codes) == 0,
+    }
 
 
 def getAlbumInboxTaskPriority(task_data):
@@ -211,6 +271,7 @@ def buildInboxTaskData(task):
         artist_id = getattr(artist, "id", task.entity_id)
         artist_info = artist.get_info() if artist is not None else {}
         is_cover_art_fallback = (not hasDedicatedArtistImage(artist_info)) and hasAlbumCoverFallback(artist)
+        issue_codes = getTaskIssueCodes(task)
         return {
             "id": str(task.id),
             "entity_type": "artist",
@@ -219,11 +280,14 @@ def buildInboxTaskData(task):
             "description": getInboxTaskDescription(task),
             "status": task.status,
             "created": task.created,
+            "expires_at": task.expires_at,
+            "issue_codes": issue_codes,
             "cover_art_url": getMetadataCoverArtUrl(f"ar-{artist_id}"),
             "is_cover_art_fallback": is_cover_art_fallback,
         }
 
     album = task.album
+    issue_codes = getTaskIssueCodes(task)
     if album is None:
         return {
             "id": str(task.id),
@@ -233,6 +297,8 @@ def buildInboxTaskData(task):
             "description": getInboxTaskDescription(task),
             "status": task.status,
             "created": task.created,
+            "expires_at": task.expires_at,
+            "issue_codes": issue_codes,
             "cover_art_url": getMetadataCoverArtUrl(f"al-{task.entity_id}"),
         }
 
@@ -249,6 +315,8 @@ def buildInboxTaskData(task):
         "description": getInboxTaskDescription(task),
         "status": task.status,
         "created": task.created,
+        "expires_at": task.expires_at,
+        "issue_codes": issue_codes,
         "cover_art_url": getMetadataCoverArtUrl(f"al-{album.id}"),
     }
 
@@ -262,7 +330,27 @@ def buildArtistReviewCard(artist):
         "biography": artist_info.get("biography", ""),
         "image_url": getReviewArtistImageUrl(artist, artist_info),
         "is_cover_art_fallback": (not hasDedicatedArtistImage(artist_info)) and hasAlbumCoverFallback(artist),
+        "can_remove": False,
     }
+
+
+def filterSupersededInboxTasks(tasks):
+    artist_ids_with_missing_image = {
+        str(task.entity_id)
+        for task in tasks
+        if task.is_artist_task() and task.status == "pending" and task.reason == "missing_image"
+    }
+    filtered_tasks = []
+    for task in tasks:
+        if (
+            task.is_artist_task()
+            and task.status == "pending"
+            and task.reason == "new_artist"
+            and str(task.entity_id) in artist_ids_with_missing_image
+        ):
+            continue
+        filtered_tasks.append(task)
+    return filtered_tasks
 
 
 def ensurePendingReviewTask(task):
@@ -294,7 +382,8 @@ def metadata():
     selected_status = request.args.get("status", "pending")
     if activeTab == "inbox":
         query_status = None if selected_status == "all" else selected_status
-        for task in listMetadataReviewTasks(status=query_status):
+        raw_tasks = filterSupersededInboxTasks(list(listMetadataReviewTasks(status=query_status)))
+        for task in raw_tasks:
             inbox_tasks.append(buildInboxTaskData(task))
 
         album_inbox_tasks = [task for task in inbox_tasks if task["entity_type"] == "album"]
@@ -337,14 +426,18 @@ def metadata_review_task(task_id):
             return {"status": "error", "message": "Review task artist not found"}, 404
 
         review_artist_cards = [buildArtistReviewCard(artist)]
+        issue_summary = buildTaskIssueStatus(task)
         review_summary = {
             "status": task.status,
             "created": task.created,
+            "expires_at": task.expires_at,
             "track_count": 0,
             "related_artist_count": 1,
             "total_duration": formatDurationLabel(0),
             "cover_art_url": getMetadataCoverArtUrl(f"ar-{artist.id}"),
             "issues": getTaskDisplayIssues(task),
+            "issue_status": issue_summary["issue_status"],
+            "ready_to_confirm": issue_summary["ready_to_confirm"],
             "is_cover_art_fallback": review_artist_cards[0]["is_cover_art_fallback"],
         }
         return render_template(
@@ -363,15 +456,21 @@ def metadata_review_task(task_id):
     tracks = list(album.tracks.order_by(Track.disc, Track.number, Track.title))
     related_artists = getTaskRelatedArtists(task)
     review_artist_cards = [buildArtistReviewCard(artist) for artist in related_artists]
+    for review_artist_card in review_artist_cards:
+        review_artist_card["can_remove"] = review_artist_card["id"] != str(album.artist_id)
 
+    issue_summary = buildTaskIssueStatus(task)
     review_summary = {
         "status": task.status,
         "created": task.created,
+        "expires_at": task.expires_at,
         "track_count": len(tracks),
         "related_artist_count": len(related_artists),
         "total_duration": formatDurationLabel(sum(track.duration for track in tracks)),
         "cover_art_url": getMetadataCoverArtUrl(f"al-{album.id}"),
         "issues": getTaskDisplayIssues(task, tracks=tracks),
+        "issue_status": issue_summary["issue_status"],
+        "ready_to_confirm": issue_summary["ready_to_confirm"],
     }
 
     return render_template(
@@ -453,7 +552,8 @@ def update_metadata_review_task_album(task_id):
         resolved_artist_id=resolved_artist_id,
     )
 
-    return {"status": "success", "message": "album updated"}
+    issue_summary = buildTaskIssueStatus(task)
+    return {"status": "success", "message": "album updated", **issue_summary}
 
 
 @frontend.route("/metadata/review-tasks/<task_id>/tracks", methods=["POST"])
@@ -521,7 +621,8 @@ def update_metadata_review_task_tracks(task_id):
         track_count=len(track_updates),
     )
 
-    return {"status": "success", "message": "tracks updated"}
+    issue_summary = buildTaskIssueStatus(task)
+    return {"status": "success", "message": "tracks updated", **issue_summary}
 
 
 @frontend.route("/metadata/review-tasks/<task_id>/artists/<artist_id>", methods=["POST"])
@@ -619,7 +720,116 @@ def update_metadata_review_task_artist(task_id, artist_id):
         photo_updated=photo_updated,
     )
 
-    return {"status": "success", "message": "artist updated"}
+    issue_summary = buildTaskIssueStatus(task)
+    return {"status": "success", "message": "artist updated", **issue_summary}
+
+
+@frontend.route("/metadata/review-tasks/<task_id>/artists/<artist_id>/remove", methods=["POST"])
+@admin_only
+def remove_metadata_review_task_artist(task_id, artist_id):
+    task = None
+    try:
+        task = getMetadataReviewTask(task_id)
+        ensurePendingReviewTask(task)
+    except ValueError as exc:
+        logMetadataEvent(
+            logging.WARNING,
+            "review_artist_remove",
+            result="bad_request",
+            task_id=task_id,
+            requested_artist_id=artist_id,
+        )
+        return {"status": "error", "message": str(exc)}, 400
+    except LookupError as exc:
+        logMetadataEvent(
+            logging.WARNING,
+            "review_artist_remove",
+            result="not_found",
+            task_id=task_id,
+            requested_artist_id=artist_id,
+        )
+        return {"status": "error", "message": str(exc)}, 404
+
+    if task.is_artist_task() or task.album is None:
+        logMetadataEvent(
+            logging.WARNING,
+            "review_artist_remove",
+            result="bad_request",
+            task_id=task.id,
+            album_id="-",
+            requested_artist_id=artist_id,
+        )
+        return {"status": "error", "message": "artist removal is only available for album review tasks"}, 400
+
+    allowed_artist_ids = {artist.id for artist in getTaskRelatedArtists(task)}
+    target_artist = Artist.get_or_none(Artist.id == artist_id)
+    if target_artist is None:
+        logMetadataEvent(
+            logging.WARNING,
+            "review_artist_remove",
+            result="not_found",
+            task_id=task.id,
+            album_id=task.album.id,
+            requested_artist_id=artist_id,
+        )
+        return {"status": "error", "message": "artist not found"}, 404
+    if target_artist.id not in allowed_artist_ids:
+        logMetadataEvent(
+            logging.WARNING,
+            "review_artist_remove",
+            result="bad_request",
+            task_id=task.id,
+            album_id=task.album.id,
+            requested_artist_id=artist_id,
+            target_artist_id=target_artist.id,
+        )
+        return {"status": "error", "message": "artist is outside this review task"}, 400
+    if target_artist.id == task.album.artist_id:
+        logMetadataEvent(
+            logging.WARNING,
+            "review_artist_remove",
+            result="bad_request",
+            task_id=task.id,
+            album_id=task.album.id,
+            requested_artist_id=artist_id,
+            target_artist_id=target_artist.id,
+        )
+        return {"status": "error", "message": "album primary artist cannot be removed"}, 400
+
+    album_tracks = list(task.album.tracks)
+    reassigned_tracks = [track for track in album_tracks if track.artist_id == target_artist.id]
+
+    with db.atomic():
+        AlbumArtist.delete().where(
+            AlbumArtist.album_id == task.album,
+            AlbumArtist.artist_id == target_artist,
+        ).execute()
+        TrackArtist.delete().where(
+            TrackArtist.track_id.in_([track.id for track in album_tracks]),
+            TrackArtist.artist_id == target_artist,
+        ).execute()
+        for track in reassigned_tracks:
+            previous_artist_id = track.artist_id
+            track.artist = task.album.artist
+            track.save()
+            syncTrackArtists(track, previousArtistId=previous_artist_id)
+
+    logMetadataEvent(
+        logging.INFO,
+        "review_artist_remove",
+        result="success",
+        task_id=task.id,
+        album_id=task.album.id,
+        requested_artist_id=artist_id,
+        target_artist_id=target_artist.id,
+        reassigned_track_count=len(reassigned_tracks),
+    )
+    return {
+        "status": "success",
+        "message": "artist removed from album review task",
+        "removed_artist_id": str(target_artist.id),
+        "reassigned_track_count": len(reassigned_tracks),
+    }
 
 
 @frontend.route("/metadata/review-tasks/<task_id>/confirm", methods=["POST"])
@@ -747,6 +957,39 @@ def dismiss_metadata_review_task(task_id):
         return redirectResponse
 
     return {"status": "success", "message": "review task dismissed", "task_status": task.status}
+
+
+@frontend.route("/metadata/review-tasks/<task_id>/reopen", methods=["POST"])
+@admin_only
+def reopen_metadata_review_task(task_id):
+    task = None
+    try:
+        task = getMetadataReviewTask(task_id)
+        previous_status = task.status
+        reopenMetadataReviewTask(task)
+    except ValueError as exc:
+        logMetadataEvent(logging.WARNING, "review_task_reopen", result="bad_request", task_id=task_id)
+        return {"status": "error", "message": str(exc)}, 400
+    except LookupError as exc:
+        logMetadataEvent(logging.WARNING, "review_task_reopen", result="not_found", task_id=task_id)
+        return {"status": "error", "message": str(exc)}, 404
+
+    logMetadataEvent(
+        logging.INFO,
+        "review_task_reopen",
+        result="success",
+        task_id=task.id,
+        album_id=task.album.id if task.album is not None else "-",
+        entity_type=task.entity_type,
+        from_status=previous_status,
+        to_status=task.status,
+    )
+
+    redirectResponse = getReviewRedirectResponse(task)
+    if redirectResponse is not None:
+        return redirectResponse
+
+    return {"status": "success", "message": "review task reopened", "task_status": task.status}
 
 
 @frontend.route("/artists", methods=["GET", "POST"])

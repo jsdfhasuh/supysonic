@@ -9,7 +9,7 @@ from unittest.mock import patch
 from PIL import Image
 
 from supysonic.daemon.exceptions import DaemonUnavailableError
-from supysonic.db import Album, AlbumArtist, AlbumReviewTask, Artist, Folder, ReviewTask, Track, TrackArtist, User, db
+from supysonic.db import Album, AlbumArtist, AlbumReviewTask, Artist, Folder, ReviewTask, Track, TrackArtist, User, db, now
 from supysonic.nfo.nfo import NfoHandler
 from supysonic.tool import read_dict_from_json
 
@@ -98,6 +98,10 @@ class MetadataReviewActionsTestCase(FrontendTestBase):
         return imageBuffer
 
     def test_review_task_album_update(self):
+        self.task.reason = "missing_year"
+        self.task.snapshot_json = '{"album_name": "Review Album", "artist_name": "Review Artist", "track_count": 1, "issues": ["missing_year"]}'
+        self.task.save()
+
         rv = self.client.post(
             f"/metadata/review-tasks/{self.task.id}/album",
             json={"name": "Updated Album", "artist_name": "Updated Artist", "year": "2025"},
@@ -108,6 +112,9 @@ class MetadataReviewActionsTestCase(FrontendTestBase):
         self.assertEqual(saved_album.name, "Updated Album")
         self.assertEqual(saved_album.year, "2025")
         self.assertEqual(saved_album.artist.get_artist_name(), "Updated Artist")
+        self.assertEqual(rv.json["issue_status"][0]["code"], "missing_year")
+        self.assertTrue(rv.json["issue_status"][0]["resolved"])
+        self.assertFalse(rv.json["ready_to_confirm"])
         album_artist_names = sorted(relation.artist_id.get_artist_name() for relation in saved_album.album_artists)
         self.assertEqual(album_artist_names, ["Updated Artist"])
         log_content = self.readMetadataLog()
@@ -131,6 +138,10 @@ class MetadataReviewActionsTestCase(FrontendTestBase):
         self.assertEqual(album_artist_names, ["Guest Album Artist", "Review Artist"])
 
     def test_review_task_tracks_update_stays_within_album_scope(self):
+        self.task.reason = "missing_year"
+        self.task.snapshot_json = '{"album_name": "Review Album", "artist_name": "Review Artist", "track_count": 1, "issues": ["track_artist_mapping_needs_review"]}'
+        self.task.save()
+
         rv = self.client.post(
             f"/metadata/review-tasks/{self.task.id}/tracks",
             json={
@@ -139,7 +150,7 @@ class MetadataReviewActionsTestCase(FrontendTestBase):
                         "id": str(self.track.id),
                         "number": 2,
                         "title": "Updated Track",
-                        "artist_name": "Track Artist",
+                        "artist_name": "Review Artist",
                     }
                 ]
             },
@@ -149,9 +160,32 @@ class MetadataReviewActionsTestCase(FrontendTestBase):
         saved_track = Track.get_by_id(self.track.id)
         self.assertEqual(saved_track.number, 2)
         self.assertEqual(saved_track.title, "Updated Track")
-        self.assertEqual(saved_track.artist.get_artist_name(), "Track Artist")
+        self.assertEqual(saved_track.artist.get_artist_name(), "Review Artist")
+        self.assertEqual(rv.json["issue_status"][0]["code"], "track_artist_mapping_needs_review")
+        self.assertTrue(rv.json["issue_status"][0]["resolved"])
+        self.assertTrue(rv.json["ready_to_confirm"])
         track_artist_names = sorted(relation.artist_id.get_artist_name() for relation in saved_track.track_artists)
-        self.assertEqual(track_artist_names, ["Track Artist"])
+        self.assertEqual(track_artist_names, ["Review Artist"])
+
+    def test_review_task_artist_primary_mapping_resolves_track_mapping_issue(self):
+        guest_artist = Artist.create(name="Guest Review Artist")
+        AlbumArtist.create(album_id=self.album, artist_id=guest_artist, position=2)
+        self.track.artist = guest_artist
+        self.track.save()
+        TrackArtist.create(track_id=self.track, artist_id=guest_artist, position=2)
+        self.task.snapshot_json = '{"album_name": "Review Album", "artist_name": "Review Artist", "track_count": 1, "issues": ["track_artist_mapping_needs_review"]}'
+        self.task.save()
+
+        rv = self.client.post(
+            f"/metadata/review-tasks/{self.task.id}/artists/{guest_artist.id}",
+            data={"primary_name": "Review Artist"},
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertEqual(rv.json["issue_status"][0]["code"], "track_artist_mapping_needs_review")
+        self.assertTrue(rv.json["issue_status"][0]["resolved"])
+        self.assertTrue(rv.json["ready_to_confirm"])
 
     def test_review_task_tracks_update_preserves_existing_guest_track_artists(self):
         guest_artist = Artist.create(name="Guest Track Artist")
@@ -214,8 +248,17 @@ class MetadataReviewActionsTestCase(FrontendTestBase):
         self.assertIn(f"requested_artist_id={self.artist.id}", log_content)
 
     def test_review_task_artist_update_persists_uploaded_photo(self):
+        artist_task = ReviewTask.create(
+            entity_type="artist",
+            entity_id=str(self.artist.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="missing_image",
+            snapshot_json='{"artist_name": "Review Artist", "issues": ["missing_image"]}',
+        )
+
         rv = self.client.post(
-            f"/metadata/review-tasks/{self.task.id}/artists/{self.artist.id}",
+            f"/metadata/review-tasks/{artist_task.id}/artists/{self.artist.id}",
             data={
                 "biography": "Updated biography",
                 "artist_photo": (self.createImageUpload(), "artist.png"),
@@ -228,9 +271,59 @@ class MetadataReviewActionsTestCase(FrontendTestBase):
         info = read_dict_from_json(saved_artist.artist_info_json)
         self.assertEqual(info["biography"], "Updated biography")
         self.assertEqual(sorted(info["image"].keys()), ["large", "medium", "small"])
+        self.assertEqual(rv.json["issue_status"][0]["code"], "missing_image")
+        self.assertTrue(rv.json["issue_status"][0]["resolved"])
+        self.assertTrue(rv.json["ready_to_confirm"])
         log_content = self.readMetadataLog()
         self.assertIn("metadata event=review_artist_update", log_content)
         self.assertIn("photo_updated=true", log_content)
+
+    def test_review_task_artist_remove_deletes_album_and_track_relations(self):
+        guest_artist = Artist.create(name="Guest Review Artist")
+        AlbumArtist.create(album_id=self.album, artist_id=guest_artist, position=2)
+        self.track.artist = guest_artist
+        self.track.save()
+        TrackArtist.create(track_id=self.track, artist_id=guest_artist, position=2)
+
+        rv = self.client.post(f"/metadata/review-tasks/{self.task.id}/artists/{guest_artist.id}/remove")
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertEqual(rv.json["removed_artist_id"], str(guest_artist.id))
+        self.assertEqual(rv.json["reassigned_track_count"], 1)
+        self.assertFalse(
+            AlbumArtist.select().where(AlbumArtist.album_id == self.album, AlbumArtist.artist_id == guest_artist).exists()
+        )
+        self.assertFalse(
+            TrackArtist.select().where(TrackArtist.track_id == self.track, TrackArtist.artist_id == guest_artist).exists()
+        )
+        saved_track = Track.get_by_id(self.track.id)
+        self.assertEqual(saved_track.artist_id, self.album.artist_id)
+        self.assertTrue(
+            TrackArtist.select().where(TrackArtist.track_id == self.track, TrackArtist.artist_id == self.artist).exists()
+        )
+
+    def test_review_task_artist_remove_rejects_album_primary_artist(self):
+        rv = self.client.post(f"/metadata/review-tasks/{self.task.id}/artists/{self.artist.id}/remove")
+
+        self.assertEqual(rv.status_code, 400)
+        self.assertEqual(rv.json["status"], "error")
+
+    def test_review_task_artist_remove_rejects_unrelated_artist(self):
+        rv = self.client.post(f"/metadata/review-tasks/{self.task.id}/artists/{self.unrelated_artist.id}/remove")
+
+        self.assertEqual(rv.status_code, 400)
+        self.assertEqual(rv.json["status"], "error")
+
+    def test_review_task_artist_remove_rejects_resolved_task(self):
+        guest_artist = Artist.create(name="Resolved Guest Artist")
+        AlbumArtist.create(album_id=self.album, artist_id=guest_artist, position=2)
+        self.task.status = "confirmed"
+        self.task.save()
+
+        rv = self.client.post(f"/metadata/review-tasks/{self.task.id}/artists/{guest_artist.id}/remove")
+
+        self.assertEqual(rv.status_code, 400)
+        self.assertEqual(rv.json["status"], "error")
 
     def test_review_task_confirm_rejects_invalid_task_id(self):
         rv = self.client.post("/metadata/review-tasks/not-a-uuid/confirm")
@@ -367,6 +460,60 @@ class MetadataReviewActionsTestCase(FrontendTestBase):
         self.assertEqual(rv.json["task_status"], "confirmed")
         self.assertEqual(ReviewTask.get_by_id(artist_task.id).status, "confirmed")
         write_review_album_nfo.assert_not_called()
+
+    def test_review_task_reopen_reopens_confirmed_album_task(self):
+        self.task.status = "confirmed"
+        self.task.resolved_at = now()
+        self.task.save()
+
+        rv = self.client.post(f"/metadata/review-tasks/{self.task.id}/reopen")
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertEqual(rv.json["task_status"], "pending")
+        reopened_task = AlbumReviewTask.get_by_id(self.task.id)
+        self.assertEqual(reopened_task.status, "pending")
+        self.assertIsNone(reopened_task.resolved_at)
+
+    def test_review_task_reopen_reopens_dismissed_artist_task(self):
+        artist_task = ReviewTask.create(
+            entity_type="artist",
+            entity_id=str(self.artist.id),
+            task_type="metadata_review",
+            status="dismissed",
+            reason="missing_image",
+            snapshot_json='{"artist_name": "Review Artist", "issues": ["missing_image"]}',
+            resolved_at=now(),
+        )
+
+        rv = self.client.post(f"/metadata/review-tasks/{artist_task.id}/reopen")
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertEqual(rv.json["task_status"], "pending")
+        reopened_task = ReviewTask.get_by_id(artist_task.id)
+        self.assertEqual(reopened_task.status, "pending")
+        self.assertIsNone(reopened_task.resolved_at)
+
+    def test_review_task_reopen_rejects_pending_task(self):
+        rv = self.client.post(f"/metadata/review-tasks/{self.task.id}/reopen")
+
+        self.assertEqual(rv.status_code, 400)
+        self.assertEqual(rv.json["status"], "error")
+
+    def test_review_task_album_update_succeeds_after_reopen(self):
+        self.task.status = "confirmed"
+        self.task.resolved_at = now()
+        self.task.save()
+
+        reopen_response = self.client.post(f"/metadata/review-tasks/{self.task.id}/reopen")
+        self.assertEqual(reopen_response.status_code, 200)
+
+        rv = self.client.post(
+            f"/metadata/review-tasks/{self.task.id}/album",
+            json={"name": "Updated After Reopen"},
+        )
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertEqual(Album.get_by_id(self.album.id).name, "Updated After Reopen")
 
     def test_review_task_confirm_rejects_orphaned_album_task_without_server_error(self):
         orphan_task = ReviewTask.create(

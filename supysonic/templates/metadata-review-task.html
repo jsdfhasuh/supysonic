@@ -35,7 +35,7 @@
         </div>
         <div class="text-body-secondary text-end metadata-review-hero-side">
           <div>{{ reviewTracks|length }} tracks</div>
-          <div>{{ reviewArtists|length }} related artists</div>
+          <div><span data-review-related-artist-count>{{ reviewArtists|length }}</span> related artists</div>
           <div>{{ reviewSummary.total_duration }}</div>
         </div>
       </div>
@@ -60,7 +60,7 @@
           <div class="metadata-review-panel{% if activeReviewTab == 'tracks' %} active{% endif %}" data-review-panel="tracks">
             {% include "partials/metadata-review-tracks-panel.html" %}
           </div>
-          <div class="metadata-review-panel{% if activeReviewTab == 'artists' %} active{% endif %}" data-review-panel="artists">
+          <div class="metadata-review-panel{% if activeReviewTab == 'artists' %} active{% endif %}" data-review-panel="artists" data-review-artists-panel>
             {% include "partials/metadata-review-artists-panel.html" %}
           </div>
         </div>
@@ -76,7 +76,7 @@
             <li><span>Created</span><strong>{{ reviewTask.created.strftime('%Y-%m-%d %H:%M:%S') }}</strong></li>
             <li><span>Expires</span><strong>{% if reviewSummary.expires_at %}{{ reviewSummary.expires_at.strftime('%Y-%m-%d %H:%M:%S') }}{% else %}No expiry{% endif %}</strong></li>
             <li><span>Track count</span><strong>{{ reviewTracks|length }}</strong></li>
-            <li><span>Related artists</span><strong>{{ reviewArtists|length }}</strong></li>
+            <li><span>Related artists</span><strong data-review-related-artist-count>{{ reviewArtists|length }}</strong></li>
             <li><span>Total duration</span><strong>{{ reviewSummary.total_duration }}</strong></li>
           </ul>
           <div class="mb-4">
@@ -122,6 +122,8 @@
     const issueStatusListNode = document.querySelector('[data-review-issue-status-list]');
     const readyToConfirmNode = document.querySelector('[data-review-ready-to-confirm]');
     const readyToConfirmBanner = document.querySelector('[data-review-ready-to-confirm-banner]');
+    const artistsPanelNode = document.querySelector('[data-review-artists-panel]');
+    const relatedArtistCountNodes = document.querySelectorAll('[data-review-related-artist-count]');
     const artistSuggestionsUrl = '{{ url_for("frontend.metadata_artist_suggestions") }}';
     const metadataInboxUrl = '{{ url_for("frontend.metadata", tab="inbox") }}';
     const confirmWritebackMessage = 'Confirm this review task and write the current metadata to album.nfo?';
@@ -252,6 +254,87 @@
       }
       issueStatusState = payload.issue_status;
       renderIssueStatus(issueStatusState, Boolean(payload.ready_to_confirm));
+    }
+
+    function updateRelatedArtistCount(count) {
+      relatedArtistCountNodes.forEach((node) => {
+        node.textContent = String(count);
+      });
+    }
+
+    function bindArtistReviewForms(rootNode) {
+      if (!isReviewEditable()) {
+        return;
+      }
+      rootNode.querySelectorAll('[data-review-artist-form]').forEach((artistForm) => {
+        const primaryNameField = artistForm.querySelector('input[name="primary_name"]');
+        const primaryArtistSuggestionsNode = artistForm.querySelector('[data-review-primary-artist-suggestions]');
+        const primaryArtistAutocomplete = setupArtistAutocomplete(primaryNameField, primaryArtistSuggestionsNode, {
+          suggestionsUrl: artistSuggestionsUrl,
+          onFocus: function(autocompleteState) {
+            activeArtistAutocomplete = autocompleteState;
+          },
+        });
+        if (primaryNameField) {
+          primaryNameField.addEventListener('input', evaluateAlbumIssueStatus);
+        }
+        artistForm.addEventListener('submit', async function(event) {
+          event.preventDefault();
+          const requestData = new FormData(artistForm);
+          const response = await fetch(artistForm.action, {
+            method: 'POST',
+            body: requestData,
+          });
+          try {
+            const payload = await parseReviewResponse(response, 'Failed to save artist changes');
+            applyArtistFormChanges(payload, artistForm);
+            syncIssueStatusFromResponse(payload);
+            if (primaryArtistAutocomplete && typeof primaryArtistAutocomplete.clear === 'function') {
+              primaryArtistAutocomplete.clear();
+            }
+            showReviewFeedback(payload.message || 'Artist changes saved', false);
+          } catch (error) {
+            showReviewFeedback(error.message, true);
+          }
+        });
+      });
+    }
+
+    function bindArtistRemoveButtons(rootNode) {
+      if (!isReviewEditable()) {
+        return;
+      }
+      rootNode.querySelectorAll('[data-review-artist-remove]').forEach((button) => {
+        button.addEventListener('click', async function() {
+          if (!window.confirm(confirmRemoveArtistMessage)) {
+            return;
+          }
+          const response = await fetch(button.dataset.reviewArtistRemoveAction, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+          });
+          try {
+            const payload = await parseReviewResponse(response, 'Failed to remove artist');
+            showReviewFeedback(payload.message || 'Artist removed', false);
+            reloadReviewPage('artists');
+          } catch (error) {
+            showReviewFeedback(error.message, true);
+          }
+        });
+      });
+    }
+
+    function replaceArtistsPanel(payload) {
+      if (!artistsPanelNode || !payload || typeof payload.artists_panel_html !== 'string') {
+        return;
+      }
+      const artistsPanelHtml = payload.artists_panel_html;
+      artistsPanelNode.innerHTML = artistsPanelHtml;
+      if (typeof payload.related_artist_count === 'number') {
+        updateRelatedArtistCount(payload.related_artist_count);
+      }
+      bindArtistReviewForms(artistsPanelNode);
+      bindArtistRemoveButtons(artistsPanelNode);
     }
 
     function applyAlbumFormChanges(payload) {
@@ -456,6 +539,7 @@
           const payload = await parseReviewResponse(response, 'Failed to save album changes');
           applyAlbumFormChanges(payload);
           syncIssueStatusFromResponse(payload);
+          replaceArtistsPanel(payload);
           if (activeArtistAutocomplete && typeof activeArtistAutocomplete.clear === 'function') {
             activeArtistAutocomplete.clear();
           }
@@ -511,56 +595,8 @@
     }
 
     if (isReviewEditable()) {
-      document.querySelectorAll('[data-review-artist-form]').forEach((artistForm) => {
-        const primaryNameField = artistForm.querySelector('input[name="primary_name"]');
-        const primaryArtistSuggestionsNode = artistForm.querySelector('[data-review-primary-artist-suggestions]');
-        const primaryArtistAutocomplete = setupArtistAutocomplete(primaryNameField, primaryArtistSuggestionsNode, {
-          suggestionsUrl: artistSuggestionsUrl,
-          onFocus: function(autocompleteState) {
-            activeArtistAutocomplete = autocompleteState;
-          },
-        });
-        if (primaryNameField) {
-          primaryNameField.addEventListener('input', evaluateAlbumIssueStatus);
-        }
-        artistForm.addEventListener('submit', async function(event) {
-        event.preventDefault();
-        const requestData = new FormData(artistForm);
-        const response = await fetch(artistForm.action, {
-          method: 'POST',
-          body: requestData,
-        });
-        try {
-          const payload = await parseReviewResponse(response, 'Failed to save artist changes');
-          applyArtistFormChanges(payload, artistForm);
-          syncIssueStatusFromResponse(payload);
-          if (primaryArtistAutocomplete && typeof primaryArtistAutocomplete.clear === 'function') {
-            primaryArtistAutocomplete.clear();
-          }
-          showReviewFeedback(payload.message || 'Artist changes saved', false);
-        } catch (error) {
-          showReviewFeedback(error.message, true);
-        }
-      });
-      });
-      document.querySelectorAll('[data-review-artist-remove]').forEach((button) => {
-        button.addEventListener('click', async function() {
-          if (!window.confirm(confirmRemoveArtistMessage)) {
-            return;
-          }
-          const response = await fetch(button.dataset.reviewArtistRemoveAction, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-          });
-          try {
-            const payload = await parseReviewResponse(response, 'Failed to remove artist');
-            showReviewFeedback(payload.message || 'Artist removed', false);
-            reloadReviewPage('artists');
-          } catch (error) {
-            showReviewFeedback(error.message, true);
-          }
-        });
-      });
+      bindArtistReviewForms(document);
+      bindArtistRemoveButtons(document);
     }
 
     renderIssueStatus(issueStatusState, {{ 'true' if reviewSummary.ready_to_confirm else 'false' }});

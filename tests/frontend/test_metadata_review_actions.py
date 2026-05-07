@@ -137,6 +137,25 @@ class MetadataReviewActionsTestCase(FrontendTestBase):
         album_artist_names = sorted(relation.artist_id.get_artist_name() for relation in saved_album.album_artists)
         self.assertEqual(album_artist_names, ["Guest Album Artist", "Review Artist"])
 
+    def test_review_task_album_update_returns_refreshed_artist_panel_when_related_artists_change(self):
+        track_artist = Artist.create(name="Track Only Artist")
+        self.track.artist = track_artist
+        self.track.save()
+        TrackArtist.delete().where(TrackArtist.track_id == self.track, TrackArtist.artist_id == self.artist).execute()
+        TrackArtist.get_or_create(track_id=self.track, artist_id=track_artist, defaults={"position": 1})
+
+        rv = self.client.post(
+            f"/metadata/review-tasks/{self.task.id}/album",
+            json={"artist_name": "Updated Artist"},
+        )
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn("artists_panel_html", rv.json)
+        self.assertEqual(rv.json["related_artist_count"], 2)
+        self.assertIn("Updated Artist", rv.json["artists_panel_html"])
+        self.assertIn("Track Only Artist", rv.json["artists_panel_html"])
+        self.assertNotIn("value=\"Review Artist\" readonly", rv.json["artists_panel_html"])
+
     def test_review_task_tracks_update_stays_within_album_scope(self):
         self.task.reason = "missing_year"
         self.task.snapshot_json = '{"album_name": "Review Album", "artist_name": "Review Artist", "track_count": 1, "issues": ["track_artist_mapping_needs_review"]}'

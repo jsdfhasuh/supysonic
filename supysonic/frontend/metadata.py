@@ -334,6 +334,23 @@ def buildArtistReviewCard(artist):
     }
 
 
+def buildAlbumReviewArtistPanelPayload(task):
+    related_artists = getTaskRelatedArtists(task)
+    review_artist_cards = [buildArtistReviewCard(artist) for artist in related_artists]
+    for review_artist_card in review_artist_cards:
+        review_artist_card["can_remove"] = review_artist_card["id"] != str(task.album.artist_id)
+    return {
+        "review_artist_cards": review_artist_cards,
+        "related_artist_count": len(related_artists),
+        "artists_panel_html": render_template(
+            "partials/metadata-review-artists-panel.html",
+            reviewTask=task,
+            reviewArtistCards=review_artist_cards,
+            reviewIsEditable=(task.status == "pending"),
+        ),
+    }
+
+
 def filterSupersededInboxTasks(tasks):
     artist_ids_with_missing_image = {
         str(task.entity_id)
@@ -454,10 +471,9 @@ def metadata_review_task(task_id):
     if album is None:
         return {"status": "error", "message": "Review task album not found"}, 404
     tracks = list(album.tracks.order_by(Track.disc, Track.number, Track.title))
+    artist_panel_payload = buildAlbumReviewArtistPanelPayload(task)
     related_artists = getTaskRelatedArtists(task)
-    review_artist_cards = [buildArtistReviewCard(artist) for artist in related_artists]
-    for review_artist_card in review_artist_cards:
-        review_artist_card["can_remove"] = review_artist_card["id"] != str(album.artist_id)
+    review_artist_cards = artist_panel_payload["review_artist_cards"]
 
     issue_summary = buildTaskIssueStatus(task)
     review_summary = {
@@ -465,7 +481,7 @@ def metadata_review_task(task_id):
         "created": task.created,
         "expires_at": task.expires_at,
         "track_count": len(tracks),
-        "related_artist_count": len(related_artists),
+        "related_artist_count": artist_panel_payload["related_artist_count"],
         "total_duration": formatDurationLabel(sum(track.duration for track in tracks)),
         "cover_art_url": getMetadataCoverArtUrl(f"al-{album.id}"),
         "issues": getTaskDisplayIssues(task, tracks=tracks),
@@ -553,7 +569,8 @@ def update_metadata_review_task_album(task_id):
     )
 
     issue_summary = buildTaskIssueStatus(task)
-    return {"status": "success", "message": "album updated", **issue_summary}
+    artist_panel_payload = buildAlbumReviewArtistPanelPayload(task)
+    return {"status": "success", "message": "album updated", **issue_summary, **artist_panel_payload}
 
 
 @frontend.route("/metadata/review-tasks/<task_id>/tracks", methods=["POST"])

@@ -120,6 +120,9 @@ class MetadataReviewWorkspaceTestCase(FrontendTestBase):
         self.assertIn("data-review-ready-to-confirm", rv.data)
         self.assertIn("evaluateAlbumIssueStatus", rv.data)
         self.assertIn("renderIssueStatus", rv.data)
+        self.assertIn("replaceArtistsPanel", rv.data)
+        self.assertIn("artistsPanelHtml", rv.data)
+        self.assertIn("bindArtistReviewForms", rv.data)
 
     def test_review_workspace_shows_album_task_expiry_when_present(self):
         self.task.expires_at = now() + timedelta(days=2)

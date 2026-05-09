@@ -12,8 +12,6 @@ import os.path
 import sys
 import time
 
-from datetime import datetime
-from hashlib import sha1
 import hashlib
 from peewee import (
     AutoField,
@@ -26,66 +24,17 @@ from peewee import (
     IntegerField,
     OperationalError,
     TextField,
-    UUIDField,
 )
-from peewee import CompositeKey, DatabaseProxy, Model, MySQLDatabase
+from peewee import CompositeKey, MySQLDatabase
 from peewee import fn
 from playhouse.db_url import parseresult_to_dict, schemes
 from urllib.parse import urlparse
-from uuid import UUID, uuid4
+from uuid import UUID
 from PIL import Image as PILImage
 from .tool import read_dict_from_json
+from .db_layer.core import _Model, Meta, PathMixin, PrimaryKeyField, db, now, random
 
 SCHEMA_VERSION = "20260510"
-
-
-def now():
-    return datetime.now().replace(microsecond=0)
-
-
-def random():
-    if isinstance(db.obj, MySQLDatabase):
-        return fn.rand()
-    return fn.random()
-
-
-def PrimaryKeyField(**kwargs):
-    return UUIDField(primary_key=True, default=uuid4, **kwargs)
-
-
-db = DatabaseProxy()
-
-
-class _Model(Model):
-    class Meta:
-        database = db
-        legacy_table_names = False
-
-
-class Meta(_Model):
-    key = CharField(32, primary_key=True)
-    value = CharField(256)
-
-
-class PathMixin:
-    @classmethod
-    def get(cls, *args, **kwargs):
-        if kwargs:
-            path = kwargs.pop("path", None)
-            if path:
-                kwargs["_path_hash"] = sha1(path.encode("utf-8")).digest()
-        return _Model.get.__func__(cls, *args, **kwargs)
-
-    def __init__(self, *args, **kwargs):
-        if "path" in kwargs:
-            path = kwargs["path"]
-            kwargs["_path_hash"] = sha1(path.encode("utf-8")).digest()
-        _Model.__init__(self, *args, **kwargs)
-
-    def __setattr__(self, attr, value):
-        _Model.__setattr__(self, attr, value)
-        if attr == "path":
-            _Model.__setattr__(self, "_path_hash", sha1(value.encode("utf-8")).digest())
 
 
 class Image(_Model):

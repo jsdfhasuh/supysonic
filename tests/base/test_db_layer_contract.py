@@ -55,6 +55,17 @@ class DbLayerContractTestCase(unittest.TestCase):
 
         self.assertIsNotNone(package)
 
+    def test_core_exports_are_shared_with_facade(self):
+        db_module = importlib.import_module("supysonic.db")
+        core = importlib.import_module("supysonic.db_layer.core")
+
+        self.assertIs(db_module.db, core.db)
+        self.assertIs(db_module.Meta, core.Meta)
+        self.assertIs(db_module.PathMixin, core.PathMixin)
+        self.assertIs(db_module.now, core.now)
+        self.assertIs(db_module.random, core.random)
+        self.assertIs(db_module.PrimaryKeyField, core.PrimaryKeyField)
+
 
 if __name__ == "__main__":
     unittest.main()

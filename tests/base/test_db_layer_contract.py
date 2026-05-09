@@ -82,6 +82,24 @@ class DbLayerContractTestCase(unittest.TestCase):
         self.assertIs(db_module.open_connection, runtime.open_connection)
         self.assertIs(db_module.close_connection, runtime.close_connection)
 
+    def test_serializer_module_exists(self):
+        serializers = importlib.import_module("supysonic.db_layer.serializers")
+
+        for name in (
+            "serialize_folder_child",
+            "serialize_folder_artist",
+            "serialize_folder_directory",
+            "serialize_artist",
+            "serialize_album",
+            "serialize_track_child",
+            "serialize_user",
+            "serialize_chat_message",
+            "serialize_playlist",
+            "serialize_radio_station",
+        ):
+            with self.subTest(name=name):
+                self.assertTrue(hasattr(serializers, name))
+
 
 if __name__ == "__main__":
     unittest.main()

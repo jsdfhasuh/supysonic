@@ -5,7 +5,6 @@
 #
 # Distributed under terms of the GNU AGPLv3 license.
 
-import json
 import mimetypes
 import os.path
 import time
@@ -77,74 +76,19 @@ class Folder(PathMixin, _Model):
     parent = ForeignKeyField("self", null=True, backref="children")
 
     def as_subsonic_child(self, user):
-        info = {
-            "id": str(self.id),
-            "isDir": True,
-            "title": self.name,
-            "album": self.name,
-            "created": self.created.isoformat(),
-        }
-        if not self.root:
-            info["parent"] = str(self.parent.id)
-            info["artist"] = self.parent.name
-        if self.cover_art:
-            info["coverArt"] = str(self.id)
-        else:
-            for track in self.tracks:
-                if track.has_art:
-                    info["coverArt"] = str(track.id)
-                    break
+        from .db_layer.serializers import serialize_folder_child
 
-        try:
-            starred = StarredFolder[user.id, self.id]
-            info["starred"] = starred.date.isoformat()
-        except StarredFolder.DoesNotExist:
-            pass
-
-        try:
-            rating = RatingFolder[user.id, self.id]
-            info["userRating"] = rating.rating
-        except RatingFolder.DoesNotExist:
-            pass
-
-        avgRating = (
-            RatingFolder.select(fn.avg(RatingFolder.rating, coerce=False))
-            .where(RatingFolder.rated == self)
-            .scalar()
-        )
-        if avgRating:
-            info["averageRating"] = avgRating
-
-        return info
+        return serialize_folder_child(self, user)
 
     def as_subsonic_artist(self, user):  # "Artist" type in XSD
-        info = {"id": str(self.id), "name": self.name}
+        from .db_layer.serializers import serialize_folder_artist
 
-        try:
-            starred = StarredFolder[user.id, self.id]
-            info["starred"] = starred.date.isoformat()
-        except StarredFolder.DoesNotExist:
-            pass
-
-        return info
+        return serialize_folder_artist(self, user)
 
     def as_subsonic_directory(self, user, client):  # "Directory" type in XSD
-        info = {
-            "id": str(self.id),
-            "name": self.name,
-            "child": [
-                f.as_subsonic_child(user)
-                for f in self.children.order_by(fn.lower(Folder.name))
-            ]
-            + [
-                t.as_subsonic_child(user, client)
-                for t in sorted(self.tracks, key=lambda t: t.sort_key())
-            ],
-        }
-        if not self.root:
-            info["parent"] = str(self.parent.id)
+        from .db_layer.serializers import serialize_folder_directory
 
-        return info
+        return serialize_folder_directory(self, user, client)
 
     @classmethod
     def prune(cls):
@@ -218,36 +162,9 @@ class Artist(_Model):
 
     # 更精确的 as_subsonic_artist 方法 返回艺术家信息字典
     def as_subsonic_artist(self, user):
-        # 使用去重查询获取艺术家参与的所有专辑
-        album_count = (
-            Album.select()
-            .distinct()
-            .join(
-                AlbumArtist,
-                join_type='LEFT OUTER JOIN',
-                on=(Album.id == AlbumArtist.album_id),
-            )
-            .where(
-                (Album.artist == self)  # 作为主艺术家
-                | (AlbumArtist.artist_id == self)  # 作为专辑合作艺术家
-            )
-            .count()
-        )
+        from .db_layer.serializers import serialize_artist
 
-        info = {
-            "id": str(self.id),
-            "name": self.name,
-            # coverArt
-            "coverArt": "ar-" + str(self.id),
-            "albumCount": album_count,
-        }
-
-        try:
-            starred = StarredArtist[user.id, self.id]
-            info["starred"] = starred.date.isoformat()
-        except StarredArtist.DoesNotExist:
-            pass
-        return info
+        return serialize_artist(self, user)
 
     def get_info(self):
         info = {
@@ -336,93 +253,9 @@ class Album(_Model):
         return artists or [self.artist]
 
     def as_subsonic_album(self, user, server_type=None):  # "AlbumID3" type in XSD
-        server_name = (server_type or "").lower()
-        is_music_client = "music" in server_name
-        duration, created = self.tracks.select(
-            fn.sum(Track.duration), fn.min(Track.created)
-        ).scalar(as_tuple=True)
-        all_artists = self.get_all_artists()
-        info = {
-            "id": str(self.id),
-            "name": str(self.name),
-            "artist": str(self.artist.get_artist_name()),
-            "artistId": str(self.artist.id),
-            "songCount": self.tracks.count(),
-            "duration": duration,
-            "created": created.isoformat(),
-        }
+        from .db_layer.serializers import serialize_album
 
-        if is_music_client:
-            info["albumArtist"] = str(self.artist.get_artist_name())
-            info["albumArtistId"] = str(self.artist.id)
-            info["smallImageUrl"] = ""
-            info["mediumImageUrl"] = ""
-            info["largeImageUrl"] = ""
-            participants = {"albumartist": [], "artist": []}
-
-            for artist in all_artists:
-                participants["artist"].append(
-                    {"id": str(artist.id), "name": str(artist.get_artist_name())}
-                )
-            info["participants"] = participants
-            info["coverArt"] = "al-" + str(self.id)
-        else:
-            track_with_cover = (
-                self.tracks.join(Folder).where(Folder.cover_art.is_null(False)).first()
-            )
-            if track_with_cover is not None:
-                info["coverArt"] = str(track_with_cover.folder.id)
-            else:
-                track_with_cover = self.tracks.where(Track.has_art).first()
-                if track_with_cover is not None:
-                    info["coverArt"] = str(track_with_cover.id)
-        if self.year:
-            info["year"] = self.year
-
-        album_info = {}
-        if self.album_info_json:
-            try:
-                album_info_value = json.loads(self.album_info_json)
-            except (TypeError, ValueError):
-                album_info_value = {}
-            if isinstance(album_info_value, dict):
-                album_info = album_info_value
-
-        if is_music_client:
-            if self.release_date:
-                info["releaseDate"] = self.release_date
-            if self.release_type:
-                info["releaseType"] = self.release_type
-
-            styles = album_info.get("styles")
-            if isinstance(styles, list) and styles:
-                info["styles"] = [str(style) for style in styles if style]
-
-            musicbrainz_id = album_info.get("musicbrainz_id")
-            if musicbrainz_id:
-                info["musicBrainzId"] = str(musicbrainz_id)
-
-            discogs_id = album_info.get("discogs_id")
-            if discogs_id:
-                info["discogsId"] = str(discogs_id)
-
-        genre = ", ".join(
-            g
-            for (g,) in self.tracks.select(Track.genre)
-            .where(Track.genre.is_null(False))
-            .distinct()
-            .tuples()
-        )
-        if genre:
-            info["genre"] = genre
-
-        try:
-            starred = StarredAlbum[user.id, self.id]
-            info["starred"] = starred.date.isoformat()
-        except StarredAlbum.DoesNotExist:
-            pass
-
-        return info
+        return serialize_album(self, user, server_type)
 
     def sort_key(self):
         year = self.tracks.select(fn.min(Track.year)).scalar() or 9999
@@ -567,69 +400,9 @@ class Track(PathMixin, _Model):
     folder = ForeignKeyField(Folder, backref="tracks")
 
     def as_subsonic_child(self, user, prefs):
-        info = {
-            "id": str(self.id),
-            "parent": str(self.folder.id),
-            "isDir": False,
-            "title": self.title,
-            "album": self.album.name,
-            "artist": self.artist.get_artist_name(),
-            "track": self.number,
-            "size": os.path.getsize(self.path) if os.path.isfile(self.path) else -1,
-            "contentType": self.mimetype,
-            "suffix": self.suffix(),
-            "duration": self.duration,
-            "bitRate": self.bitrate,
-            "path": self.path[len(self.root_folder.path) + 1 :],
-            "isVideo": False,
-            "discNumber": self.disc,
-            "created": self.created.isoformat(),
-            "albumId": str(self.album.id),
-            "artistId": str(self.artist.id),
-            "type": "music",
-        }
+        from .db_layer.serializers import serialize_track_child
 
-        if self.year:
-            info["year"] = self.year
-        if self.genre:
-            info["genre"] = self.genre
-        if self.has_art:
-            info["coverArt"] = str(self.id)
-        elif self.folder.cover_art:
-            info["coverArt"] = str(self.folder.id)
-
-        try:
-            starred = StarredTrack[user.id, self.id]
-            info["starred"] = starred.date.isoformat()
-        except StarredTrack.DoesNotExist:
-            pass
-
-        try:
-            rating = RatingTrack[user.id, self.id]
-            info["userRating"] = rating.rating
-        except RatingTrack.DoesNotExist:
-            pass
-
-        avgRating = (
-            RatingTrack.select(fn.avg(RatingTrack.rating, coerce=False))
-            .where(RatingTrack.rated == self)
-            .scalar()
-        )
-        if avgRating:
-            info["averageRating"] = avgRating
-
-        if (
-            prefs is not None
-            and prefs.format is not None
-            and prefs.format != self.suffix()
-        ):
-            info["transcodedSuffix"] = prefs.format
-            info["transcodedContentType"] = (
-                mimetypes.guess_type("dummyname." + prefs.format, False)[0]
-                or "application/octet-stream"
-            )
-
-        return info
+        return serialize_track_child(self, user, prefs)
 
     @property
     def mimetype(self):
@@ -690,22 +463,9 @@ class User(_Model):
     last_play_date = DateTimeField(null=True)
 
     def as_subsonic_user(self):
-        return {
-            "username": self.name,
-            "email": self.mail or "",
-            "scrobblingEnabled": self.lastfm_session is not None and self.lastfm_status,
-            "adminRole": self.admin,
-            "settingsRole": True,
-            "downloadRole": True,
-            "uploadRole": False,
-            "playlistRole": True,
-            "coverArtRole": False,
-            "commentRole": False,
-            "podcastRole": False,
-            "streamRole": True,
-            "jukeboxRole": self.admin or self.jukebox,
-            "shareRole": False,
-        }
+        from .db_layer.serializers import serialize_user
+
+        return serialize_user(self)
 
 
 class User_Play_Activity(_Model):
@@ -816,11 +576,9 @@ class ChatMessage(_Model):
     message = CharField(512)
 
     def responsize(self):
-        return {
-            "username": self.user.name,
-            "time": self.time * 1000,
-            "message": self.message,
-        }
+        from .db_layer.serializers import serialize_chat_message
+
+        return serialize_chat_message(self)
 
 
 class Playlist(_Model):
@@ -833,27 +591,9 @@ class Playlist(_Model):
     tracks = TextField(null=True)
 
     def as_subsonic_playlist(self, user, tracks=None):
-        tracks = self.get_tracks() if tracks is None else tracks
-        first_track = tracks[0] if tracks else None
-        first_album = first_track.album if first_track else None
-        info = {
-            "id": str(self.id),
-            "name": (
-                self.name
-                if self.user.id == user.id
-                else f"[{self.user.name}] {self.name}"
-            ),
-            "owner": self.user.name,
-            "public": self.public,
-            "songCount": len(tracks),
-            "duration": sum(t.duration for t in tracks),
-            "created": self.created.isoformat(),
-        }
-        if first_album:
-            info["coverArt"] = f"al-{first_album.id}"
-        if self.comment:
-            info["comment"] = self.comment
-        return info
+        from .db_layer.serializers import serialize_playlist
+
+        return serialize_playlist(self, user, tracks)
 
     def get_tracks(self):
         if not self.tracks:
@@ -918,13 +658,9 @@ class RadioStation(_Model):
     created = DateTimeField(default=now)
 
     def as_subsonic_station(self):
-        info = {
-            "id": str(self.id),
-            "streamUrl": self.stream_url,
-            "name": self.name,
-            "homePageUrl": self.homepage_url,
-        }
-        return info
+        from .db_layer.serializers import serialize_radio_station
+
+        return serialize_radio_station(self)
 
 
 class ClientRelease(_Model):
@@ -955,4 +691,3 @@ class ClientRelease(_Model):
             (("platform", "build_name", "build_number"), True),
             (("platform", "active"), False),
         )
-

@@ -100,6 +100,18 @@ class DbLayerContractTestCase(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertTrue(hasattr(serializers, name))
 
+    def test_low_dependency_models_are_shared_with_facade(self):
+        db_module = importlib.import_module("supysonic.db")
+        emo = importlib.import_module("supysonic.db_layer.emo")
+        client_releases = importlib.import_module(
+            "supysonic.db_layer.client_releases"
+        )
+
+        self.assertIs(db_module.EmoSessionQueue, emo.EmoSessionQueue)
+        self.assertIs(db_module.EmoLocalQueue, emo.EmoLocalQueue)
+        self.assertIs(db_module.EmoPlaybackState, emo.EmoPlaybackState)
+        self.assertIs(db_module.ClientRelease, client_releases.ClientRelease)
+
 
 if __name__ == "__main__":
     unittest.main()

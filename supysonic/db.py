@@ -48,6 +48,8 @@ from .db_layer.runtime import (
     open_connection,
     release_database,
 )
+from .db_layer.emo import EmoLocalQueue, EmoPlaybackState, EmoSessionQueue
+from .db_layer.client_releases import ClientRelease
 
 
 class Image(_Model):
@@ -489,50 +491,6 @@ class ClientPrefs(_Model):
         primary_key = CompositeKey("user", "client_name")
 
 
-class EmoSessionQueue(_Model):
-    id = PrimaryKeyField()
-    session_id = CharField(128, unique=True)
-    user_name = CharField(64)
-    owner_client_id = CharField(128)
-    queue_json = TextField()
-    current_index = IntegerField(default=0)
-    position_ms = IntegerField(default=0)
-    version = IntegerField(default=1)
-    created_at = DateTimeField(default=now)
-    updated_at = DateTimeField(default=now)
-
-
-class EmoLocalQueue(_Model):
-    id = PrimaryKeyField()
-    session_id = CharField(128)
-    owner_client_id = CharField(128)
-    queue_json = TextField()
-    current_index = IntegerField(default=0)
-    position_ms = IntegerField(default=0)
-    created_at = DateTimeField(default=now)
-    updated_at = DateTimeField(default=now)
-
-    class Meta:
-        indexes = ((('session_id', 'owner_client_id'), True),)
-
-
-class EmoPlaybackState(_Model):
-    id = PrimaryKeyField()
-    session_id = CharField(128)
-    user_name = CharField(64)
-    owner_client_id = CharField(128)
-    state = CharField(32)
-    track_id = CharField(128, null=True)
-    position_ms = IntegerField(default=0)
-    volume = IntegerField(null=True)
-    playback_json = TextField(null=True)
-    created_at = DateTimeField(default=now)
-    updated_at = DateTimeField(default=now)
-
-    class Meta:
-        indexes = ((('session_id', 'owner_client_id'), True),)
-
-
 def _make_starred_model(target_model):
     class Starred(_Model):
         user = ForeignKeyField(User, backref="+")
@@ -661,33 +619,3 @@ class RadioStation(_Model):
         from .db_layer.serializers import serialize_radio_station
 
         return serialize_radio_station(self)
-
-
-class ClientRelease(_Model):
-    id = PrimaryKeyField()
-    platform = CharField(max_length=16)
-    file_type = CharField(max_length=16)
-    build_name = CharField(max_length=64)
-    build_number = IntegerField()
-    version = CharField(max_length=80)
-    publish_mode = CharField(max_length=16)
-    file_name = CharField(max_length=256, null=True)
-    file_path = CharField(max_length=4096, null=True)
-    download_url = CharField(max_length=2048, null=True)
-    file_size = IntegerField(null=True)
-    sha256 = CharField(max_length=64, null=True)
-    release_notes = TextField(null=True)
-    active = BooleanField(default=True)
-    created = DateTimeField(default=now)
-    updated = DateTimeField(default=now)
-
-    def save(self, *args, **kwargs):
-        self.updated = now()
-        return super().save(*args, **kwargs)
-
-    class Meta:
-        table_name = "client_release"
-        indexes = (
-            (("platform", "build_name", "build_number"), True),
-            (("platform", "active"), False),
-        )

@@ -66,6 +66,13 @@ class DbLayerContractTestCase(unittest.TestCase):
         self.assertIs(db_module.random, core.random)
         self.assertIs(db_module.PrimaryKeyField, core.PrimaryKeyField)
 
+    def test_schema_exports_are_shared_with_facade(self):
+        db_module = importlib.import_module("supysonic.db")
+        schema = importlib.import_module("supysonic.db_layer.schema")
+
+        self.assertEqual(db_module.SCHEMA_VERSION, schema.SCHEMA_VERSION)
+        self.assertIs(db_module.execute_sql_resource_script, schema.execute_sql_resource_script)
+
 
 if __name__ == "__main__":
     unittest.main()

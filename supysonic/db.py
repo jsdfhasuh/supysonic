@@ -9,7 +9,6 @@ import importlib
 import json
 import mimetypes
 import os.path
-import sys
 import time
 
 import hashlib
@@ -31,10 +30,22 @@ from playhouse.db_url import parseresult_to_dict, schemes
 from urllib.parse import urlparse
 from uuid import UUID
 from PIL import Image as PILImage
+from .db_layer.core import (
+    _Model,
+    Meta,
+    PathMixin,
+    PrimaryKeyField,
+    db,
+    now,
+    random,
+)
 from .tool import read_dict_from_json
-from .db_layer.core import _Model, Meta, PathMixin, PrimaryKeyField, db, now, random
-
-SCHEMA_VERSION = "20260510"
+from .db_layer.schema import (
+    SCHEMA_VERSION,
+    execute_sql_resource_script,
+    get_resource_text,
+    list_migrations,
+)
 
 
 class Image(_Model):
@@ -941,42 +952,6 @@ class ClientRelease(_Model):
             (("platform", "build_name", "build_number"), True),
             (("platform", "active"), False),
         )
-
-
-if sys.version_info < (3, 9):
-    import pkg_resources
-
-    def get_resource_text(respath):
-        return pkg_resources.resource_string(__package__, respath).decode("utf-8")
-
-    def list_migrations(provider):
-        return pkg_resources.resource_listdir(
-            __package__, f"schema/migration/{provider}"
-        )
-
-else:
-    import importlib.resources
-
-    def get_resource_text(respath):
-        return (
-            importlib.resources.files(__package__).joinpath(respath).read_text("utf-8")
-        )
-
-    def list_migrations(provider):
-        return (
-            e.name
-            for e in importlib.resources.files(__package__)
-            .joinpath(f"schema/migration/{provider}")
-            .iterdir()
-        )
-
-
-def execute_sql_resource_script(respath):
-    sql = get_resource_text(respath)
-    for statement in sql.split(";"):
-        statement = statement.strip()
-        if statement and not statement.startswith("--"):
-            db.execute_sql(statement)
 
 
 def init_database(database_uri):

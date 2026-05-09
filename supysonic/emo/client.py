@@ -3,7 +3,7 @@ import os
 import time
 from functools import wraps
 
-from flask import g, jsonify, redirect, render_template, request, send_file, url_for
+from flask import current_app, g, jsonify, redirect, render_template, request, send_file, url_for
 
 from ..logging_utils import format_log_event
 from . import api_routing, log_emo_event
@@ -27,15 +27,20 @@ def get_version():
     return request.formatter("version", Version)
 
 
-UPLOAD_FOLDER = './logs'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+DEFAULT_UPLOAD_FOLDER = "./logs"
+
+
+def get_upload_folder():
+    uploadFolder = current_app.config["WEBAPP"].get("emo_log_upload_dir") or DEFAULT_UPLOAD_FOLDER
+    os.makedirs(uploadFolder, exist_ok=True)
+    return uploadFolder
 
 
 def get_log_path(filename):
     if not filename:
         raise GenericError("Missing filename")
 
-    basePath = os.path.abspath(UPLOAD_FOLDER)
+    basePath = os.path.abspath(get_upload_folder())
     safePath = os.path.abspath(os.path.join(basePath, filename))
     if os.path.commonpath([basePath, safePath]) != basePath or not os.path.isfile(safePath):
         raise GenericError("File not found")
@@ -68,7 +73,7 @@ def upload_log():
         return jsonify({'status': 'error', 'message': 'No selected file'}), 400
     
     filename = time.strftime("%Y%m%d_%H%M%S_") + file.filename
-    file_path = os.path.join(UPLOAD_FOLDER, filename)
+    file_path = os.path.join(get_upload_folder(), filename)
     
     try:
         file.save(file_path)
@@ -101,7 +106,7 @@ def upload_log():
 @api_routing('/logs')
 @admin_only
 def list_logs():
-    files = sorted(os.listdir(UPLOAD_FOLDER), reverse=True)
+    files = sorted(os.listdir(get_upload_folder()), reverse=True)
     return render_template('log_list.html', files=files)
 
 # 查看日志页面

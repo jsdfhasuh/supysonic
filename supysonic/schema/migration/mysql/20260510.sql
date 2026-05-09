@@ -1,0 +1,1 @@
+-- No MySQL schema changes required for this version.

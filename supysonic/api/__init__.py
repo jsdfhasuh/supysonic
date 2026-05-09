@@ -20,7 +20,7 @@ from ..db import ClientPrefs, Folder
 from ..logging_utils import format_log_event
 from ..managers.user import UserManager
 
-from .exceptions import GenericError, Unauthorized, NotFound
+from .exceptions import GenericError, MissingParameter, Unauthorized, NotFound
 from .formatters import JSONFormatter, JSONPFormatter, XMLFormatter
 
 api = Blueprint("api", __name__)
@@ -108,22 +108,20 @@ def authorize():
         except (ValueError, User.DoesNotExist):
             session.clear()
             raise Unauthorized("Please login")
+    else:
+        log_api_event(
+            logging.WARNING,
+            "auth_failure",
+            reason="missing_auth",
+            auth_method="subsonic_params",
+        )
+        raise MissingParameter("u")
     
     # 方法 1: 明文密码
     if 'p' in request.values:
         password = request.values['p']
         if password.startswith('enc:'):
-            # 处理编码密码（hex编码）
-            try:
-                password = binascii.unhexlify(password[4:]).decode('utf-8')
-            except:
-                log_api_event(
-                    logging.WARNING,
-                    "auth_failure",
-                    user=username,
-                    reason="invalid_encoded_password",
-                )
-                raise Unauthorized("Invalid encoded password")
+            password = decode_password(password)
         
         user = UserManager.try_auth(username, password)
     
@@ -154,8 +152,9 @@ def authorize():
             "auth_failure",
             user=username,
             reason="missing_auth",
+            auth_method="subsonic_params",
         )
-        raise Unauthorized("Missing authentication parameters")
+        raise MissingParameter("p")
     
     # 检查认证结果
     if user is None:

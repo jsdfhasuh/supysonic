@@ -30,7 +30,7 @@ def list_playlists():
         .order_by(Playlist.name)
     )
 
-    username = request.values.get("username") or request.values.get("u")
+    username = request.values.get("username")
     if username:
         if not request.user.admin:
             raise Forbidden()
@@ -39,30 +39,7 @@ def list_playlists():
         # requested user doesn't exist
         user = User.get(name=username)
         query = Playlist.select().where(Playlist.user == user).order_by(Playlist.name)
-        # add star to indicate
-        trq = (
-            StarredTrack.select(StarredTrack.starred)
-            .join(Track)
-            .where(StarredTrack.user == request.user)
-            .order_by(-StarredTrack.date)
-        )
-        first_track = trq[0].starred if trq else None
-        first_album = first_track.album if first_track else None
-
-        favourite_playlist = {
-            'id': 'default',
-            'name': 'my Starred Tracks',
-            'owner': user.name,
-            'public': False,
-            'comment': 'Tracks you have starred',
-            'songCount': len(trq),
-            'duration': sum(t.starred.duration for t in trq),
-            'created': time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime()),
-            'changed': time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime()),
-            "coverArt": f"al-{first_album.id}" if first_album else None,
-        }
     temp = [p.as_subsonic_playlist(request.user) for p in query]
-    temp.insert(0, favourite_playlist)
     temp_temp = temp.copy()
     for playlist in temp_temp:
         comment = playlist.get("comment", "")
@@ -92,7 +69,7 @@ def show_playlist():
             .where(StarredTrack.user == request.user)
             .order_by(-StarredTrack.date)
         )
-        first_album = trq[0].album if trq else None
+        first_album = trq[0].starred.album if trq else None
         info = {
             "id": "default",
             "name": "my Starred Tracks",
@@ -102,9 +79,9 @@ def show_playlist():
             "songCount": len(trq),
             "duration": sum(t.starred.duration for t in trq),
             "created": time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime()),
-            "changed": time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime()),
-            "coverArt": f"al-{first_album.id}",
         }
+        if first_album:
+            info["coverArt"] = f"al-{first_album.id}"
         entry = [
             st.starred.as_subsonic_child(request.user, request.client) for st in trq
         ]
@@ -144,12 +121,7 @@ def create_playlist():
         track = Track[sid]
         playlist.add(track)
     playlist.save()
-    info = playlist.as_subsonic_playlist(request.user)
-    info["entry"] = [
-        t.as_subsonic_child(request.user, request.client) for t in playlist.get_tracks()
-    ]
-
-    return request.formatter("playlist", info)
+    return request.formatter.empty
 
 
 @api_routing("/deletePlaylist")
@@ -222,8 +194,10 @@ def get_recommended_playlists():
             "songCount": len(trs),
             "duration": sum(t.duration for t in trs),
             "created": time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime()),
-            "changed": time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime()),
         }
+        first_track = trs[0] if trs else None
+        if first_track:
+            info["coverArt"] = f"al-{first_track.album.id}"
         entry = [st.as_subsonic_child(request.user, request.client) for st in trs]
         info["entry"] = entry
         return request.formatter("playlist", info)

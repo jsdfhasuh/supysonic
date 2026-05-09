@@ -9,7 +9,7 @@ from unittest.mock import patch
 from PIL import Image
 
 from supysonic.daemon.exceptions import DaemonUnavailableError
-from supysonic.db import Album, AlbumArtist, AlbumReviewTask, Artist, Folder, ReviewTask, Track, TrackArtist, User, db, now
+from supysonic.db import Album, AlbumArtist, AlbumReviewTask, Artist, Folder, ReviewTask, Track, TrackArtist, User, now
 from supysonic.nfo.nfo import NfoHandler
 from supysonic.tool import read_dict_from_json
 
@@ -29,24 +29,6 @@ class MetadataReviewActionsTestCase(FrontendTestBase):
         TestConfig.WEBAPP["log_dir"] = self.logDir
         TestConfig.WEBAPP["log_level"] = "INFO"
         super().setUp()
-        db.execute_sql(
-            "CREATE TABLE album_artist ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-            "album_id CHAR(36) NOT NULL REFERENCES album(id), "
-            "artist_id CHAR(36) NOT NULL REFERENCES artist(id), "
-            "position INTEGER NOT NULL DEFAULT 0, "
-            "UNIQUE(album_id, artist_id)"
-            ")"
-        )
-        db.execute_sql(
-            "CREATE TABLE track_artist ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-            "track_id CHAR(36) NOT NULL REFERENCES track(id), "
-            "artist_id CHAR(36) NOT NULL REFERENCES artist(id), "
-            "position INTEGER NOT NULL DEFAULT 0, "
-            "UNIQUE(track_id, artist_id)"
-            ")"
-        )
 
         alice = User.get(User.name == "alice")
         with self.client.session_transaction() as session:

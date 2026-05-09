@@ -19,6 +19,19 @@ class SystemTestCase(ApiTestBase):
         rv, child = self._make_request("getLicense", tag="license")
         self.assertEqual(child.get("valid"), "true")
 
+    def test_open_subsonic_extensions_excludes_unsupported_transcode_offset(self):
+        rv = self.client.get(
+            "/rest/getOpenSubsonicExtensions.view",
+            query_string={"u": "alice", "p": "Alic3", "c": "tests", "f": "json"},
+        )
+
+        data = rv.get_json()
+        extensions = data["subsonic-response"]["openSubsonicExtensions"]
+        self.assertNotIn(
+            "transcodeOffset",
+            {extension["name"] for extension in extensions},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

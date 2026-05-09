@@ -66,5 +66,5 @@ class ScannerCoverTraceTestCase(unittest.TestCase):
         _, trace_type, _, detail_lines = log_trace.call_args[0]
         self.assertEqual(trace_type, "ALBUM_COVER_TRACE")
         self.assertIn("folder cover lookup: miss", detail_lines)
-        self.assertIn("embedded artwork: miss", detail_lines)
+        self.assertIn("embedded artwork: track path missing", detail_lines)
         self.assertIn("cover repair result: no source succeeded", detail_lines)

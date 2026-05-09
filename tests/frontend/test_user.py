@@ -24,7 +24,7 @@ class UserTestCase(FrontendTestBase):
     def test_index(self):
         self._login("bob", "B0b")
         rv = self.client.get("/user", follow_redirects=True)
-        self.assertIn("There's nothing much to see", rv.data)
+        self.assertIn("Overview", rv.data)
         self.assertNotIn("Users", rv.data)
         self._logout()
 
@@ -46,10 +46,10 @@ class UserTestCase(FrontendTestBase):
 
         self._login("bob", "B0b")
         rv = self.client.get("/user/" + str(self.users["alice"]), follow_redirects=True)
-        self.assertIn("There's nothing much to see", rv.data)
+        self.assertIn("Overview", rv.data)
         self.assertNotIn("<h2>bob</h2>", rv.data)
         rv = self.client.get("/user/me")
-        self.assertIn("<h2 class=\"mt-4 pb-2 border-bottom\">bob</h2>", rv.data)
+        self.assertIn('<h1 class="console-title">bob</h1>', rv.data)
         self.assertIn("tests", rv.data)
 
     def test_update_client_prefs(self):
@@ -79,7 +79,7 @@ class UserTestCase(FrontendTestBase):
     def test_change_username_get(self):
         self._login("bob", "B0b")
         rv = self.client.get("/user/whatever/changeusername", follow_redirects=True)
-        self.assertIn("There's nothing much to see", rv.data)
+        self.assertIn("Overview", rv.data)
         self._logout()
 
         self._login("alice", "Alic3")
@@ -177,7 +177,7 @@ class UserTestCase(FrontendTestBase):
     def test_add_get(self):
         self._login("bob", "B0b")
         rv = self.client.get("/user/add", follow_redirects=True)
-        self.assertIn("There's nothing much to see", rv.data)
+        self.assertIn("Overview", rv.data)
         self.assertNotIn("Add User", rv.data)
         self._logout()
 
@@ -223,7 +223,7 @@ class UserTestCase(FrontendTestBase):
 
         self._login("bob", "B0b")
         rv = self.client.get(path, follow_redirects=True)
-        self.assertIn("There's nothing much to see", rv.data)
+        self.assertIn("Overview", rv.data)
         self.assertEqual(User.select().count(), 2)
         self._logout()
 
@@ -249,6 +249,18 @@ class UserTestCase(FrontendTestBase):
             follow_redirects=True,
         )
         self.assertIn("No API key set", rv.data)
+
+    def test_lastfm_blank_credentials_disable_profile_link(self):
+        with self.app_context():
+            from flask import current_app
+
+            current_app.config["LASTFM"]["api_key"] = ""
+            current_app.config["LASTFM"]["secret"] = ""
+
+        self._login("alice", "Alic3")
+        rv = self.client.get("/user/me")
+        self.assertIn("Unavailable", rv.data)
+        self.assertNotIn("Link Last.fm", rv.data)
 
     def test_lastfm_unlink(self):
         self._login("alice", "Alic3")

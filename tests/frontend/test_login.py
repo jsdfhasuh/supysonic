@@ -53,7 +53,7 @@ class LoginTestCase(FrontendTestBase):
         rv = self.client.get("/", follow_redirects=True)
         self.assertIn("alice", rv.data)
         self.assertIn("Log out", rv.data)
-        self.assertIn("There's nothing much to see here.", rv.data)
+        self.assertIn("Overview", rv.data)
 
     def test_root_with_non_valid_session(self):
         # Root with a no-valid session

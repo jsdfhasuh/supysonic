@@ -8,6 +8,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from ..db import Album, Artist, ReviewTask, close_connection, open_connection, now
+from ..logging_utils import format_log_event
 
 if TYPE_CHECKING:
     from ..scanner import Scanner
@@ -19,6 +20,7 @@ CLOSED_REVIEW_TASK_STATUSES = {"confirmed", "dismissed", "expired"}
 METADATA_REVIEW_TASK_TYPE = "metadata_review"
 NEW_ALBUM_REVIEW_REASON = "new_album"
 MISSING_YEAR_REVIEW_REASON = "missing_year"
+EXTERNAL_ENRICHMENT_REVIEW_REASON = "external_enrichment"
 NEW_ARTIST_REVIEW_REASON = "new_artist"
 MISSING_IMAGE_REVIEW_REASON = "missing_image"
 NEW_ARTIST_REVIEW_TTL_DAYS = 7
@@ -37,15 +39,50 @@ def rememberNewArtist(scanner: Scanner, artist) -> None:
     scanner.review_task_artist_ids.add(artist.id)
 
 
+def rememberExternalEnrichedAlbum(scanner: Scanner, album: Album) -> None:
+    if not hasattr(scanner, "review_task_enriched_album_ids"):
+        scanner.review_task_enriched_album_ids = set()
+    scanner.review_task_enriched_album_ids.add(album.id)
+
+
+def _getAlbumEnrichmentSnapshot(album: Album) -> dict:
+    try:
+        album_info = json.loads(album.album_info_json or "{}")
+    except (TypeError, ValueError):
+        album_info = {}
+    if not isinstance(album_info, dict):
+        album_info = {}
+    enrichment = {}
+    for key in (
+        "providers_used",
+        "source_urls",
+        "genres",
+        "styles",
+        "primary_genre",
+        "musicbrainz_id",
+        "discogs_id",
+        "last_enriched_at",
+    ):
+        value = album_info.get(key)
+        if value not in (None, "", [], {}):
+            enrichment[key] = value
+    return enrichment
+
+
 def buildAlbumReviewSnapshot(album: Album) -> str:
     snapshot = {
         "album_id": str(album.id),
         "album_name": album.name,
         "artist_name": album.artist.get_artist_name(),
         "year": album.year,
+        "release_date": album.release_date,
+        "release_type": album.release_type,
         "track_count": album.tracks.count(),
         "issues": getAlbumReviewIssues(album),
     }
+    enrichment = _getAlbumEnrichmentSnapshot(album)
+    if enrichment:
+        snapshot["enrichment"] = enrichment
     return json.dumps(snapshot, ensure_ascii=False)
 
 
@@ -181,6 +218,37 @@ def _getLegacyAlbumPendingKey(album: Album) -> str:
     return f"{album.id}:pending"
 
 
+def _getExternalAlbumPendingKey(album: Album) -> str:
+    return f"album:{album.id}:pending:{EXTERNAL_ENRICHMENT_REVIEW_REASON}"
+
+
+def _logExternalEnrichmentReviewTask(event: str, album: Album, task: ReviewTask) -> None:
+    logger.info(
+        format_log_event(
+            "scanner",
+            event,
+            album_id=album.id,
+            album=album.name,
+            task_id=task.id,
+            pending_key=task.pending_key or "-",
+            reason=task.reason,
+        )
+    )
+
+
+def _getPendingAlbumTask(album: Album):
+    return (
+        ReviewTask.select()
+        .where(
+            ReviewTask.entity_type == "album",
+            ReviewTask.entity_id == str(album.id),
+            ReviewTask.status == PENDING_REVIEW_TASK_STATUS,
+        )
+        .order_by(ReviewTask.created.asc())
+        .first()
+    )
+
+
 def removeLegacyDuplicateAlbumPendingTasks() -> int:
     removed = 0
     pending_album_tasks = list(
@@ -273,6 +341,14 @@ def createAlbumReviewTasks(scanner: Scanner) -> int:
 
         snapshot_json = buildAlbumReviewSnapshot(album)
         reason = getAlbumReviewReason(album)
+        existing_task = _getPendingAlbumTask(album)
+        if existing_task is not None:
+            if existing_task.reason == reason and existing_task.snapshot_json == snapshot_json:
+                continue
+            existing_task.reason = reason
+            existing_task.snapshot_json = snapshot_json
+            _syncTask(existing_task)
+            continue
 
         task, was_created = ReviewTask.get_or_create(
             pending_key=f"album:{album.id}:pending",
@@ -297,6 +373,68 @@ def createAlbumReviewTasks(scanner: Scanner) -> int:
         task.reason = reason
         task.snapshot_json = snapshot_json
         _syncTask(task)
+
+    enriched_album_ids = getattr(scanner, "review_task_enriched_album_ids", set())
+    for album_id in enriched_album_ids:
+        album = Album.get_or_none(Album.id == album_id)
+        if album is None:
+            continue
+
+        snapshot_json = buildAlbumReviewSnapshot(album)
+        existing_task = _getPendingAlbumTask(album)
+        if existing_task is not None:
+            if existing_task.snapshot_json != snapshot_json:
+                existing_task.snapshot_json = snapshot_json
+                _syncTask(existing_task)
+                _logExternalEnrichmentReviewTask(
+                    "external_enrichment_review_task_updated",
+                    album,
+                    existing_task,
+                )
+            else:
+                _logExternalEnrichmentReviewTask(
+                    "external_enrichment_review_task_merged_existing",
+                    album,
+                    existing_task,
+                )
+            continue
+
+        task, was_created = ReviewTask.get_or_create(
+            pending_key=_getExternalAlbumPendingKey(album),
+            defaults={
+                "entity_type": "album",
+                "entity_id": str(album.id),
+                "task_type": METADATA_REVIEW_TASK_TYPE,
+                "status": PENDING_REVIEW_TASK_STATUS,
+                "reason": EXTERNAL_ENRICHMENT_REVIEW_REASON,
+                "snapshot_json": snapshot_json,
+                "expires_at": None,
+            },
+        )
+        if was_created:
+            _syncTask(task)
+            created += 1
+            _logExternalEnrichmentReviewTask(
+                "external_enrichment_review_task_created",
+                album,
+                task,
+            )
+            continue
+
+        if task.snapshot_json != snapshot_json:
+            task.snapshot_json = snapshot_json
+            _syncTask(task)
+            _logExternalEnrichmentReviewTask(
+                "external_enrichment_review_task_updated",
+                album,
+                task,
+            )
+        else:
+            _logExternalEnrichmentReviewTask(
+                "external_enrichment_review_task_merged_existing",
+                album,
+                task,
+            )
     return created
 
 

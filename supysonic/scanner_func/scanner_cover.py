@@ -175,7 +175,11 @@ def repairAlbumCover(
             trace_logger,
             "ALBUM_COVER_TRACE",
             trace_header,
-            trace_details + ["embedded artwork: track path missing"],
+            trace_details
+            + [
+                "embedded artwork: track path missing",
+                "cover repair result: no source succeeded",
+            ],
         )
         return
 

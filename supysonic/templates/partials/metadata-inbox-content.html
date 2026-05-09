@@ -9,6 +9,13 @@
         </div>
         <p class="mb-2 text-body-secondary">{{ task.subtitle }}</p>
         <p class="mb-3 text-body-secondary">{{ task.description }}</p>
+        {% if task.album_enrichment and task.album_enrichment.has_enrichment %}
+          <div class="mb-3 text-body-secondary">
+            {% for line in task.album_enrichment.inbox_lines %}
+              <div>{{ line }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
         {% if task.entity_type == 'artist' and task.is_cover_art_fallback %}
           <p class="mb-3 text-warning-emphasis">Showing album cover fallback. Artist image is still missing.</p>
         {% endif %}

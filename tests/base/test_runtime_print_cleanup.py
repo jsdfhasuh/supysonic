@@ -4,7 +4,7 @@ import unittest
 from contextlib import closing
 from unittest.mock import patch
 
-from supysonic.db import Album, Artist, Folder, Track, db
+from supysonic.db import Album, Artist, Folder, Track
 
 from ..testbase import TestBase
 
@@ -14,18 +14,6 @@ class RuntimePrintCleanupTestCase(TestBase):
 
     def setUp(self):
         super().setUp()
-        db.execute_sql("ALTER TABLE artist ADD COLUMN artist_info_json VARCHAR(4096)")
-        db.execute_sql("ALTER TABLE artist ADD COLUMN real_artist_id INTEGER")
-        db.execute_sql("ALTER TABLE album ADD COLUMN year VARCHAR(255)")
-        db.execute_sql(
-            "CREATE TABLE album_artist ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-            "album_id CHAR(36) NOT NULL REFERENCES album(id), "
-            "artist_id CHAR(36) NOT NULL REFERENCES artist(id), "
-            "position INTEGER NOT NULL DEFAULT 0, "
-            "UNIQUE(album_id, artist_id)"
-            ")"
-        )
         self.root = Folder.create(
             name="Root",
             path=os.path.abspath("tests/assets"),

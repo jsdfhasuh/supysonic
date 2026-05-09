@@ -71,8 +71,8 @@ def prepare_transcoding_cmdline(
 def stream_media():
     res = get_entity(Track)
     timeoffset = request.values.get("timeOffset")
-    # if "timeOffset" in request.values:
-    #     raise UnsupportedParameter("timeOffset")
+    if "timeOffset" in request.values:
+        raise UnsupportedParameter("timeOffset")
     if "size" in request.values:
         raise UnsupportedParameter("size")
 
@@ -370,7 +370,7 @@ def _cover_from_collection(obj, extract=True):
         if not cover_path and extract:
             track_with_embedded = obj.tracks.where(Track.has_art).first()
             if track_with_embedded is not None:
-                cover_path = _cover_from_track(track_with_embedded.id)
+                cover_path = _cover_from_track(track_with_embedded)
 
     if not cover_path or not os.path.isfile(cover_path):
         return None
@@ -449,19 +449,7 @@ def __new_get_cover_path(eid, input_size):
             )
             return cover_image.path if cover_image else None
     else:
-        # default try to find in album first
-        id = eid
-        cover_image = db_image.get_or_none(image_type="album", related_id=id)
-        if cover_image:
-            if os.path.exists(cover_image.path):
-                return cover_image.path
-            else:
-                db_image.delete().where(
-                    db_image.image_type == "album", db_image.related_id == id
-                ).execute()
-                return None
-        else:
-            return None
+        return _get_cover_path(eid)
 
     return None
 

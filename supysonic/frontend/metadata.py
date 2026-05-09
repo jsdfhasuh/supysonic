@@ -100,6 +100,107 @@ def getMetadataCoverArtUrl(entityId):
     return f"/rest/getCoverArt?id={entityId}&v=1.15.0&c=web"
 
 
+def parseAlbumInfoJson(value):
+    if not value:
+        return {}
+    try:
+        album_info = json.loads(value)
+    except (TypeError, ValueError):
+        return {}
+    if isinstance(album_info, dict):
+        return album_info
+    return {}
+
+
+def getOptionalText(value):
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def normalizeStringList(value):
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def formatProviderName(provider):
+    provider_names = {
+        "musicbrainz": "MusicBrainz",
+        "discogs": "Discogs",
+    }
+    provider_key = str(provider).strip().lower()
+    return provider_names.get(provider_key, provider_key.replace("_", " ").title())
+
+
+def buildAlbumEnrichmentData(album=None, snapshot=None):
+    snapshot = snapshot if isinstance(snapshot, dict) else {}
+    snapshot_enrichment = snapshot.get("enrichment") or {}
+    if not isinstance(snapshot_enrichment, dict):
+        snapshot_enrichment = {}
+
+    album_info = parseAlbumInfoJson(getattr(album, "album_info_json", None))
+    providers = normalizeStringList(
+        album_info.get("providers_used") or snapshot_enrichment.get("providers_used")
+    )
+    styles = normalizeStringList(
+        album_info.get("styles") or snapshot_enrichment.get("styles")
+    )
+    release_date = getOptionalText(
+        getattr(album, "release_date", None) or snapshot.get("release_date")
+    )
+    release_type = getOptionalText(
+        getattr(album, "release_type", None) or snapshot.get("release_type")
+    )
+    primary_genre = getOptionalText(
+        album_info.get("primary_genre") or snapshot_enrichment.get("primary_genre")
+    )
+    musicbrainz_id = getOptionalText(
+        album_info.get("musicbrainz_id") or snapshot_enrichment.get("musicbrainz_id")
+    )
+    discogs_id = getOptionalText(
+        album_info.get("discogs_id") or snapshot_enrichment.get("discogs_id")
+    )
+    providers_label = ", ".join(formatProviderName(provider) for provider in providers)
+    styles_label = ", ".join(styles)
+    has_enrichment = any(
+        [
+            release_date,
+            release_type,
+            styles,
+            providers,
+            primary_genre,
+            musicbrainz_id,
+            discogs_id,
+        ]
+    )
+    inbox_lines = []
+    if providers_label:
+        inbox_lines.append(f"External enrichment: {providers_label}")
+    elif has_enrichment:
+        inbox_lines.append("External enrichment")
+    if release_type:
+        inbox_lines.append(f"Release type: {release_type}")
+    if primary_genre:
+        inbox_lines.append(f"Primary genre: {primary_genre}")
+
+    return {
+        "has_enrichment": has_enrichment,
+        "release_date": release_date,
+        "release_type": release_type,
+        "styles": styles,
+        "styles_label": styles_label,
+        "providers_used": providers,
+        "providers_label": providers_label,
+        "primary_genre": primary_genre,
+        "musicbrainz_id": musicbrainz_id,
+        "discogs_id": discogs_id,
+        "inbox_lines": inbox_lines,
+    }
+
+
 def getReviewArtistImageUrl(artist, artistInfo):
     for key in ("largeImageUrl", "mediumImageUrl", "smallImageUrl"):
         imageUrl = artistInfo.get(key) or ""
@@ -300,6 +401,7 @@ def buildInboxTaskData(task):
             "expires_at": task.expires_at,
             "issue_codes": issue_codes,
             "cover_art_url": getMetadataCoverArtUrl(f"al-{task.entity_id}"),
+            "album_enrichment": buildAlbumEnrichmentData(snapshot=snapshot),
         }
 
     year = snapshot.get("year") or album.year
@@ -318,6 +420,7 @@ def buildInboxTaskData(task):
         "expires_at": task.expires_at,
         "issue_codes": issue_codes,
         "cover_art_url": getMetadataCoverArtUrl(f"al-{album.id}"),
+        "album_enrichment": buildAlbumEnrichmentData(album=album, snapshot=snapshot),
     }
 
 
@@ -487,6 +590,10 @@ def metadata_review_task(task_id):
         "issues": getTaskDisplayIssues(task, tracks=tracks),
         "issue_status": issue_summary["issue_status"],
         "ready_to_confirm": issue_summary["ready_to_confirm"],
+        "album_enrichment": buildAlbumEnrichmentData(
+            album=album,
+            snapshot=json.loads(task.snapshot_json or "{}"),
+        ),
     }
 
     return render_template(

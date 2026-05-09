@@ -143,7 +143,7 @@ class ScannerTrackTraceTestCase(unittest.TestCase):
             return_value=(None, "album-row", None),
         ), patch(
             "supysonic.scanner_func.scanner_file.sanitizeString",
-            return_value="Album",
+            side_effect=lambda value: "Album" if value == tag.album else value,
         ):
             _, artists, album_id, trace_context = resolveAlbumContext(
                 scanner,
@@ -153,10 +153,10 @@ class ScannerTrackTraceTestCase(unittest.TestCase):
 
         self.assertEqual(artists, ["Tag Artist"])
         self.assertEqual(album_id, "album-row")
-        self.assertEqual(trace_context["album_artists"], ["unknown"])
-        self.assertEqual(trace_context["album_artist_source"], "fallback unknown")
+        self.assertEqual(trace_context["album_artists"], ["Tag Artist"])
+        self.assertEqual(trace_context["album_artist_source"], "tag artist fallback")
         self.assertEqual(trace_context["artist_source"], "tag artist")
-        self.assertEqual(trace_context["resolved_album_artists"], ["unknown"])
+        self.assertEqual(trace_context["resolved_album_artists"], ["Tag Artist"])
         self.assertEqual(trace_context["resolved_album_artist_count"], 1)
         self.assertEqual(trace_context["raw_artists"], ["Tag Artist"])
         self.assertEqual(trace_context["raw_album_artists"], [])

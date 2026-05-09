@@ -11,6 +11,7 @@ from ..lastfm import LastFm
 from ..spotify import MySpotify
 from ..tool import download_image, extract_year, read_dict_from_json, write_dict_to_json
 from ..MusicBrainz import get_musicbrainz_album, search_musicbrainz_album
+from .scanner_album_enrich import runAlbumEnrichmentPass
 from .scanner_cover import collectAlbumsMissingCover, repairAlbumCover
 from .scanner_trace import logTrace
 
@@ -297,6 +298,7 @@ def repairMissingArtistImages(
 
 def findLostInformation(scanner: Scanner, logger: Optional[logging.Logger] = None) -> None:
     user, get_cover_interner, lfm, sp = buildExternalMetadataClients(scanner)
+    runAlbumEnrichmentPass(scanner, logger=logger)
 
     for album in list(collectAlbumsMissingYear(scanner)):
         repairAlbumYear(scanner, album, lfm=lfm, sp=sp)

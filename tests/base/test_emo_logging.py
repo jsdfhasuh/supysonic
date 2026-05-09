@@ -17,12 +17,14 @@ class EmoLoggingTestCase(unittest.TestCase):
     def setUp(self):
         self._db = tempfile.mkstemp()
         self._dir = tempfile.mkdtemp()
-        self.config = TestConfig(False, False)
+        self.config = TestConfig(True, False)
         self.config.BASE["database_uri"] = "sqlite:///" + self._db[1]
         self.config.WEBAPP["cache_dir"] = self._dir
         self.config.WEBAPP["log_dir"] = self._dir
         self.config.WEBAPP["log_level"] = "INFO"
         self.config.WEBAPP["mount_emosonic"] = True
+        self.uploadDir = os.path.join(self._dir, "uploaded-emo-logs")
+        self.config.WEBAPP["emo_log_upload_dir"] = self.uploadDir
         self.app = create_application(self.config)
         self.client = self.app.test_client()
         self.http_client = self.app.test_client()
@@ -192,6 +194,22 @@ class EmoLoggingTestCase(unittest.TestCase):
         self.assertIn("user=alice", content)
         self.assertIn("filename=mobile.log", content)
         self.assertIn("path=/emo/upload_log", content)
+
+    def test_logs_upload_log_uses_configured_upload_directory(self):
+        rv = self.client.post(
+            "/emo/upload_log?u=alice&p=Alic3",
+            data={"file": (io.BytesIO(b"configured log"), "configured.log")},
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(rv.status_code, 200)
+        savedPath = rv.get_json()["path"]
+        self.assertTrue(savedPath.startswith(self.uploadDir))
+        self.assertTrue(os.path.isfile(savedPath))
+
+        listResponse = self.client.get("/emo/logs?u=alice&p=Alic3")
+        self.assertEqual(listResponse.status_code, 200)
+        self.assertIn(os.path.basename(savedPath).encode("utf-8"), listResponse.data)
 
     def test_logs_upload_log_save_failure(self):
         with patch("werkzeug.datastructures.FileStorage.save", side_effect=OSError("disk full")):

@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 from supysonic.db import Artist
-from supysonic.db import db, release_database
+from supysonic.db import release_database
 from supysonic.managers.user import UserManager
 from supysonic.web import create_application
 
@@ -23,9 +23,6 @@ class ArtistInfo2UrlTestCase(unittest.TestCase):
 
         self._app = create_application(self.config)
         self.client = self._app.test_client()
-
-        db.execute_sql("ALTER TABLE artist ADD COLUMN artist_info_json VARCHAR(4096)")
-        db.execute_sql("ALTER TABLE artist ADD COLUMN real_artist_id INTEGER")
 
         UserManager.add("alice", "Alic3", admin=True)
         self.artist = Artist.create(name="Test Artist")

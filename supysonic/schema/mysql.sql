@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS album (
     id CHAR(32) PRIMARY KEY,
     name VARCHAR(256) NOT NULL,
     year VARCHAR(255) NULL,
+    release_date VARCHAR(32) NULL,
+    release_type VARCHAR(64) NULL,
+    album_info_json TEXT NULL,
     artist_id CHAR(32) NOT NULL REFERENCES artist(id)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE INDEX index_album_artist_id_fk ON album(artist_id);
@@ -218,6 +221,27 @@ CREATE TABLE IF NOT EXISTS review_task (
 CREATE INDEX index_review_task_entity_status ON review_task(entity_type, entity_id, status);
 CREATE INDEX index_review_task_status_created ON review_task(status, created);
 CREATE UNIQUE INDEX index_review_task_pending_key ON review_task(pending_key);
+
+CREATE TABLE IF NOT EXISTS client_release (
+    id CHAR(32) PRIMARY KEY,
+    platform VARCHAR(16) NOT NULL,
+    file_type VARCHAR(16) NOT NULL,
+    build_name VARCHAR(64) NOT NULL,
+    build_number INTEGER NOT NULL,
+    version VARCHAR(80) NOT NULL,
+    publish_mode VARCHAR(16) NOT NULL,
+    file_name VARCHAR(256),
+    file_path VARCHAR(4096),
+    download_url VARCHAR(2048),
+    file_size INTEGER,
+    sha256 CHAR(64),
+    release_notes TEXT,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created DATETIME NOT NULL,
+    updated DATETIME NOT NULL,
+    UNIQUE KEY index_client_release_platform_version (platform, build_name, build_number),
+    INDEX index_client_release_platform_active (platform, active)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 
 CREATE TABLE  album_artist (

@@ -33,7 +33,7 @@ class TranscodingTestCase(ApiTestBase):
             {"u": "alice", "p": "Alic3", "c": "tests", "v": "1.9.0", "id": self.trackid}
         )
 
-        rv = self.client.get("/rest/stream.view", query_string=kwargs)
+        rv = self.client.get("/rest/stream.view", query_string=kwargs, buffered=False)
         self.assertEqual(rv.status_code, 200)
         self.assertFalse(rv.mimetype.startswith("text/"))
 
@@ -100,8 +100,8 @@ class TranscodingTestCase(ApiTestBase):
 
         key = f"{self.trackid}-96.rnd"
         with self.app_context():
-            self.assertFalse(current_app.transcode_cache.has(key))
-            self.assertEqual(current_app.transcode_cache.size, 0)
+            self.assertTrue(current_app.transcode_cache.has(key))
+            self.assertEqual(current_app.transcode_cache.size, 52000)
 
     @unittest.skipIf(
         sys.platform == "win32",

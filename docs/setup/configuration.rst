@@ -298,6 +298,77 @@ Sample configuration::
    ; Enable log rotation. Default: yes
    log_rotate = yes
 
+.. _conf-musicbrainz:
+
+``[musicbrainz]`` section
+-------------------------
+
+This section controls MusicBrainz requests used by album metadata enrichment.
+MusicBrainz is the default structured source for release dates, years, release
+types, and MusicBrainz identifiers.
+
+Album enrichment only fills missing album and track metadata. It does not
+overwrite existing values, and automatic writes may create or update an album
+review task with reason ``external_enrichment`` for human audit.
+
+``api_url``
+   MusicBrainz API root URL. Defaults to ``https://musicbrainz.org/ws/2``.
+
+``cover_art_api_url``
+   Cover Art Archive root URL. Defaults to ``https://coverartarchive.org``.
+
+``user_agent``
+   User-Agent sent to MusicBrainz. Production deployments should use a
+   meaningful value with contact information.
+
+``request_delay_seconds``
+   Delay between MusicBrainz enrichment requests, in seconds. Defaults to
+   ``1.0``.
+
+Sample configuration::
+
+   [musicbrainz]
+   ;api_url = https://musicbrainz.org/ws/2
+   ;cover_art_api_url = https://coverartarchive.org
+   ;user_agent = Supysonic/1.0
+   ;request_delay_seconds = 1.0
+
+.. _conf-discogs:
+
+``[discogs]`` section
+---------------------
+
+This section controls optional Discogs album metadata enrichment. Discogs is
+disabled unless ``enabled`` is on and ``token`` is non-empty. Missing credentials
+or API failures skip Discogs without blocking MusicBrainz enrichment. HTTP
+``429`` rate limits, request timeouts, and network failures are logged and
+skipped without aborting the scan.
+
+``enabled``
+   Enable Discogs enrichment. Defaults to ``off``.
+
+``api_url``
+   Discogs API root URL. Defaults to ``https://api.discogs.com``.
+
+``token``
+   Discogs personal access token. Do not commit real tokens.
+
+``user_agent``
+   User-Agent sent to Discogs. Production deployments should use a meaningful
+   value with contact information.
+
+``request_delay_seconds``
+   Delay between Discogs enrichment requests, in seconds. Defaults to ``1.0``.
+
+Sample configuration::
+
+   [discogs]
+   enabled = off
+   ;api_url = https://api.discogs.com
+   ;token =
+   ;user_agent = Supysonic/1.0
+   ;request_delay_seconds = 1.0
+
 .. _conf-lastfm:
 
 ``[lastfm]`` section

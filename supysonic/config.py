@@ -41,10 +41,15 @@ class DefaultConfig:
         "mount_api": True,
         "mount_emosonic": False,
         "emo_ws_enabled": True,
+        "emo_log_upload_dir": "./logs",
         "allow_user_registration": True,
         "registration_invite_code": "",
         "index_ignored_prefixes": "El La Le Las Les Los The",
         "online_lyrics": False,
+        "mount_client_releases": True,
+        "release_upload_dir": os.path.join(tempdir, "client-releases"),
+        "release_api_token": "",
+        "release_max_upload_size": 512 * 1024 * 1024,
     }
     DAEMON = {
         "socket": (
@@ -66,6 +71,19 @@ class DefaultConfig:
         "review_task_maintenance": True,
         "review_task_maintenance_interval": 300,
     }
+    MUSICBRAINZ = {
+        "api_url": "https://musicbrainz.org/ws/2",
+        "cover_art_api_url": "https://coverartarchive.org",
+        "user_agent": "Supysonic/1.0",
+        "request_delay_seconds": 1.0,
+    }
+    DISCOGS = {
+        "enabled": False,
+        "api_url": "https://api.discogs.com",
+        "token": "",
+        "user_agent": "Supysonic/1.0",
+        "request_delay_seconds": 1.0,
+    }
     LASTFM = {"api_key": None, "secret": None}
     LISTENBRAINZ = {"api_url": "https://api.listenbrainz.org"}
     SPOTIFY = {"client_id": None, "client_secret": None}
@@ -86,6 +104,15 @@ class IniConfig(DefaultConfig):
 
     def __init__(self, paths):
         super().__init__()
+
+        for attr, value in DefaultConfig.__dict__.items():
+            if attr.startswith("_") or attr != attr.upper():
+                continue
+
+            if isinstance(value, dict):
+                setattr(self, attr, value.copy())
+            else:
+                setattr(self, attr, value)
 
         parser = RawConfigParser()
         parser.read(paths)

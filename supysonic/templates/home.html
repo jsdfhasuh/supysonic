@@ -126,30 +126,45 @@ Distributed under terms of the GNU AGPLv3 license.
       </div>
     </div>
   </div>
+  {% if client_release_downloads %}
   <div class="col-xl-5">
     <div class="card h-100">
-      <div class="card-header">Client ecosystem</div>
+      <div class="card-header">Client downloads</div>
       <div class="card-body">
         <div class="row g-3">
+          {% for platform, label in [('android', 'Android'), ('windows', 'Windows')] %}
+          {% set release = client_release_downloads.get(platform) %}
           <div class="col-md-6">
-            <h6>Web-based</h6>
-            <ul class="mb-0">
-              <li><a href="https://github.com/peguerosdc/subplayer">Subplayer</a></li>
-              <li><a href="https://github.com/tsquillario/Jamstash">Jamstash</a></li>
-            </ul>
+            <div class="p-3 rounded-4 border h-100" style="border-color: var(--console-border);">
+              <h6>{{ label }}</h6>
+              {% if release %}
+              <p class="mb-1"><strong>{{ release.version }}</strong></p>
+              <p class="console-muted mb-2">{{ release.file_type|upper }} · {{ release.created.strftime('%Y-%m-%d') }}</p>
+              <div class="d-flex gap-2 flex-wrap">
+                <a class="btn btn-dark btn-sm" href="{{ url_for('client_releases.download_release', release_id=release.id) }}">Download {{ label }}</a>
+                <a class="btn btn-outline-dark btn-sm" href="{{ url_for('client_releases.release_history', platform=platform) }}">History</a>
+              </div>
+              {% else %}
+              <p class="console-muted mb-0">Not available</p>
+              {% endif %}
+            </div>
           </div>
-          <div class="col-md-6">
-            <h6>Android</h6>
-            <ul class="mb-0">
-              <li><a href="https://github.com/CappielloAntonio/tempo">Tempo</a></li>
-              <li><a href="https://github.com/daneren2005/Subsonic">DSub</a></li>
-              <li><a href="https://gitlab.com/ultrasonic/ultrasonic">Ultrasonic</a></li>
-            </ul>
+          {% endfor %}
+        </div>
+        <div class="mt-3 pt-3 border-top">
+          <h6>Other compatible clients</h6>
+          <div class="d-flex flex-wrap gap-2">
+            <a href="https://github.com/peguerosdc/subplayer">Subplayer</a>
+            <a href="https://github.com/tsquillario/Jamstash">Jamstash</a>
+            <a href="https://github.com/CappielloAntonio/tempo">Tempo</a>
+            <a href="https://github.com/daneren2005/Subsonic">DSub</a>
+            <a href="https://gitlab.com/ultrasonic/ultrasonic">Ultrasonic</a>
           </div>
         </div>
       </div>
     </div>
   </div>
+  {% endif %}
 </div>
 
 {% if request.user.admin and device_summary %}

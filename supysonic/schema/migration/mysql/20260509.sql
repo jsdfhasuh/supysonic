@@ -1,0 +1,3 @@
+ALTER TABLE album ADD COLUMN release_date VARCHAR(32) NULL;
+ALTER TABLE album ADD COLUMN release_type VARCHAR(64) NULL;
+ALTER TABLE album ADD COLUMN album_info_json TEXT NULL;

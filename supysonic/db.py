@@ -6,6 +6,7 @@
 # Distributed under terms of the GNU AGPLv3 license.
 
 import importlib
+import json
 import mimetypes
 import os.path
 import sys
@@ -23,6 +24,7 @@ from peewee import (
     FixedCharField,
     ForeignKeyField,
     IntegerField,
+    OperationalError,
     TextField,
     UUIDField,
 )
@@ -34,7 +36,7 @@ from uuid import UUID, uuid4
 from PIL import Image as PILImage
 from .tool import read_dict_from_json
 
-SCHEMA_VERSION = "20260504"
+SCHEMA_VERSION = "20260510"
 
 
 def now():
@@ -345,6 +347,9 @@ class Album(_Model):
     name = CharField()
     artist = ForeignKeyField(Artist, backref="albums")
     year = CharField(default=None, null=True)  # 专辑年份
+    release_date = CharField(max_length=32, null=True)
+    release_type = CharField(max_length=64, null=True)
+    album_info_json = TextField(null=True)
 
     # 在 Album 类中添加获取艺术家的方法
 
@@ -358,11 +363,18 @@ class Album(_Model):
         artist_relations = self.album_artists.order_by(AlbumArtist.position)
 
         # 从关系中提取艺术家对象
-        artists = [rel.artist_id for rel in artist_relations]
+        try:
+            artists = [rel.artist_id for rel in artist_relations]
+        except OperationalError as exc:
+            if "album_artist" not in str(exc):
+                raise
+            artists = []
 
-        return artists
+        return artists or [self.artist]
 
     def as_subsonic_album(self, user, server_type=None):  # "AlbumID3" type in XSD
+        server_name = (server_type or "").lower()
+        is_music_client = "music" in server_name
         duration, created = self.tracks.select(
             fn.sum(Track.duration), fn.min(Track.created)
         ).scalar(as_tuple=True)
@@ -374,48 +386,62 @@ class Album(_Model):
             "artistId": str(self.artist.id),
             "songCount": self.tracks.count(),
             "duration": duration,
-            "albumArtist": str(self.artist.get_artist_name()),
-            "albumArtistId": str(self.artist.id),
             "created": created.isoformat(),
-            "smallImageUrl": "",
-            "mediumImageUrl": "",
-            "largeImageUrl": "",
         }
 
-        #     # 添加参与者信息
-        participants = {"albumartist": [], "artist": []}
+        if is_music_client:
+            info["albumArtist"] = str(self.artist.get_artist_name())
+            info["albumArtistId"] = str(self.artist.id)
+            info["smallImageUrl"] = ""
+            info["mediumImageUrl"] = ""
+            info["largeImageUrl"] = ""
+            participants = {"albumartist": [], "artist": []}
 
-        for artist in all_artists:
-            # participants["albumartist"].append(
-            #     {"id": str(artist.id), "name": str(artist.name)}
-            # )
-            participants["artist"].append(
-                {"id": str(artist.id), "name": str(artist.get_artist_name())}
-            )
-        info["participants"] = participants
-        # track_with_cover = (
-        #     self.tracks.join(Folder).where(Folder.cover_art.is_null(False)).first()
-        # )
-        # if track_with_cover is not None:
-        #     info["coverArt"] = str(track_with_cover.folder.id)
-        # else:
-        #     track_with_cover = self.tracks.where(Track.has_art).first()
-        #     if track_with_cover is not None:
-        #         info["coverArt"] = str(track_with_cover.id)
-        if "music" not in server_type.lower():
-            al_image = (
-                Image.select()
-                .where(
-                    (Image.image_type == "album") & (Image.related_id == str(self.id))
+            for artist in all_artists:
+                participants["artist"].append(
+                    {"id": str(artist.id), "name": str(artist.get_artist_name())}
                 )
-                .first()
-            )
-            if al_image:
-                info["coverArt"] = str(al_image.id)
-        else:
+            info["participants"] = participants
             info["coverArt"] = "al-" + str(self.id)
+        else:
+            track_with_cover = (
+                self.tracks.join(Folder).where(Folder.cover_art.is_null(False)).first()
+            )
+            if track_with_cover is not None:
+                info["coverArt"] = str(track_with_cover.folder.id)
+            else:
+                track_with_cover = self.tracks.where(Track.has_art).first()
+                if track_with_cover is not None:
+                    info["coverArt"] = str(track_with_cover.id)
         if self.year:
             info["year"] = self.year
+
+        album_info = {}
+        if self.album_info_json:
+            try:
+                album_info_value = json.loads(self.album_info_json)
+            except (TypeError, ValueError):
+                album_info_value = {}
+            if isinstance(album_info_value, dict):
+                album_info = album_info_value
+
+        if is_music_client:
+            if self.release_date:
+                info["releaseDate"] = self.release_date
+            if self.release_type:
+                info["releaseType"] = self.release_type
+
+            styles = album_info.get("styles")
+            if isinstance(styles, list) and styles:
+                info["styles"] = [str(style) for style in styles if style]
+
+            musicbrainz_id = album_info.get("musicbrainz_id")
+            if musicbrainz_id:
+                info["musicBrainzId"] = str(musicbrainz_id)
+
+            discogs_id = album_info.get("discogs_id")
+            if discogs_id:
+                info["discogsId"] = str(discogs_id)
 
         genre = ", ".join(
             g
@@ -511,6 +537,8 @@ class ReviewTask(_Model):
         if self.status == "pending" and self.entity_type and self.entity_id:
             if self.entity_type == "artist":
                 self.pending_key = f"artist:{self.entity_id}:pending:{self.reason}"
+            elif self.reason == "external_enrichment":
+                self.pending_key = f"{self.entity_type}:{self.entity_id}:pending:{self.reason}"
             else:
                 self.pending_key = f"{self.entity_type}:{self.entity_id}:pending"
         elif self.status != "pending":
@@ -857,9 +885,9 @@ class Playlist(_Model):
             "songCount": len(tracks),
             "duration": sum(t.duration for t in tracks),
             "created": self.created.isoformat(),
-            "changed": self.created.isoformat(),
-            "coverArt": f"al-{first_album.id}" if first_album else None,
         }
+        if first_album:
+            info["coverArt"] = f"al-{first_album.id}"
         if self.comment:
             info["comment"] = self.comment
         return info
@@ -881,7 +909,7 @@ class Playlist(_Model):
 
         if should_fix:
             self.tracks = ",".join(str(t.id) for t in tracks)
-            db.commit()
+            self.save()
 
         return tracks
 
@@ -895,9 +923,6 @@ class Playlist(_Model):
             tid = track.id
         elif isinstance(track, str):
             tid = UUID(track)
-        orinal_tracks = self.tracks.split(",") if self.tracks else []
-        if str(tid) in orinal_tracks:
-            return  # already in playlist
         if self.tracks and len(self.tracks) > 0:
             self.tracks = f"{self.tracks},{tid}"
         else:
@@ -937,6 +962,36 @@ class RadioStation(_Model):
             "homePageUrl": self.homepage_url,
         }
         return info
+
+
+class ClientRelease(_Model):
+    id = PrimaryKeyField()
+    platform = CharField(max_length=16)
+    file_type = CharField(max_length=16)
+    build_name = CharField(max_length=64)
+    build_number = IntegerField()
+    version = CharField(max_length=80)
+    publish_mode = CharField(max_length=16)
+    file_name = CharField(max_length=256, null=True)
+    file_path = CharField(max_length=4096, null=True)
+    download_url = CharField(max_length=2048, null=True)
+    file_size = IntegerField(null=True)
+    sha256 = CharField(max_length=64, null=True)
+    release_notes = TextField(null=True)
+    active = BooleanField(default=True)
+    created = DateTimeField(default=now)
+    updated = DateTimeField(default=now)
+
+    def save(self, *args, **kwargs):
+        self.updated = now()
+        return super().save(*args, **kwargs)
+
+    class Meta:
+        table_name = "client_release"
+        indexes = (
+            (("platform", "build_name", "build_number"), True),
+            (("platform", "active"), False),
+        )
 
 
 if sys.version_info < (3, 9):
@@ -995,7 +1050,9 @@ def init_database(database_uri):
     db_class = schemes.get(uri.scheme)
     temp = db_class(**args)
     if uri.scheme == "sqlite":
-        path = os.makedirs(os.path.dirname(temp.database), exist_ok=True)
+        database_dir = os.path.dirname(temp.database)
+        if database_dir:
+            os.makedirs(database_dir, exist_ok=True)
     db.initialize(db_class(**args))
     db.connect()
 

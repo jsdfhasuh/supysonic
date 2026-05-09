@@ -33,6 +33,26 @@
           <label for="year">Release year:</label>
           <input type="text" id="year" required>
         </div>
+        <div class="form-group">
+          <h3>External enrichment</h3>
+          <p class="text-body-secondary">Read-only fields filled by MusicBrainz or optional Discogs enrichment.</p>
+        </div>
+        <div class="form-group">
+          <label for="releaseDate">Release date:</label>
+          <input type="text" id="releaseDate" readonly disabled>
+        </div>
+        <div class="form-group">
+          <label for="releaseType">Release type:</label>
+          <input type="text" id="releaseType" readonly disabled>
+        </div>
+        <div class="form-group">
+          <label for="styles">Styles:</label>
+          <input type="text" id="styles" readonly disabled>
+        </div>
+        <div class="form-group">
+          <label for="externalIds">External IDs:</label>
+          <input type="text" id="externalIds" readonly disabled>
+        </div>
       </div>
 
       <div id="pane-tracks" class="tab-pane">
@@ -174,6 +194,24 @@ function renderPage(album_array) {
     }
 }
 
+function formatAlbumEnrichmentList(value) {
+    if (Array.isArray(value)) {
+        return value.join(', ');
+    }
+    return value || '';
+}
+
+function formatAlbumExternalIds(album) {
+    const externalIds = [];
+    if (album.musicBrainzId) {
+        externalIds.push(`MusicBrainz: ${album.musicBrainzId}`);
+    }
+    if (album.discogsId) {
+        externalIds.push(`Discogs: ${album.discogsId}`);
+    }
+    return externalIds.join(' · ');
+}
+
 function addTrackRow(container, track = {}) {
     let tbody = document.getElementById('trackTbody');
     if (!tbody) {
@@ -234,6 +272,10 @@ function openEditModal(album) {
     document.getElementById('albumname').value = album.name || '';
     document.getElementById('artistname').value = album.artist || '';
     document.getElementById('year').value = album.year || '';
+    document.getElementById('releaseDate').value = album.releaseDate || '';
+    document.getElementById('releaseType').value = album.releaseType || '';
+    document.getElementById('styles').value = formatAlbumEnrichmentList(album.styles);
+    document.getElementById('externalIds').value = formatAlbumExternalIds(album);
     document.getElementById('trackTbody').innerHTML = '<tr><td colspan="4" style="text-align:center;color:#888;">Loading tracks...</td></tr>';
     modal.classList.add('show');
 }

@@ -3,7 +3,7 @@ import unittest
 
 from unittest.mock import patch
 
-from supysonic.db import Album, Artist, Folder, Track, User, db
+from supysonic.db import Album, Artist, Folder, Track, User
 
 from .frontendtestbase import FrontendTestBase
 from ..testbase import TestConfig
@@ -16,7 +16,6 @@ class DeviceCoverTestCase(FrontendTestBase):
         TestConfig.WEBAPP = TestConfig.WEBAPP.copy()
         TestConfig.WEBAPP["log_dir"] = ""
         super().setUp()
-        db.execute_sql("ALTER TABLE album ADD COLUMN year VARCHAR(255)")
 
         alice = User.get(User.name == "alice")
         with self.client.session_transaction() as session:

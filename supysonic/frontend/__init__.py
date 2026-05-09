@@ -36,6 +36,7 @@ from ..emo.ws_state import get_state
 from ..managers.user import UserManager
 from ..api.media import __new_get_cover_path
 from ..cache import CacheMiss
+from ..client_releases import get_latest_release
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,12 @@ def scan_status():
 def index():
     device_rows = getDeviceMonitorRows() if request.user and request.user.admin else []
     device_summary = getDeviceMonitorSummary(device_rows) if request.user and request.user.admin else None
+    client_release_downloads = None
+    if current_app.config["WEBAPP"].get("mount_client_releases", True):
+        client_release_downloads = {
+            "android": get_latest_release("android"),
+            "windows": get_latest_release("windows"),
+        }
     stats = {
         "artists": Artist.select().count(),
         "albums": Album.select().count(),
@@ -111,6 +118,7 @@ def index():
         stats=stats,
         device_summary=device_summary,
         recent_devices=device_rows[:5],
+        client_release_downloads=client_release_downloads,
     )
 
 

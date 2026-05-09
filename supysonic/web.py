@@ -77,6 +77,11 @@ def create_application(config=None):
         from .api import api
 
         app.register_blueprint(api, url_prefix="/rest")
+
+    if app.config["WEBAPP"].get("mount_client_releases", True):
+        from .frontend.client_releases import client_releases
+
+        app.register_blueprint(client_releases, url_prefix="/client-releases")
         
     # import emosonic API
     if app.config["WEBAPP"].get("mount_emosonic", False):

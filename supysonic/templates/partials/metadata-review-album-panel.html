@@ -34,4 +34,29 @@
       </div>
     {% endif %}
   </form>
+  {% set albumEnrichment = reviewSummary.album_enrichment %}
+  {% if albumEnrichment and albumEnrichment.has_enrichment %}
+    <div class="card mt-4">
+      <div class="card-header">External enrichment</div>
+      <div class="card-body">
+        <ul class="console-info-list mb-0">
+          {% if albumEnrichment.release_date %}
+            <li><span>Release date</span><strong>{{ albumEnrichment.release_date }}</strong></li>
+          {% endif %}
+          {% if albumEnrichment.release_type %}
+            <li><span>Release type</span><strong>{{ albumEnrichment.release_type }}</strong></li>
+          {% endif %}
+          {% if albumEnrichment.styles_label %}
+            <li><span>Styles</span><strong>{{ albumEnrichment.styles_label }}</strong></li>
+          {% endif %}
+          {% if albumEnrichment.providers_label %}
+            <li><span>Providers</span><strong>{{ albumEnrichment.providers_label }}</strong></li>
+          {% endif %}
+          {% if albumEnrichment.primary_genre %}
+            <li><span>Primary genre</span><strong>{{ albumEnrichment.primary_genre }}</strong></li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+  {% endif %}
 </section>

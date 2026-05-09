@@ -119,6 +119,36 @@ class WatcherTestBase(unittest.TestCase):
         if not self._column_exists(database, "album", "year"):
             database.execute_sql("ALTER TABLE album ADD COLUMN year VARCHAR(255)")
 
+        musicbrainz_patchers = [
+            patch(
+                "supysonic.scanner_func.scanner_album_enrich.search_musicbrainz_album",
+                return_value={},
+            ),
+            patch(
+                "supysonic.scanner_func.scanner_album_enrich.get_musicbrainz_album",
+                return_value={},
+            ),
+            patch(
+                "supysonic.scanner_func.scanner_enrich.search_musicbrainz_album",
+                return_value={},
+            ),
+            patch(
+                "supysonic.scanner_func.scanner_enrich.get_musicbrainz_album",
+                return_value={},
+            ),
+            patch(
+                "supysonic.scanner_func.scanner_cover.search_musicbrainz_album",
+                return_value={},
+            ),
+            patch(
+                "supysonic.scanner_func.scanner_cover.get_musicbrainz_album_image_info",
+                return_value={},
+            ),
+        ]
+        for patcher in musicbrainz_patchers:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
         conf = WatcherTestConfig(dburi)
         self.__sleep_time = conf.DAEMON["wait_delay"] + 1
 

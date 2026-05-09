@@ -51,6 +51,24 @@ log_rotate = yes
 ; Enable the emosonic websocket endpoint at /emo/ws. Default: on
 ;emo_ws_enabled = on
 
+; Directory used by /emo/upload_log and /emo/logs for uploaded diagnostic files.
+; Default: ./logs
+emo_log_upload_dir = /var/supysonic/emo-logs
+
+; Enable public client release endpoints at /client-releases. Default: on
+mount_client_releases = on
+
+; Directory used to store uploaded APK and Windows client installers.
+; Default: /tmp/supysonic/client-releases
+release_upload_dir = /var/supysonic/client-releases
+
+; Token required for POST /client-releases/publish. Leave empty to disable publishing.
+; Generate one with: openssl rand -hex 32
+release_api_token =
+
+; Maximum client installer upload size in bytes. Default: 536870912 (512MB)
+release_max_upload_size = 536870912
+
 ; Space separated list of prefixes that should be ignored on index endpoints
 ; Default: El La Le Las Les Los The
 index_ignored_prefixes = El La Le Las Les Los The
@@ -85,6 +103,43 @@ log_backup_count = 7
 
 log_level = INFO
 log_rotate = yes
+
+[musicbrainz]
+; MusicBrainz is the default structured album enrichment source.
+; Enrichment only fills empty album/track metadata and may create an
+; external_enrichment review task after automatic writes.
+; Defaults: https://musicbrainz.org/ws/2
+;api_url = https://musicbrainz.org/ws/2
+
+; Cover Art Archive root URL used by MusicBrainz cover lookups.
+; Defaults: https://coverartarchive.org
+;cover_art_api_url = https://coverartarchive.org
+
+; User-Agent sent to MusicBrainz. Set a contact-aware value for production.
+; Defaults: Supysonic/1.0
+;user_agent = Supysonic/1.0
+
+; Delay between MusicBrainz enrichment requests, in seconds. Default: 1.0
+;request_delay_seconds = 1.0
+
+[discogs]
+; Optional Discogs album enrichment. Disabled unless enabled and token is set.
+; Rate limits, HTTP errors and network failures are logged and skipped without
+; blocking MusicBrainz enrichment or scans.
+;enabled = off
+
+; Defaults: https://api.discogs.com
+;api_url = https://api.discogs.com
+
+; Discogs personal access token. Do not commit real tokens.
+;token =
+
+; User-Agent sent to Discogs. Set a contact-aware value for production.
+; Defaults: Supysonic/1.0
+;user_agent = Supysonic/1.0
+
+; Delay between Discogs enrichment requests, in seconds. Default: 1.0
+;request_delay_seconds = 1.0
 
 [lastfm]
 ; API and secret key to enable scrobbling. http://www.last.fm/api/accounts

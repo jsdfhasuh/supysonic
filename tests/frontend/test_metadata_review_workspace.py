@@ -7,7 +7,7 @@ from flask import current_app
 from uuid import uuid4
 
 from supysonic.tool import write_dict_to_json
-from supysonic.db import Album, AlbumArtist, AlbumReviewTask, Artist, Folder, ReviewTask, Track, TrackArtist, User, db, now
+from supysonic.db import Album, AlbumArtist, AlbumReviewTask, Artist, Folder, ReviewTask, Track, TrackArtist, User, now
 
 from .frontendtestbase import FrontendTestBase
 from ..testbase import TestConfig
@@ -20,24 +20,6 @@ class MetadataReviewWorkspaceTestCase(FrontendTestBase):
         TestConfig.WEBAPP = TestConfig.WEBAPP.copy()
         TestConfig.WEBAPP["log_dir"] = ""
         super().setUp()
-        db.execute_sql(
-            "CREATE TABLE album_artist ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-            "album_id CHAR(36) NOT NULL REFERENCES album(id), "
-            "artist_id CHAR(36) NOT NULL REFERENCES artist(id), "
-            "position INTEGER NOT NULL DEFAULT 0, "
-            "UNIQUE(album_id, artist_id)"
-            ")"
-        )
-        db.execute_sql(
-            "CREATE TABLE track_artist ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-            "track_id CHAR(36) NOT NULL REFERENCES track(id), "
-            "artist_id CHAR(36) NOT NULL REFERENCES artist(id), "
-            "position INTEGER NOT NULL DEFAULT 0, "
-            "UNIQUE(track_id, artist_id)"
-            ")"
-        )
 
         alice = User.get(User.name == "alice")
         with self.client.session_transaction() as session:

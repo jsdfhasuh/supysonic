@@ -11,15 +11,22 @@ import requests
 from bs4 import BeautifulSoup
 import time
 import re
+from typing import Mapping
 
 logger = logging.getLogger(__name__)
 
 
+def is_configured(config: Mapping[str, object]) -> bool:
+    api_key = str(config.get("api_key") or "").strip()
+    secret = str(config.get("secret") or "").strip()
+    return bool(api_key and secret)
+
+
 class LastFm:
     def __init__(self, config, user):
-        if config["api_key"] is not None and config["secret"] is not None:
-            self.__api_key = config["api_key"]
-            self.__api_secret = config["secret"].encode("utf-8")
+        if is_configured(config):
+            self.__api_key = str(config["api_key"]).strip()
+            self.__api_secret = str(config["secret"]).strip().encode("utf-8")
             self.__enabled = True
             self.__find_json = {}
         else:

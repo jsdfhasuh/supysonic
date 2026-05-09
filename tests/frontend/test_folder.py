@@ -16,24 +16,24 @@ class FolderTestCase(FrontendTestBase):
     def test_index(self):
         self._login("bob", "B0b")
         rv = self.client.get("/folder", follow_redirects=True)
-        self.assertIn("There's nothing much to see", rv.data)
+        self.assertIn("Overview", rv.data)
         self.assertNotIn("Music folders", rv.data)
         self._logout()
 
         self._login("alice", "Alic3")
         rv = self.client.get("/folder")
-        self.assertIn("Music folders", rv.data)
+        self.assertIn("Library sources", rv.data)
 
     def test_add_get(self):
         self._login("bob", "B0b")
         rv = self.client.get("/folder/add", follow_redirects=True)
-        self.assertIn("There's nothing much to see", rv.data)
+        self.assertIn("Overview", rv.data)
         self.assertNotIn("Add new folder", rv.data)
         self._logout()
 
         self._login("alice", "Alic3")
         rv = self.client.get("/folder/add")
-        self.assertIn("Add new folder", rv.data)
+        self.assertIn("Add library source", rv.data)
 
     def test_add_post(self):
         self._login("alice", "Alic3")
@@ -44,7 +44,7 @@ class FolderTestCase(FrontendTestBase):
         rv = self.client.post("/folder/add", data={"path": "path"})
         self.assertIn("required", rv.data)
         rv = self.client.post("/folder/add", data={"name": "name", "path": "path"})
-        self.assertIn("Add new folder", rv.data)
+        self.assertIn("Add library source", rv.data)
         rv = self.client.post(
             "/folder/add",
             data={"name": "name", "path": "tests/assets"},
@@ -58,7 +58,7 @@ class FolderTestCase(FrontendTestBase):
 
         self._login("bob", "B0b")
         rv = self.client.get("/folder/del/" + str(folder.id), follow_redirects=True)
-        self.assertIn("There's nothing much to see", rv.data)
+        self.assertIn("Overview", rv.data)
         self.assertEqual(Folder.select().count(), 1)
         self._logout()
 
@@ -68,7 +68,7 @@ class FolderTestCase(FrontendTestBase):
         rv = self.client.get("/folder/del/1234567890", follow_redirects=True)
         self.assertIn("No such folder", rv.data)
         rv = self.client.get("/folder/del/" + str(folder.id), follow_redirects=True)
-        self.assertIn("Music folders", rv.data)
+        self.assertIn("Library sources", rv.data)
         self.assertEqual(Folder.select().count(), 0)
 
     def test_scan(self):

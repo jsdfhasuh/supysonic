@@ -57,7 +57,7 @@ class UserManager:
     @staticmethod
     def change_password(uid, old_pass, new_pass):
         user = UserManager.get(uid)
-        if UserManager.__encrypt_password(old_pass, user.salt)[0] != user.password:
+        if old_pass != user.password:
             raise ValueError("Wrong password")
 
         user.password = new_pass

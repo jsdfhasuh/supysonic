@@ -128,3 +128,15 @@ class TestBase(unittest.TestCase):
         shutil.rmtree(self.__dir)
         os.close(self.__db[0])
         os.remove(self.__db[1])
+        for attr in (
+            "BASE",
+            "WEBAPP",
+            "DAEMON",
+            "MUSICBRAINZ",
+            "DISCOGS",
+            "LASTFM",
+            "LISTENBRAINZ",
+            "SPOTIFY",
+        ):
+            if attr in TestConfig.__dict__:
+                delattr(TestConfig, attr)

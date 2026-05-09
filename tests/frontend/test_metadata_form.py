@@ -6,7 +6,7 @@ import unittest
 
 from PIL import Image
 
-from supysonic.db import Album, AlbumArtist, Artist, Folder, Track, TrackArtist, User, db
+from supysonic.db import Album, AlbumArtist, Artist, Folder, Track, TrackArtist, User
 from supysonic.tool import read_dict_from_json
 
 from .frontendtestbase import FrontendTestBase
@@ -20,27 +20,6 @@ class MetadataFormTestCase(FrontendTestBase):
         TestConfig.WEBAPP["log_dir"] = self.logDir
         TestConfig.WEBAPP["log_level"] = "INFO"
         super().setUp()
-        db.execute_sql("ALTER TABLE artist ADD COLUMN artist_info_json VARCHAR(4096)")
-        db.execute_sql("ALTER TABLE artist ADD COLUMN real_artist_id INTEGER")
-        db.execute_sql("ALTER TABLE album ADD COLUMN year VARCHAR(255)")
-        db.execute_sql(
-            "CREATE TABLE album_artist ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-            "album_id CHAR(36) NOT NULL REFERENCES album(id), "
-            "artist_id CHAR(36) NOT NULL REFERENCES artist(id), "
-            "position INTEGER NOT NULL DEFAULT 0, "
-            "UNIQUE(album_id, artist_id)"
-            ")"
-        )
-        db.execute_sql(
-            "CREATE TABLE track_artist ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-            "track_id CHAR(36) NOT NULL REFERENCES track(id), "
-            "artist_id CHAR(36) NOT NULL REFERENCES artist(id), "
-            "position INTEGER NOT NULL DEFAULT 0, "
-            "UNIQUE(track_id, artist_id)"
-            ")"
-        )
         alice = User.get(User.name == "alice")
         with self.client.session_transaction() as session:
             session["userid"] = str(alice.id)

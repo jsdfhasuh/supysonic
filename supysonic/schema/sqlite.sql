@@ -23,7 +23,10 @@ CREATE TABLE IF NOT EXISTS album (
     id CHAR(36) PRIMARY KEY,
     name VARCHAR(256) NOT NULL COLLATE NOCASE,
     artist_id CHAR(36) NOT NULL REFERENCES artist,
-    year VARCHAR(255)
+    year VARCHAR(255),
+    release_date VARCHAR(32),
+    release_type VARCHAR(64),
+    album_info_json TEXT
 );
 CREATE INDEX IF NOT EXISTS index_album_artist_id_fk ON album(artist_id);
 
@@ -54,6 +57,34 @@ CREATE INDEX IF NOT EXISTS index_track_artist_id_fk ON track(artist_id);
 CREATE INDEX IF NOT EXISTS index_track_folder_id_fk ON track(folder_id);
 CREATE INDEX IF NOT EXISTS index_track_root_folder_id_fk ON track(root_folder_id);
 CREATE UNIQUE INDEX IF NOT EXISTS index_track_path ON track(path_hash);
+
+CREATE TABLE IF NOT EXISTS album_artist (
+    id INTEGER NOT NULL PRIMARY KEY,
+    album_id CHAR(36) NOT NULL REFERENCES album(id) ON DELETE CASCADE,
+    artist_id CHAR(36) NOT NULL REFERENCES artist(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS index_album_artist_album_id_artist_id ON album_artist(album_id, artist_id);
+CREATE INDEX IF NOT EXISTS index_album_artist_album_id_fk ON album_artist(album_id);
+CREATE INDEX IF NOT EXISTS index_album_artist_artist_id_fk ON album_artist(artist_id);
+
+CREATE TABLE IF NOT EXISTS track_artist (
+    id INTEGER NOT NULL PRIMARY KEY,
+    track_id CHAR(36) NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    artist_id CHAR(36) NOT NULL REFERENCES artist(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS index_track_artist_track_id_artist_id ON track_artist(track_id, artist_id);
+CREATE INDEX IF NOT EXISTS index_track_artist_track_id_fk ON track_artist(track_id);
+CREATE INDEX IF NOT EXISTS index_track_artist_artist_id_fk ON track_artist(artist_id);
+
+CREATE TABLE IF NOT EXISTS image (
+    id INTEGER NOT NULL PRIMARY KEY,
+    path VARCHAR(4096) NOT NULL,
+    image_type VARCHAR(10) NOT NULL,
+    related_id CHAR(36) NOT NULL,
+    created DATETIME NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS user (
     id CHAR(36) PRIMARY KEY,
@@ -229,6 +260,27 @@ CREATE TABLE IF NOT EXISTS review_task (
 CREATE INDEX IF NOT EXISTS index_review_task_entity_status ON review_task(entity_type, entity_id, status);
 CREATE INDEX IF NOT EXISTS index_review_task_status_created ON review_task(status, created);
 CREATE UNIQUE INDEX IF NOT EXISTS index_review_task_pending_key ON review_task(pending_key);
+
+CREATE TABLE IF NOT EXISTS client_release (
+    id CHAR(36) PRIMARY KEY,
+    platform VARCHAR(16) NOT NULL,
+    file_type VARCHAR(16) NOT NULL,
+    build_name VARCHAR(64) NOT NULL,
+    build_number INTEGER NOT NULL,
+    version VARCHAR(80) NOT NULL,
+    publish_mode VARCHAR(16) NOT NULL,
+    file_name VARCHAR(256),
+    file_path VARCHAR(4096),
+    download_url VARCHAR(2048),
+    file_size INTEGER,
+    sha256 CHAR(64),
+    release_notes TEXT,
+    active BOOLEAN NOT NULL DEFAULT 1,
+    created DATETIME NOT NULL,
+    updated DATETIME NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS index_client_release_platform_version ON client_release(platform, build_name, build_number);
+CREATE INDEX IF NOT EXISTS index_client_release_platform_active ON client_release(platform, active);
 
 CREATE TABLE meta (
     key CHAR(32) PRIMARY KEY,

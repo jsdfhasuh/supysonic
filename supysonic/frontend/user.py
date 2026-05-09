@@ -11,7 +11,7 @@ from flask import current_app, flash, jsonify, redirect, render_template, reques
 from functools import wraps
 
 from ..db import ClientPrefs, User
-from ..lastfm import LastFm
+from ..lastfm import LastFm, is_configured
 from ..listenbrainz import ListenBrainz
 from ..managers.user import UserManager
 
@@ -33,15 +33,21 @@ def _is_registration_invite_required():
 
 
 def _is_lastfm_link_available():
+    return _get_lastfm_api_key() is not None
+
+
+def _get_lastfm_api_key():
     config = current_app.config["LASTFM"]
-    return config.get("api_key") is not None and config.get("secret") is not None
+    if not is_configured(config):
+        return None
+    return str(config.get("api_key")).strip()
 
 
 def _build_lastfm_auth_url(uid):
     callback_url = request.url_root[:-1] + url_for("frontend.lastfm_reg", uid=uid)
     return (
         "https://www.last.fm/api/auth/"
-        f"?api_key={current_app.config['LASTFM']['api_key']}&cb={callback_url}"
+        f"?api_key={_get_lastfm_api_key()}&cb={callback_url}"
     )
 
 
@@ -143,7 +149,7 @@ def user_profile(uid, user):
     return render_template(
         "profile.html",
         user=user,
-        api_key=current_app.config["LASTFM"]["api_key"],
+        api_key=_get_lastfm_api_key(),
         clients=user.clients,
     )
 

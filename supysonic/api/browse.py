@@ -298,9 +298,11 @@ def album_info():
         t.as_subsonic_child(request.user, request.client)
         for t in sorted(res.tracks, key=lambda t: t.sort_key())
     ]
-    image_base_url = request.url.replace("/getAlbumInfo2", "/getCoverArt")
-    image_base_url = image_base_url.replace(f"{res.id}", f"al-{res.id}")
-    info['cover_art'] = f'{image_base_url}&input_size=large'
+    if "music" in request.client.client_name.lower():
+        image_base_url = request.base_url.replace("/getAlbum", "/getCoverArt")
+        info["cover_art"] = (
+            f"{image_base_url}?id=al-{res.id}&input_size=large&c={request.client.client_name}"
+        )
     return request.formatter("album", info)
 
 

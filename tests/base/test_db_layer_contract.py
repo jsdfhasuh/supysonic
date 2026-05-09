@@ -112,6 +112,50 @@ class DbLayerContractTestCase(unittest.TestCase):
         self.assertIs(db_module.EmoPlaybackState, emo.EmoPlaybackState)
         self.assertIs(db_module.ClientRelease, client_releases.ClientRelease)
 
+    def test_main_model_groups_are_shared_with_facade(self):
+        db_module = importlib.import_module("supysonic.db")
+        library = importlib.import_module("supysonic.db_layer.library")
+        users = importlib.import_module("supysonic.db_layer.users")
+        annotations = importlib.import_module("supysonic.db_layer.annotations")
+        review_tasks = importlib.import_module("supysonic.db_layer.review_tasks")
+        playlists = importlib.import_module("supysonic.db_layer.playlists")
+        misc = importlib.import_module("supysonic.db_layer.misc")
+
+        for name in (
+            "Image",
+            "Folder",
+            "Artist",
+            "Album",
+            "AlbumArtist",
+            "Track",
+            "TrackArtist",
+        ):
+            with self.subTest(name=name):
+                self.assertIs(getattr(db_module, name), getattr(library, name))
+
+        for name in ("User", "User_Play_Activity", "ClientPrefs"):
+            with self.subTest(name=name):
+                self.assertIs(getattr(db_module, name), getattr(users, name))
+
+        for name in (
+            "StarredFolder",
+            "StarredArtist",
+            "StarredAlbum",
+            "StarredTrack",
+            "RatingFolder",
+            "RatingTrack",
+        ):
+            with self.subTest(name=name):
+                self.assertIs(getattr(db_module, name), getattr(annotations, name))
+
+        self.assertIs(db_module.ReviewTask, review_tasks.ReviewTask)
+        self.assertIs(db_module.AlbumReviewTask, review_tasks.AlbumReviewTask)
+        self.assertIs(review_tasks.AlbumReviewTask, review_tasks.ReviewTask)
+        self.assertIs(db_module.Playlist, playlists.Playlist)
+        self.assertIs(db_module.SharedTrackLink, playlists.SharedTrackLink)
+        self.assertIs(db_module.ChatMessage, misc.ChatMessage)
+        self.assertIs(db_module.RadioStation, misc.RadioStation)
+
 
 if __name__ == "__main__":
     unittest.main()

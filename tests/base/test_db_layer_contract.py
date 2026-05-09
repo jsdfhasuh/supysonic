@@ -73,6 +73,15 @@ class DbLayerContractTestCase(unittest.TestCase):
         self.assertEqual(db_module.SCHEMA_VERSION, schema.SCHEMA_VERSION)
         self.assertIs(db_module.execute_sql_resource_script, schema.execute_sql_resource_script)
 
+    def test_runtime_exports_are_shared_with_facade(self):
+        db_module = importlib.import_module("supysonic.db")
+        runtime = importlib.import_module("supysonic.db_layer.runtime")
+
+        self.assertIs(db_module.init_database, runtime.init_database)
+        self.assertIs(db_module.release_database, runtime.release_database)
+        self.assertIs(db_module.open_connection, runtime.open_connection)
+        self.assertIs(db_module.close_connection, runtime.close_connection)
+
 
 if __name__ == "__main__":
     unittest.main()

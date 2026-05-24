@@ -6,11 +6,16 @@ SENSITIVE_FIELD_NAMES = {
     "cookie",
     "p",
     "password",
+    "proxy-authorization",
     "s",
     "salt",
     "set-cookie",
     "t",
     "token",
+    "x-api-key",
+    "x-auth-token",
+    "x-csrf-token",
+    "x-release-token",
 }
 SAFE_VALUE_RE = re.compile(r"^[A-Za-z0-9._/@,:+\-*]+$")
 

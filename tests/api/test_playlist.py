@@ -9,6 +9,7 @@ import unittest
 import uuid
 
 from supysonic.db import Folder, Artist, Album, Track, Playlist, User
+from supysonic.recommend import RECOMMENDED_PLAYLIST_COMMENT
 
 from .apitestbase import ApiTestBase
 
@@ -89,6 +90,23 @@ class PlaylistTestCase(ApiTestBase):
 
         # get from unknown user
         self._make_request("getPlaylists", {"username": "johndoe"}, error=70)
+
+    def test_get_playlists_excludes_recommended_playlists_in_query(self):
+        user = User.get(User.name == "alice")
+        recommended = Playlist.create(
+            user=user,
+            name="alice's 2026-05-01 recommend playlist",
+            comment=RECOMMENDED_PLAYLIST_COMMENT,
+        )
+        recommended.add(Track.select().first())
+        recommended.save()
+
+        rv, child = self._make_request("getPlaylists", tag="playlists")
+
+        self.assertEqual(len(child), 2)
+        self.assertIsNone(
+            self._find(child, "./playlist[@name=\"alice's 2026-05-01 recommend playlist\"]")
+        )
 
     def test_get_playlist(self):
         # missing param

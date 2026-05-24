@@ -9,24 +9,30 @@
 import hashlib
 import json
 import logging
-import mediafile
 import mimetypes
 import os.path
-import requests
 import shlex
+import shutil
 import subprocess
 import zlib
-from ..tool import read_dict_from_json
-from flask import request, Response, send_file
-from flask import current_app
-from PIL import Image
+from io import BytesIO
+from typing import Dict, Optional, Tuple
 from xml.etree import ElementTree
+
+import mediafile
+import requests
+from flask import current_app
+from flask import request, Response, send_file
+from mutagen import MutagenError
+from mutagen.flac import FLAC
+from PIL import Image
 from zipstream import ZipStream
 
 from ..cache import CacheMiss
 from ..db import Track, Album, Artist, Folder, now
 from ..db import Image as db_image
 from ..covers import EXTENSIONS
+from ..tool import read_dict_from_json
 
 from . import api_routing, get_entity, get_entity_id, log_api_event
 from .exceptions import (
@@ -38,9 +44,413 @@ from .exceptions import (
 
 logger = logging.getLogger(__name__)
 
+STREAM_VARIANT_ORIGINAL = "original"
+STREAM_VARIANT_FLAC_NO_PICTURE = "flac_no_picture"
+STREAM_VARIANT_TRANSCODE = "transcode"
+
+
+class MediaInfo:
+    def __init__(
+        self,
+        container: Optional[str],
+        audio_codec: Optional[str],
+        sample_rate: Optional[int],
+        bit_depth: Optional[int],
+        channels: Optional[int],
+        bitrate: Optional[int],
+        duration_ms: Optional[int],
+        stream_count: Optional[int],
+        audio_stream_count: Optional[int],
+        attached_picture_count: Optional[int],
+        attached_picture_codec: Optional[str],
+        attached_picture_width: Optional[int],
+        attached_picture_height: Optional[int],
+        content_length: Optional[int],
+    ):
+        self.container = container
+        self.audio_codec = audio_codec
+        self.sample_rate = sample_rate
+        self.bit_depth = bit_depth
+        self.channels = channels
+        self.bitrate = bitrate
+        self.duration_ms = duration_ms
+        self.stream_count = stream_count
+        self.audio_stream_count = audio_stream_count
+        self.attached_picture_count = attached_picture_count
+        self.attached_picture_codec = attached_picture_codec
+        self.attached_picture_width = attached_picture_width
+        self.attached_picture_height = attached_picture_height
+        self.content_length = content_length
+
 
 def _log_media_event(level, event, **fields):
     log_api_event(level, event, **fields)
+
+
+def _clean_header_value(value) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def _set_optional_header(
+    headers: Dict[str, str], name: str, value: object
+) -> None:
+    header_value = _clean_header_value(value)
+    if header_value is not None:
+        headers[name] = header_value
+
+
+def _image_details(image) -> Tuple[Optional[str], Optional[int], Optional[int]]:
+    mime_type = getattr(image, "mime_type", None)
+    codec = None
+    if mime_type and "/" in mime_type:
+        codec = mime_type.rsplit("/", 1)[1].lower()
+
+    try:
+        with Image.open(BytesIO(image.data)) as img:
+            width, height = img.size
+    except (AttributeError, OSError, ValueError):
+        width = None
+        height = None
+
+    return codec, width, height
+
+
+def _flac_picture_details(path: str) -> Tuple[int, Optional[str], Optional[int], Optional[int]]:
+    try:
+        pictures = FLAC(path).pictures
+    except (OSError, MutagenError):
+        return 0, None, None, None
+
+    if not pictures:
+        return 0, None, None, None
+
+    picture = pictures[0]
+    codec = None
+    if picture.mime and "/" in picture.mime:
+        codec = picture.mime.rsplit("/", 1)[1].lower()
+
+    return len(pictures), codec, picture.width or None, picture.height or None
+
+
+def _file_content_length(path: str) -> Optional[int]:
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return None
+
+
+def _stat_fingerprint(path: str) -> Optional[str]:
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+
+    fingerprint = "{}:{}:{}".format(
+        os.path.abspath(path), stat.st_mtime_ns, stat.st_size
+    )
+    return "sha256:" + hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()
+
+
+def _track_bitrate_bps(track: Track) -> Optional[int]:
+    if track.bitrate is None:
+        return None
+    return track.bitrate * 1000
+
+
+def _track_duration_ms(track: Track) -> Optional[int]:
+    if track.duration is None:
+        return None
+    return track.duration * 1000
+
+
+def _read_media_info(track: Track, path: Optional[str] = None) -> MediaInfo:
+    media_path = path or track.path
+    container = track.suffix() or None
+    audio_codec = container
+    sample_rate = None
+    bit_depth = None
+    channels = None
+    bitrate = _track_bitrate_bps(track)
+    duration_ms = _track_duration_ms(track)
+    attached_picture_count = None
+    attached_picture_codec = None
+    attached_picture_width = None
+    attached_picture_height = None
+
+    try:
+        tag = mediafile.MediaFile(media_path)
+    except mediafile.UnreadableFileError:
+        tag = None
+
+    if tag is not None:
+        container = (tag.type or container or "").lower() or None
+        audio_codec = container
+        sample_rate = tag.samplerate or None
+        bit_depth = tag.bitdepth or None
+        channels = tag.channels or None
+        if tag.bitrate:
+            bitrate = tag.bitrate if tag.bitrate >= 10000 else tag.bitrate * 1000
+        if tag.length:
+            duration_ms = int(tag.length * 1000)
+        images = tag.images or []
+        attached_picture_count = len(images)
+        if images:
+            (
+                attached_picture_codec,
+                attached_picture_width,
+                attached_picture_height,
+            ) = _image_details(images[0])
+
+    if container == "flac":
+        (
+            attached_picture_count,
+            attached_picture_codec,
+            attached_picture_width,
+            attached_picture_height,
+        ) = _flac_picture_details(media_path)
+
+    if attached_picture_count is None:
+        attached_picture_count = 1 if track.has_art else 0
+
+    audio_stream_count = 1 if audio_codec else None
+    stream_count = None
+    if audio_stream_count is not None:
+        stream_count = audio_stream_count + attached_picture_count
+
+    return MediaInfo(
+        container=container,
+        audio_codec=audio_codec,
+        sample_rate=sample_rate,
+        bit_depth=bit_depth,
+        channels=channels,
+        bitrate=bitrate,
+        duration_ms=duration_ms,
+        stream_count=stream_count,
+        audio_stream_count=audio_stream_count,
+        attached_picture_count=attached_picture_count,
+        attached_picture_codec=attached_picture_codec,
+        attached_picture_width=attached_picture_width,
+        attached_picture_height=attached_picture_height,
+        content_length=_file_content_length(media_path),
+    )
+
+
+def _info_headers(prefix: str, info: MediaInfo) -> Dict[str, str]:
+    headers = {}
+    _set_optional_header(headers, f"EmoSonic-{prefix}-Container", info.container)
+    _set_optional_header(headers, f"EmoSonic-{prefix}-Audio-Codec", info.audio_codec)
+    _set_optional_header(
+        headers, f"EmoSonic-{prefix}-Audio-Sample-Rate", info.sample_rate
+    )
+    _set_optional_header(
+        headers, f"EmoSonic-{prefix}-Audio-Bit-Depth", info.bit_depth
+    )
+    _set_optional_header(
+        headers, f"EmoSonic-{prefix}-Audio-Channels", info.channels
+    )
+    _set_optional_header(
+        headers, f"EmoSonic-{prefix}-Audio-Bitrate", info.bitrate
+    )
+    _set_optional_header(
+        headers, f"EmoSonic-{prefix}-Audio-Duration-Ms", info.duration_ms
+    )
+    if prefix == "Output":
+        _set_optional_header(
+            headers, "EmoSonic-Output-Content-Length", info.content_length
+        )
+    _set_optional_header(headers, f"EmoSonic-{prefix}-Stream-Count", info.stream_count)
+    _set_optional_header(
+        headers,
+        f"EmoSonic-{prefix}-Audio-Stream-Count",
+        info.audio_stream_count,
+    )
+    _set_optional_header(
+        headers,
+        f"EmoSonic-{prefix}-Attached-Picture-Count",
+        info.attached_picture_count,
+    )
+    _set_optional_header(
+        headers,
+        f"EmoSonic-{prefix}-Attached-Picture-Codec",
+        info.attached_picture_codec,
+    )
+    _set_optional_header(
+        headers,
+        f"EmoSonic-{prefix}-Attached-Picture-Width",
+        info.attached_picture_width,
+    )
+    _set_optional_header(
+        headers,
+        f"EmoSonic-{prefix}-Attached-Picture-Height",
+        info.attached_picture_height,
+    )
+    return headers
+
+
+def _can_sanitize_flac(source_info: MediaInfo) -> bool:
+    return (
+        source_info.container == "flac"
+        and bool(source_info.attached_picture_count)
+    )
+
+
+def _sanitized_output_info(source_info: MediaInfo, path: str) -> MediaInfo:
+    return MediaInfo(
+        container="flac",
+        audio_codec=source_info.audio_codec,
+        sample_rate=source_info.sample_rate,
+        bit_depth=source_info.bit_depth,
+        channels=source_info.channels,
+        bitrate=source_info.bitrate,
+        duration_ms=source_info.duration_ms,
+        stream_count=source_info.audio_stream_count,
+        audio_stream_count=source_info.audio_stream_count,
+        attached_picture_count=0,
+        attached_picture_codec=None,
+        attached_picture_width=None,
+        attached_picture_height=None,
+        content_length=_file_content_length(path),
+    )
+
+
+def _transcode_output_info(
+    track: Track,
+    output_format: str,
+    output_bitrate: int,
+    content_length: Optional[int] = None,
+) -> MediaInfo:
+    return MediaInfo(
+        container=output_format,
+        audio_codec=output_format,
+        sample_rate=None,
+        bit_depth=None,
+        channels=None,
+        bitrate=output_bitrate * 1000,
+        duration_ms=_track_duration_ms(track),
+        stream_count=None,
+        audio_stream_count=None,
+        attached_picture_count=None,
+        attached_picture_codec=None,
+        attached_picture_width=None,
+        attached_picture_height=None,
+        content_length=content_length,
+    )
+
+
+def _add_stream_headers(
+    response: Response,
+    source_info: MediaInfo,
+    output_info: MediaInfo,
+    stream_variant: str,
+    sanitized_available: bool,
+    transcode_available: bool,
+    source_path: str,
+    output_path: Optional[str] = None,
+) -> Response:
+    headers = {}
+    headers.update(_info_headers("Source", source_info))
+    headers.update(_info_headers("Output", output_info))
+    _set_optional_header(
+        headers, "EmoSonic-Sanitized-Available", sanitized_available
+    )
+    _set_optional_header(headers, "EmoSonic-Transcode-Available", transcode_available)
+    if sanitized_available:
+        headers["EmoSonic-Preferred-Compatible-Variant"] = (
+            STREAM_VARIANT_FLAC_NO_PICTURE
+        )
+    headers["EmoSonic-Stream-Variant"] = stream_variant
+    _set_optional_header(
+        headers, "EmoSonic-Media-Fingerprint", _stat_fingerprint(source_path)
+    )
+    if output_path and stream_variant == STREAM_VARIANT_FLAC_NO_PICTURE:
+        _set_optional_header(
+            headers,
+            "EmoSonic-Sanitized-Fingerprint",
+            _stat_fingerprint(output_path),
+        )
+
+    for name, value in headers.items():
+        response.headers[name] = value
+
+    if (
+        output_info.content_length is not None
+        and "Content-Range" not in response.headers
+    ):
+        response.headers["EmoSonic-Output-Content-Length"] = str(
+            output_info.content_length
+        )
+    return response
+
+
+def _variant_error(message: str, status_code: int) -> Response:
+    response = request.formatter.error(0, message)
+    response.status_code = status_code
+    return response
+
+
+def _sanitized_cache_key(track: Track) -> str:
+    try:
+        stat = os.stat(track.path)
+        source_identity = "{}:{}:{}".format(track.id, stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        source_identity = "{}:missing".format(track.id)
+
+    digest = hashlib.sha256(source_identity.encode("utf-8")).hexdigest()
+    return "{}-{}.flac".format(track.id, digest[:16])
+
+
+def _get_or_create_flac_no_picture(track: Track) -> str:
+    cache = current_app.transcode_cache
+    cache_key = _sanitized_cache_key(track)
+
+    try:
+        return cache.get(cache_key)
+    except CacheMiss:
+        pass
+
+    try:
+        with cache.set_fileobj(cache_key) as output:
+            with open(track.path, "rb") as source:
+                shutil.copyfileobj(source, output)
+            output.flush()
+
+            sanitized = FLAC(output.name)
+            sanitized.clear_pictures()
+            sanitized.save()
+    except (OSError, MutagenError) as exc:
+        _log_media_event(
+            logging.ERROR,
+            "media_variant_failed",
+            track_id=track.id,
+            variant=STREAM_VARIANT_FLAC_NO_PICTURE,
+            reason=exc.__class__.__name__,
+        )
+        raise
+
+    return cache.get(cache_key)
+
+
+def _is_range_probe() -> bool:
+    return request.headers.get("Range", "").strip().lower() == "bytes=0-0"
+
+
+def _should_record_playback() -> bool:
+    return request.method != "HEAD" and not _is_range_probe()
+
+
+def _record_playback(track: Track) -> None:
+    track.play_count = track.play_count + 1
+    track.last_play = now()
+    track.save()
+
+    user = request.user
+    user.last_play = track
+    user.last_play_date = now()
+    user.save()
 
 
 def prepare_transcoding_cmdline(
@@ -82,6 +492,17 @@ def stream_media():
     if request_format:
         request_format = request_format.lower()
 
+    variant = request.values.get("variant")
+    if variant:
+        variant = variant.lower()
+    if variant not in (
+        None,
+        STREAM_VARIANT_ORIGINAL,
+        STREAM_VARIANT_FLAC_NO_PICTURE,
+    ):
+        return _variant_error("Unsupported stream variant '{}'".format(variant), 400)
+
+    source_info = _read_media_info(res)
     src_suffix = res.suffix()
     dst_suffix = res.suffix()
     dst_bitrate = res.bitrate
@@ -89,6 +510,42 @@ def stream_media():
 
     config = current_app.config["TRANSCODING"]
     prefs = request.client
+    sanitized_available = _can_sanitize_flac(source_info)
+    transcode_available = bool(config)
+
+    if variant == STREAM_VARIANT_FLAC_NO_PICTURE:
+        if not sanitized_available:
+            return _variant_error(
+                "Stream variant '{}' not found for track".format(variant), 404
+            )
+
+        try:
+            sanitized_path = _get_or_create_flac_no_picture(res)
+        except (OSError, MutagenError):
+            return _variant_error(
+                "Failed to generate stream variant '{}'".format(variant), 500
+            )
+
+        output_info = _sanitized_output_info(source_info, sanitized_path)
+        response = send_file(
+            sanitized_path, mimetype="audio/flac", conditional=True
+        )
+        response.headers["Accept-Ranges"] = "bytes"
+        _add_stream_headers(
+            response,
+            source_info,
+            output_info,
+            STREAM_VARIANT_FLAC_NO_PICTURE,
+            sanitized_available,
+            transcode_available,
+            res.path,
+            output_path=sanitized_path,
+        )
+
+        if _should_record_playback():
+            _record_playback(res)
+
+        return response
 
     using_default_format = False
     if request_format:
@@ -121,11 +578,15 @@ def stream_media():
         # Requires transcoding
         cache = current_app.transcode_cache
         cache_key = f"{res.id}-{dst_bitrate}.{dst_suffix}"
+        output_info = _transcode_output_info(res, dst_suffix, dst_bitrate)
 
         try:
+            cached_path = cache.get(cache_key)
             response = send_file(
-                cache.get(cache_key), mimetype=dst_mimetype, conditional=True
+                cached_path, mimetype=dst_mimetype, conditional=True
             )
+            response.headers["Accept-Ranges"] = "bytes"
+            output_info.content_length = _file_content_length(cached_path)
         except CacheMiss:
             transcoder = config.get(f"transcoder_{src_suffix}_{dst_suffix}")
             decoder = config.get("decoder_" + src_suffix) or config.get("decoder")
@@ -148,106 +609,125 @@ def stream_media():
                     logger.info(message)
                     raise GenericError(message)
 
-            transcoder, decoder, encoder = (
-                prepare_transcoding_cmdline(x, res, src_suffix, dst_suffix, dst_bitrate)
-                for x in (transcoder, decoder, encoder)
-            )
-            try:
-                if transcoder:
-                    dec_proc = None
-                    proc = subprocess.Popen(transcoder, stdout=subprocess.PIPE)
-                else:
-                    dec_proc = subprocess.Popen(decoder, stdout=subprocess.PIPE)
-                    proc = subprocess.Popen(
-                        encoder, stdin=dec_proc.stdout, stdout=subprocess.PIPE
-                    )
-            except OSError:
-                _log_media_event(
-                    logging.ERROR,
-                    "media_stream_failed",
-                    track_id=res.id,
-                    source_format=src_suffix or "-",
-                    target_format=dst_suffix,
-                    target_bitrate=dst_bitrate,
-                    reason="transcoder_process_error",
-                )
-                raise ServerError("Error while running the transcoding process")
-
             if estimateContentLength == "true":
                 estimate = dst_bitrate * 1000 * res.duration // 8
             else:
                 estimate = None
 
-            def transcode():
-                while True:
-                    data = proc.stdout.read(8192)
-                    if not data:
-                        break
-                    yield data
+            transcoder, decoder, encoder = (
+                prepare_transcoding_cmdline(x, res, src_suffix, dst_suffix, dst_bitrate)
+                for x in (transcoder, decoder, encoder)
+            )
 
-            def kill_processes():
-                if dec_proc is not None:
-                    dec_proc.kill()
-                proc.kill()
-
-            def handle_transcoding():
+            if request.method == "HEAD":
+                response = Response(mimetype=dst_mimetype)
+                if estimate is not None:
+                    response.headers.add("Content-Length", estimate)
+            else:
                 try:
-                    sent = 0
-                    for data in transcode():
-                        sent += len(data)
-                        yield data
-                except (Exception, SystemExit, KeyboardInterrupt):
-                    # Make sure child processes are always killed
-                    kill_processes()
-                    raise
-                except GeneratorExit:
-                    # Try to transcode/send more data if we're close to the end.
-                    # The calling code have to support this as yielding more data
-                    # after a GeneratorExit would normally raise a RuntimeError.
-                    # Hopefully this generator is only used by the cache which
-                    # handles this.
-                    if estimate and sent >= estimate * 0.95:
-                        yield from transcode()
+                    if transcoder:
+                        dec_proc = None
+                        proc = subprocess.Popen(transcoder, stdout=subprocess.PIPE)
                     else:
+                        dec_proc = subprocess.Popen(decoder, stdout=subprocess.PIPE)
+                        proc = subprocess.Popen(
+                            encoder, stdin=dec_proc.stdout, stdout=subprocess.PIPE
+                        )
+                except OSError:
+                    _log_media_event(
+                        logging.ERROR,
+                        "media_stream_failed",
+                        track_id=res.id,
+                        source_format=src_suffix or "-",
+                        target_format=dst_suffix,
+                        target_bitrate=dst_bitrate,
+                        reason="transcoder_process_error",
+                    )
+                    raise ServerError("Error while running the transcoding process")
+
+                def transcode():
+                    while True:
+                        data = proc.stdout.read(8192)
+                        if not data:
+                            break
+                        yield data
+
+                def kill_processes():
+                    if dec_proc is not None:
+                        dec_proc.kill()
+                    proc.kill()
+
+                def handle_transcoding():
+                    try:
+                        sent = 0
+                        for data in transcode():
+                            sent += len(data)
+                            yield data
+                    except (Exception, SystemExit, KeyboardInterrupt):
+                        # Make sure child processes are always killed
                         kill_processes()
                         raise
-                finally:
-                    if dec_proc is not None:
-                        dec_proc.stdout.close()
-                        dec_proc.wait()
-                    proc.stdout.close()
-                    proc.wait()
+                    except GeneratorExit:
+                        # Try to transcode/send more data if we're close to the end.
+                        # The calling code have to support this as yielding more data
+                        # after a GeneratorExit would normally raise a RuntimeError.
+                        # Hopefully this generator is only used by the cache which
+                        # handles this.
+                        if estimate and sent >= estimate * 0.95:
+                            yield from transcode()
+                        else:
+                            kill_processes()
+                            raise
+                    finally:
+                        if dec_proc is not None:
+                            dec_proc.stdout.close()
+                            dec_proc.wait()
+                        proc.stdout.close()
+                        proc.wait()
 
-            resp_content = cache.set_generated(cache_key, handle_transcoding)
+                resp_content = cache.set_generated(cache_key, handle_transcoding)
 
-            _log_media_event(
-                logging.INFO,
-                "transcode_started",
-                track_id=res.id,
-                source_format=src_suffix or "-",
-                target_format=dst_suffix,
-                target_bitrate=dst_bitrate,
-                cache_key=cache_key,
-            )
-            logger.info(
-                "Transcoding track {0.id} for user {1.id}. Source: {2} at {0.bitrate}kbps. Dest: {3} at {4}kbps".format(
-                    res, request.user, src_suffix, dst_suffix, dst_bitrate
+                _log_media_event(
+                    logging.INFO,
+                    "transcode_started",
+                    track_id=res.id,
+                    source_format=src_suffix or "-",
+                    target_format=dst_suffix,
+                    target_bitrate=dst_bitrate,
+                    cache_key=cache_key,
                 )
-            )
-            response = Response(resp_content, mimetype=dst_mimetype)
-            if estimate is not None:
-                response.headers.add("Content-Length", estimate)
+                logger.info(
+                    "Transcoding track {0.id} for user {1.id}. Source: {2} at {0.bitrate}kbps. Dest: {3} at {4}kbps".format(
+                        res, request.user, src_suffix, dst_suffix, dst_bitrate
+                    )
+                )
+                response = Response(resp_content, mimetype=dst_mimetype)
+                if estimate is not None:
+                    response.headers.add("Content-Length", estimate)
+        _add_stream_headers(
+            response,
+            source_info,
+            output_info,
+            STREAM_VARIANT_TRANSCODE,
+            sanitized_available,
+            transcode_available,
+            res.path,
+        )
     else:
         response = send_file(res.path, mimetype=dst_mimetype, conditional=True)
+        response.headers["Accept-Ranges"] = "bytes"
+        _add_stream_headers(
+            response,
+            source_info,
+            source_info,
+            STREAM_VARIANT_ORIGINAL,
+            sanitized_available,
+            transcode_available,
+            res.path,
+        )
 
-    res.play_count = res.play_count + 1
-    res.last_play = now()
-    res.save()
-
-    user = request.user
-    user.last_play = res
-    user.last_play_date = now()
-    user.save()
+    if _should_record_playback():
+        _record_playback(res)
 
     return response
 

@@ -52,6 +52,26 @@ class User_Play_Activity(_Model):
         table_name = "user_play_activity"
 
 
+class UserRecommendationFeedback(_Model):
+    id = PrimaryKeyField()
+    user = ForeignKeyField(User, backref="recommendation_feedback")
+    song_id = CharField(max_length=96)
+    action = CharField(max_length=32)
+    scope = CharField(max_length=64)
+    source = CharField(max_length=64)
+    reason = CharField(max_length=64)
+    created_at = DateTimeField(default=now)
+    updated_at = DateTimeField(default=now)
+    deleted_at = DateTimeField(null=True)
+
+    class Meta:
+        table_name = "user_recommendation_feedback"
+        indexes = (
+            (("user", "song_id", "scope"), True),
+            (("user", "scope", "deleted_at"), False),
+        )
+
+
 class ClientPrefs(_Model):
     user = ForeignKeyField(User, backref="clients")
     client_name = CharField(32)
@@ -60,3 +80,8 @@ class ClientPrefs(_Model):
 
     class Meta:
         primary_key = CompositeKey("user", "client_name")
+
+
+def clear_last_play_for_tracks(track_condition: object) -> None:
+    users = User.select(User.id).join(Track).where(track_condition)
+    User.update(last_play=None).where(User.id.in_(users)).execute()

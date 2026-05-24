@@ -140,6 +140,7 @@ class Daemon:
             createdCount = refreshDailyRecommendPlaylists(
                 num_songs=self.__get_recommend_playlist_size(),
                 day=recommendationDay,
+                config=self.__config,
             )
             self.__lastRecommendRefreshDay = recommendationDay
             logger.info(

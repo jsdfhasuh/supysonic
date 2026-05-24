@@ -11,8 +11,9 @@ import uuid
 
 from contextlib import closing
 from io import BytesIO
+from mutagen.flac import FLAC
 from PIL import Image
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from supysonic.db import Folder, Artist, Album, Track
 
@@ -51,20 +52,22 @@ class MediaTestCase(ApiTestBase):
         self.trackid = track.id
 
         self.formats = ["mp3", "flac", "ogg", "m4a"]
-        for i in range(len(self.formats)):
+        self.format_trackids = {}
+        for i, format_name in enumerate(self.formats):
             track_embeded_art = Track.create(
                 title="[silence]",
                 number=1,
                 disc=1,
                 artist=artist,
                 album=album,
-                path=os.path.abspath(f"tests/assets/formats/silence.{self.formats[i]}"),
+                path=os.path.abspath(f"tests/assets/formats/silence.{format_name}"),
                 root_folder=folder,
                 folder=folder,
                 duration=2,
                 bitrate=320,
                 last_modification=0,
             )
+            self.format_trackids[format_name] = track_embeded_art.id
             self.formats[i] = track_embeded_art.id
 
     def test_stream(self):
@@ -96,6 +99,204 @@ class MediaTestCase(ApiTestBase):
             self.assertEqual(rv.status_code, 200)
             self.assertEqual(len(rv.data), 23)
         self.assertEqual(Track[self.trackid].play_count, 1)
+
+    def test_stream_media_headers_head_and_range_probe(self):
+        trackid = self.format_trackids["flac"]
+        track = Track[trackid]
+        args = {
+            "u": "alice",
+            "p": "Alic3",
+            "c": "tests",
+            "id": str(trackid),
+        }
+
+        with closing(
+            self.client.head("/rest/stream.view", query_string=args)
+        ) as rv:
+            self.assertEqual(rv.status_code, 200)
+            self.assertEqual(rv.data, b"")
+            self.assertEqual(rv.headers["Accept-Ranges"], "bytes")
+            self.assertEqual(rv.headers["EmoSonic-Source-Container"], "flac")
+            self.assertEqual(rv.headers["EmoSonic-Output-Container"], "flac")
+            self.assertEqual(
+                rv.headers["EmoSonic-Source-Attached-Picture-Count"], "1"
+            )
+            self.assertEqual(
+                rv.headers["EmoSonic-Output-Attached-Picture-Count"], "1"
+            )
+            self.assertEqual(rv.headers["EmoSonic-Sanitized-Available"], "true")
+            self.assertEqual(
+                rv.headers["EmoSonic-Preferred-Compatible-Variant"],
+                "flac_no_picture",
+            )
+            self.assertEqual(rv.headers["EmoSonic-Stream-Variant"], "original")
+            self.assertEqual(
+                rv.headers["EmoSonic-Output-Content-Length"],
+                str(os.path.getsize(track.path)),
+            )
+        self.assertEqual(Track[trackid].play_count, 0)
+
+        with closing(
+            self.client.get(
+                "/rest/stream.view",
+                query_string=args,
+                headers={"Range": "bytes=0-0"},
+            )
+        ) as rv:
+            self.assertEqual(rv.status_code, 206)
+            self.assertEqual(rv.headers["Content-Length"], "1")
+            self.assertEqual(
+                rv.headers["Content-Range"],
+                f"bytes 0-0/{os.path.getsize(track.path)}",
+            )
+            self.assertEqual(
+                rv.headers["EmoSonic-Output-Content-Length"],
+                str(os.path.getsize(track.path)),
+            )
+            self.assertEqual(len(rv.data), 1)
+        self.assertEqual(Track[trackid].play_count, 0)
+
+    def test_stream_flac_no_picture_variant(self):
+        trackid = self.format_trackids["flac"]
+        args = {
+            "u": "alice",
+            "p": "Alic3",
+            "c": "tests",
+            "id": str(trackid),
+            "variant": "flac_no_picture",
+        }
+
+        with closing(self.client.get("/rest/stream.view", query_string=args)) as rv:
+            self.assertEqual(rv.status_code, 200)
+            self.assertEqual(rv.mimetype, "audio/flac")
+            self.assertEqual(rv.headers["Accept-Ranges"], "bytes")
+            self.assertEqual(
+                rv.headers["EmoSonic-Stream-Variant"], "flac_no_picture"
+            )
+            self.assertEqual(
+                rv.headers["EmoSonic-Source-Attached-Picture-Count"], "1"
+            )
+            self.assertEqual(
+                rv.headers["EmoSonic-Output-Attached-Picture-Count"], "0"
+            )
+            self.assertIn("EmoSonic-Sanitized-Fingerprint", rv.headers)
+            self.assertEqual(
+                rv.headers["EmoSonic-Output-Content-Length"],
+                rv.headers["Content-Length"],
+            )
+            self.assertEqual(len(FLAC(BytesIO(rv.data)).pictures), 0)
+        self.assertEqual(Track[trackid].play_count, 1)
+
+    def test_stream_media_headers_tolerate_none_images(self):
+        trackid = self.format_trackids["mp3"]
+        args = {
+            "u": "alice",
+            "p": "Alic3",
+            "c": "tests",
+            "id": str(trackid),
+        }
+        fake_tag = Mock(
+            type="mp3",
+            samplerate=44100,
+            bitdepth=0,
+            channels=2,
+            bitrate=128000,
+            length=4.8,
+            images=None,
+        )
+
+        with patch("supysonic.api.media.mediafile.MediaFile", return_value=fake_tag):
+            with closing(
+                self.client.get("/rest/stream.view", query_string=args)
+            ) as rv:
+                self.assertEqual(rv.status_code, 200)
+                self.assertEqual(
+                    rv.headers["EmoSonic-Source-Attached-Picture-Count"], "0"
+                )
+                self.assertEqual(
+                    rv.headers["EmoSonic-Output-Attached-Picture-Count"], "0"
+                )
+                self.assertEqual(rv.headers["EmoSonic-Sanitized-Available"], "false")
+
+    def test_stream_flac_headers_fall_back_to_mutagen_pictures(self):
+        trackid = self.format_trackids["flac"]
+        args = {
+            "u": "alice",
+            "p": "Alic3",
+            "c": "tests",
+            "id": str(trackid),
+        }
+        fake_tag = Mock(
+            type="flac",
+            samplerate=96000,
+            bitdepth=24,
+            channels=2,
+            bitrate=2867904,
+            length=180.0,
+            images=None,
+        )
+        fake_flac = Mock(
+            pictures=[
+                Mock(
+                    mime="image/png",
+                    width=4000,
+                    height=4000,
+                    data=b"image",
+                )
+            ]
+        )
+
+        with patch("supysonic.api.media.mediafile.MediaFile", return_value=fake_tag):
+            with patch("supysonic.api.media.FLAC", return_value=fake_flac):
+                with closing(
+                    self.client.head("/rest/stream.view", query_string=args)
+                ) as rv:
+                    self.assertEqual(rv.status_code, 200)
+                    self.assertEqual(
+                        rv.headers["EmoSonic-Source-Attached-Picture-Count"], "1"
+                    )
+                    self.assertEqual(
+                        rv.headers["EmoSonic-Source-Attached-Picture-Codec"], "png"
+                    )
+                    self.assertEqual(
+                        rv.headers["EmoSonic-Source-Attached-Picture-Width"], "4000"
+                    )
+                    self.assertEqual(
+                        rv.headers["EmoSonic-Source-Attached-Picture-Height"], "4000"
+                    )
+                    self.assertEqual(
+                        rv.headers["EmoSonic-Sanitized-Available"], "true"
+                    )
+
+    def test_stream_variant_errors_have_http_status(self):
+        base_args = {
+            "u": "alice",
+            "p": "Alic3",
+            "c": "tests",
+            "id": str(self.trackid),
+        }
+
+        args = dict(base_args, variant="unknown")
+        with closing(self.client.get("/rest/stream.view", query_string=args)) as rv:
+            self.assertEqual(rv.status_code, 400)
+
+        args = dict(base_args, variant="flac_no_picture")
+        with closing(self.client.get("/rest/stream.view", query_string=args)) as rv:
+            self.assertEqual(rv.status_code, 404)
+
+        args = dict(
+            base_args,
+            id=str(self.format_trackids["flac"]),
+            variant="flac_no_picture",
+        )
+        with patch(
+            "supysonic.api.media._get_or_create_flac_no_picture",
+            side_effect=OSError("boom"),
+        ):
+            with closing(
+                self.client.get("/rest/stream.view", query_string=args)
+            ) as rv:
+                self.assertEqual(rv.status_code, 500)
 
     def test_download(self):
         self._make_request("download", error=10)

@@ -11,6 +11,7 @@ from flask import Response, flash, redirect, render_template, request, url_for
 from functools import wraps
 
 from ..db import Playlist
+from ..recommend import non_recommended_playlist_where
 
 from . import frontend
 
@@ -19,8 +20,15 @@ from . import frontend
 def playlist_index():
     return render_template(
         "playlists.html",
-        mine=Playlist.select().where(Playlist.user == request.user),
-        others=Playlist.select().where(Playlist.user != request.user, Playlist.public),
+        mine=Playlist.select().where(
+            Playlist.user == request.user,
+            non_recommended_playlist_where(),
+        ),
+        others=Playlist.select().where(
+            Playlist.user != request.user,
+            Playlist.public,
+            non_recommended_playlist_where(),
+        ),
     )
 
 

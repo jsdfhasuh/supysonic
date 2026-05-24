@@ -58,6 +58,10 @@ class AccessLoggingTestCase(unittest.TestCase):
         def rest_ping():
             return "ok"
 
+        @app.route("/rest/stream")
+        def stream():
+            return "stream"
+
         @app.route("/page")
         def page():
             return "page"
@@ -172,6 +176,42 @@ class AccessLoggingTestCase(unittest.TestCase):
         self.assertIn("access event=request", access_content)
         self.assertIn("path=/download", access_content)
         self.assertIn("status=200", access_content)
+
+    def test_logs_stream_requests_to_stream_log_with_sanitized_headers(self):
+        app = self._create_app()
+        client = app.test_client()
+
+        response = client.get(
+            "/rest/stream?u=root&t=abc&s=def&id=track-1",
+            headers={
+                "Authorization": "Bearer secret-token",
+                "Range": "bytes=0-0",
+                "User-Agent": "TestPlayer/1.0",
+                "X-Release-Token": "release-secret",
+                "X-Request-ID": "stream-req-1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        with open(os.path.join(self._tmp_dir, "stream.log"), "r", encoding="utf-8") as f:
+            stream_content = f.read()
+        with open(os.path.join(self._tmp_dir, "access.log"), "r", encoding="utf-8") as f:
+            access_content = f.read()
+
+        self.assertIn("stream event=request", stream_content)
+        self.assertIn("type=REST", stream_content)
+        self.assertIn("request_id=stream-req-1", stream_content)
+        self.assertIn("path=/rest/stream", stream_content)
+        self.assertIn('query="u=root&t=***&s=***&id=track-1"', stream_content)
+        self.assertIn("headers=", stream_content)
+        self.assertIn("authorization=***", stream_content)
+        self.assertIn("range=bytes=0-0", stream_content)
+        self.assertIn("user-agent=TestPlayer/1.0", stream_content)
+        self.assertIn("x-release-token=***", stream_content)
+        self.assertNotIn("secret-token", stream_content)
+        self.assertNotIn("release-secret", stream_content)
+        self.assertIn("access event=request", access_content)
+        self.assertIn("path=/rest/stream", access_content)
 
 
 class SocketAccessLoggingTestCase(unittest.TestCase):

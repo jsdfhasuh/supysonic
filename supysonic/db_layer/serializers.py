@@ -6,7 +6,7 @@ from peewee import fn
 
 
 def serialize_folder_child(folder, user):
-    from supysonic.db import RatingFolder, StarredFolder
+    from .annotations import RatingFolder, StarredFolder
 
     info = {
         "id": str(folder.id),
@@ -50,7 +50,7 @@ def serialize_folder_child(folder, user):
 
 
 def serialize_folder_artist(folder, user):
-    from supysonic.db import StarredFolder
+    from .annotations import StarredFolder
 
     info = {"id": str(folder.id), "name": folder.name}
 
@@ -64,7 +64,7 @@ def serialize_folder_artist(folder, user):
 
 
 def serialize_folder_directory(folder, user, client):
-    from supysonic.db import Folder
+    from .library import Folder
 
     info = {
         "id": str(folder.id),
@@ -85,7 +85,8 @@ def serialize_folder_directory(folder, user, client):
 
 
 def serialize_artist(artist, user):
-    from supysonic.db import Album, AlbumArtist, StarredArtist
+    from .annotations import StarredArtist
+    from .library import Album, AlbumArtist
 
     album_count = (
         Album.select()
@@ -118,7 +119,8 @@ def serialize_artist(artist, user):
 
 
 def serialize_album(album, user, server_type=None):
-    from supysonic.db import Folder, StarredAlbum, Track
+    from .annotations import StarredAlbum
+    from .library import Folder, Track
 
     server_name = (server_type or "").lower()
     is_music_client = "music" in server_name
@@ -210,7 +212,7 @@ def serialize_album(album, user, server_type=None):
 
 
 def serialize_track_child(track, user, prefs):
-    from supysonic.db import RatingTrack, StarredTrack
+    from .annotations import RatingTrack, StarredTrack
 
     info = {
         "id": str(track.id),

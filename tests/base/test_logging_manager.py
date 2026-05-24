@@ -51,6 +51,7 @@ class LoggingManagerTestCase(unittest.TestCase):
                 "emo.log",
                 "metadata.log",
                 "scanner.log",
+                "stream.log",
                 "supysonic.log",
                 "task.log",
             ],
@@ -73,7 +74,7 @@ class LoggingManagerTestCase(unittest.TestCase):
             handler for handler in self.base_logger.handlers if isinstance(handler, TimedRotatingFileHandler)
         ]
 
-        self.assertEqual(len(rotating_handlers), 7)
+        self.assertEqual(len(rotating_handlers), 8)
         self.assertTrue(all(handler.when == "MIDNIGHT" for handler in rotating_handlers))
         self.assertTrue(all(handler.backupCount == 9 for handler in rotating_handlers))
 
@@ -141,6 +142,7 @@ class LoggingManagerTestCase(unittest.TestCase):
         logging.getLogger(f"{self.logger_name}.scanner_func.scanner_enrich").info("scanner event")
         logging.getLogger(f"{self.logger_name}.api.browse").info("api event")
         logging.getLogger(f"{self.logger_name}.frontend.metadata").info("metadata event")
+        logging.getLogger(f"{self.logger_name}.stream").info("stream event")
 
         with open(os.path.join(self._tmp_dir, "task.log"), "r", encoding="utf-8") as f:
             task_content = f.read()
@@ -152,6 +154,8 @@ class LoggingManagerTestCase(unittest.TestCase):
             api_content = f.read()
         with open(os.path.join(self._tmp_dir, "metadata.log"), "r", encoding="utf-8") as f:
             metadata_content = f.read()
+        with open(os.path.join(self._tmp_dir, "stream.log"), "r", encoding="utf-8") as f:
+            stream_content = f.read()
         with open(os.path.join(self._tmp_dir, "supysonic.log"), "r", encoding="utf-8") as f:
             summary_content = f.read()
 
@@ -164,11 +168,14 @@ class LoggingManagerTestCase(unittest.TestCase):
         self.assertIn("api event", api_content)
         self.assertIn("metadata event", metadata_content)
         self.assertNotIn("metadata event", api_content)
+        self.assertIn("stream event", stream_content)
+        self.assertNotIn("stream event", api_content)
         self.assertIn("task event", summary_content)
         self.assertIn("emo event", summary_content)
         self.assertIn("scanner event", summary_content)
         self.assertIn("api event", summary_content)
         self.assertIn("metadata event", summary_content)
+        self.assertIn("stream event", summary_content)
 
     def test_routes_access_logger_to_access_and_summary_logs(self):
         from supysonic.logging_manager import configure_web_logging
@@ -191,7 +198,10 @@ class LoggingManagerTestCase(unittest.TestCase):
             summary_content = f.read()
         with open(os.path.join(self._tmp_dir, "task.log"), "r", encoding="utf-8") as f:
             task_content = f.read()
+        with open(os.path.join(self._tmp_dir, "stream.log"), "r", encoding="utf-8") as f:
+            stream_content = f.read()
 
         self.assertIn("[ACCESS:REST] example", access_content)
         self.assertIn("[ACCESS:REST] example", summary_content)
         self.assertNotIn("[ACCESS:REST] example", task_content)
+        self.assertNotIn("[ACCESS:REST] example", stream_content)

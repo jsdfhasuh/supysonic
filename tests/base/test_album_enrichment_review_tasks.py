@@ -1,7 +1,8 @@
 import json
 import unittest
+from datetime import timedelta
 
-from supysonic.db import Album, Artist, ReviewTask
+from supysonic.db import Album, Artist, ReviewTask, now
 from supysonic.scanner_func.scanner_review_tasks import (
     EXTERNAL_ENRICHMENT_REVIEW_REASON,
     METADATA_REVIEW_TASK_TYPE,
@@ -40,6 +41,9 @@ class AlbumEnrichmentReviewTaskTestCase(TestBase):
         task = ReviewTask.get(ReviewTask.entity_id == str(album.id))
         self.assertEqual(task.reason, EXTERNAL_ENRICHMENT_REVIEW_REASON)
         self.assertEqual(task.pending_key, f"album:{album.id}:pending:external_enrichment")
+        self.assertIsNotNone(task.expires_at)
+        self.assertGreaterEqual(task.expires_at, now() + timedelta(days=2))
+        self.assertLessEqual(task.expires_at, now() + timedelta(days=3, seconds=1))
         output = "\n".join(logs.output)
         self.assertIn("scanner event=external_enrichment_review_task_created", output)
         self.assertIn(f"album_id={album.id}", output)

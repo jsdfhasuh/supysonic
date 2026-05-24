@@ -35,4 +35,9 @@ from .db_layer.runtime import (
     release_database,
 )
 from .db_layer.schema import SCHEMA_VERSION, execute_sql_resource_script
-from .db_layer.users import ClientPrefs, User, User_Play_Activity
+from .db_layer.users import (
+    ClientPrefs,
+    User,
+    User_Play_Activity,
+    UserRecommendationFeedback,
+)

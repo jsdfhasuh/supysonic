@@ -68,6 +68,8 @@ class DefaultConfig:
         "recommend_daily_refresh": True,
         "recommend_refresh_interval": 300,
         "recommend_playlist_size": 50,
+        "recommend_playlist_archive_enabled": True,
+        "recommend_playlist_retention_days": 5,
         "review_task_maintenance": True,
         "review_task_maintenance_interval": 300,
     }

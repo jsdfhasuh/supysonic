@@ -25,6 +25,10 @@ NEW_ARTIST_REVIEW_REASON = "new_artist"
 MISSING_IMAGE_REVIEW_REASON = "missing_image"
 NEW_ARTIST_REVIEW_TTL_DAYS = 7
 NEW_ALBUM_REVIEW_TTL_DAYS = 3
+AUTO_CONFIRM_ALBUM_REVIEW_REASONS = (
+    NEW_ALBUM_REVIEW_REASON,
+    EXTERNAL_ENRICHMENT_REVIEW_REASON,
+)
 
 
 def rememberNewAlbum(scanner: Scanner, album: Album) -> None:
@@ -118,7 +122,7 @@ def getArtistReviewIssues(artist) -> list[str]:
 def _getTaskExpiry(task) -> object:
     if task.reason == NEW_ARTIST_REVIEW_REASON:
         return now() + timedelta(days=NEW_ARTIST_REVIEW_TTL_DAYS)
-    if task.reason == NEW_ALBUM_REVIEW_REASON:
+    if task.reason in AUTO_CONFIRM_ALBUM_REVIEW_REASONS:
         issues = json.loads(task.snapshot_json or "{}").get("issues", [])
         if not issues:
             return now() + timedelta(days=NEW_ALBUM_REVIEW_TTL_DAYS)
@@ -309,13 +313,15 @@ def removeSupersededPendingNewArtistTasks() -> int:
     return removed
 
 
-def logPendingReviewTasks(context: str) -> int:
+def logPendingReviewTasks(context: str, include_details: bool = True) -> int:
     pending_tasks = list(
         ReviewTask.select()
         .where(ReviewTask.status == PENDING_REVIEW_TASK_STATUS)
         .order_by(ReviewTask.created.asc())
     )
     logger.info("Pending review tasks after %s: %d", context, len(pending_tasks))
+    if not include_details:
+        return len(pending_tasks)
     for task in pending_tasks:
         expires_at = task.expires_at.isoformat() if task.expires_at is not None else "-"
         logger.info(
@@ -558,12 +564,12 @@ def expirePendingNewArtistTasks() -> int:
     return updated
 
 
-def backfillPendingNewAlbumTaskExpiries() -> int:
+def backfillPendingAlbumTaskExpiries() -> int:
     updated = 0
     query = ReviewTask.select().where(
         ReviewTask.entity_type == "album",
         ReviewTask.status == PENDING_REVIEW_TASK_STATUS,
-        ReviewTask.reason == NEW_ALBUM_REVIEW_REASON,
+        ReviewTask.reason.in_(AUTO_CONFIRM_ALBUM_REVIEW_REASONS),
         ReviewTask.expires_at.is_null(True),
     )
     for task in query:
@@ -577,13 +583,13 @@ def backfillPendingNewAlbumTaskExpiries() -> int:
     return updated
 
 
-def confirmCleanNewAlbumTasks() -> int:
+def confirmCleanAutoExpireAlbumTasks() -> int:
     updated = 0
     current_time = now()
     query = ReviewTask.select().where(
         ReviewTask.entity_type == "album",
         ReviewTask.status == PENDING_REVIEW_TASK_STATUS,
-        ReviewTask.reason == NEW_ALBUM_REVIEW_REASON,
+        ReviewTask.reason.in_(AUTO_CONFIRM_ALBUM_REVIEW_REASONS),
         ReviewTask.expires_at.is_null(False),
         ReviewTask.expires_at <= current_time,
     )
@@ -624,8 +630,8 @@ def createReviewTaskMaintenance() -> int:
         + removeSupersededPendingNewArtistTasks()
         +
         expirePendingNewArtistTasks()
-        + backfillPendingNewAlbumTaskExpiries()
-        + confirmCleanNewAlbumTasks()
+        + backfillPendingAlbumTaskExpiries()
+        + confirmCleanAutoExpireAlbumTasks()
     )
 
 
@@ -633,7 +639,7 @@ def runReviewTaskMaintenance() -> int:
     open_connection(reuse=True)
     try:
         updated = createReviewTaskMaintenance()
-        logPendingReviewTasks("maintenance")
+        logPendingReviewTasks("maintenance", include_details=False)
         return updated
     finally:
         close_connection()

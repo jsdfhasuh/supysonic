@@ -322,6 +322,70 @@ class DbTestCase(unittest.TestCase):
         playlist.tracks = "{0},{0},some random garbage,{0}".format(track1.id)
         self.assertSequenceEqual(playlist.get_tracks(), [track1, track1, track1])
 
+    def test_delete_hierarchy_cleans_related_state(self):
+        root, child, _ = self.create_some_folders()
+        track = self.create_track_in(child, root)
+        user = self.create_user()
+
+        user.last_play = track
+        user.save()
+        db.StarredTrack.create(user=user, starred=track)
+        db.RatingTrack.create(user=user, rated=track, rating=4)
+        db.StarredFolder.create(user=user, starred=child)
+        db.RatingFolder.create(user=user, rated=child, rating=3)
+
+        deleted_tracks = child.delete_hierarchy()
+
+        self.assertEqual(deleted_tracks, 1)
+        self.assertIsNone(db.User[user.id].last_play)
+        self.assertEqual(db.Track.select().where(db.Track.id == track.id).count(), 0)
+        self.assertEqual(db.Folder.select().where(db.Folder.id == child.id).count(), 0)
+        self.assertEqual(db.StarredTrack.select().count(), 0)
+        self.assertEqual(db.RatingTrack.select().count(), 0)
+        self.assertEqual(db.StarredFolder.select().count(), 0)
+        self.assertEqual(db.RatingFolder.select().count(), 0)
+
+    def test_album_prune_cleans_orphan_annotations_and_relations(self):
+        root, child, _ = self.create_some_folders()
+        artist = db.Artist.create(name="Kept Artist")
+        kept_album = db.Album.create(artist=artist, name="Kept Album")
+        orphan_album = db.Album.create(artist=artist, name="Orphan Album")
+        collaborator = db.Artist.create(name="Collaborator")
+        user = self.create_user()
+
+        self.create_track_in(child, root, artist=artist, album=kept_album)
+        db.AlbumArtist.create(album_id=orphan_album, artist_id=collaborator)
+        db.StarredAlbum.create(user=user, starred=orphan_album)
+
+        deleted_albums = db.Album.prune()
+
+        self.assertEqual(deleted_albums, 1)
+        self.assertTrue(db.Album.select().where(db.Album.id == kept_album.id).exists())
+        self.assertFalse(
+            db.Album.select().where(db.Album.id == orphan_album.id).exists()
+        )
+        self.assertFalse(db.StarredAlbum.select().exists())
+        self.assertFalse(db.AlbumArtist.select().exists())
+
+    def test_artist_prune_cleans_orphan_annotations(self):
+        kept_artist = db.Artist.create(name="Kept Artist")
+        orphan_artist = db.Artist.create(name="Orphan Artist")
+        user = self.create_user()
+
+        db.Album.create(artist=kept_artist, name="Kept Album")
+        db.StarredArtist.create(user=user, starred=orphan_artist)
+
+        deleted_artists = db.Artist.prune()
+
+        self.assertEqual(deleted_artists, 1)
+        self.assertTrue(
+            db.Artist.select().where(db.Artist.id == kept_artist.id).exists()
+        )
+        self.assertFalse(
+            db.Artist.select().where(db.Artist.id == orphan_artist.id).exists()
+        )
+        self.assertFalse(db.StarredArtist.select().exists())
+
 
 if __name__ == "__main__":
     unittest.main()

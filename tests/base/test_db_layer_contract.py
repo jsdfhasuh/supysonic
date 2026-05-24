@@ -1,8 +1,33 @@
+import ast
 import importlib
+from pathlib import Path
+from typing import Iterator
 import unittest
 
 
 class DbLayerContractTestCase(unittest.TestCase):
+    def _is_relative_to(self, path: Path, parent: Path) -> bool:
+        try:
+            path.relative_to(parent)
+        except ValueError:
+            return False
+        return True
+
+    def _iter_imported_modules(self, file_path: Path) -> Iterator[str]:
+        tree = ast.parse(
+            file_path.read_text(encoding="utf-8"), filename=str(file_path)
+        )
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    yield alias.name
+            elif isinstance(node, ast.ImportFrom):
+                if node.module is None:
+                    continue
+                prefix = "." * node.level
+                yield prefix + node.module
+
     def test_db_facade_exports_existing_public_names(self):
         db_module = importlib.import_module("supysonic.db")
         expected_names = [
@@ -24,6 +49,7 @@ class DbLayerContractTestCase(unittest.TestCase):
             "TrackArtist",
             "User",
             "User_Play_Activity",
+            "UserRecommendationFeedback",
             "ClientPrefs",
             "EmoSessionQueue",
             "EmoLocalQueue",
@@ -100,6 +126,40 @@ class DbLayerContractTestCase(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertTrue(hasattr(serializers, name))
 
+    def test_db_layer_modules_do_not_import_facade(self):
+        package_dir = (
+            Path(importlib.import_module("supysonic.db_layer").__file__)
+            .resolve()
+            .parent
+        )
+
+        for path in sorted(package_dir.glob("*.py")):
+            if path.name == "__init__.py":
+                continue
+
+            for module_name in self._iter_imported_modules(path):
+                with self.subTest(path=path.name, module=module_name):
+                    self.assertNotEqual(module_name, "supysonic.db")
+
+    def test_non_db_modules_do_not_import_db_layer_directly(self):
+        package_dir = (
+            Path(importlib.import_module("supysonic").__file__).resolve().parent
+        )
+        db_layer_dir = package_dir / "db_layer"
+        allowed_file = package_dir / "db.py"
+
+        for path in sorted(package_dir.rglob("*.py")):
+            if path == allowed_file or self._is_relative_to(path, db_layer_dir):
+                continue
+
+            for module_name in self._iter_imported_modules(path):
+                with self.subTest(
+                    path=str(path.relative_to(package_dir)), module=module_name
+                ):
+                    self.assertFalse(module_name.startswith("supysonic.db_layer"))
+                    self.assertFalse(module_name.startswith(".db_layer"))
+                    self.assertFalse(module_name.startswith("..db_layer"))
+
     def test_low_dependency_models_are_shared_with_facade(self):
         db_module = importlib.import_module("supysonic.db")
         emo = importlib.import_module("supysonic.db_layer.emo")
@@ -133,7 +193,12 @@ class DbLayerContractTestCase(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertIs(getattr(db_module, name), getattr(library, name))
 
-        for name in ("User", "User_Play_Activity", "ClientPrefs"):
+        for name in (
+            "User",
+            "User_Play_Activity",
+            "UserRecommendationFeedback",
+            "ClientPrefs",
+        ):
             with self.subTest(name=name):
                 self.assertIs(getattr(db_module, name), getattr(users, name))
 

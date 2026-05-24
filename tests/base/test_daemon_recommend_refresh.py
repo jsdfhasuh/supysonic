@@ -34,7 +34,11 @@ class DaemonRecommendRefreshTestCase(unittest.TestCase):
                 daemon._Daemon__refresh_recommend_playlists_if_needed(current_day="2026-05-02")
             )
 
-        refresh_daily.assert_called_once_with(num_songs=25, day="2026-05-02")
+        refresh_daily.assert_called_once_with(
+            num_songs=25,
+            day="2026-05-02",
+            config=daemon._Daemon__config,
+        )
 
     def test_refresh_recommend_playlists_retries_same_day_after_failure(self):
         daemon = self.createDaemon(recommend_playlist_size=10)
@@ -71,7 +75,11 @@ class DaemonRecommendRefreshTestCase(unittest.TestCase):
                 daemon._Daemon__refresh_recommend_playlists_if_needed(current_day="2026-05-02")
             )
 
-        refresh_daily.assert_called_once_with(num_songs=10, day="2026-05-02")
+        refresh_daily.assert_called_once_with(
+            num_songs=10,
+            day="2026-05-02",
+            config=daemon._Daemon__config,
+        )
 
     def test_configure_scheduler_registers_maintenance_and_recommend_jobs(self):
         daemon = self.createDaemon(

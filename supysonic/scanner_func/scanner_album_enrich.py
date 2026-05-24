@@ -14,6 +14,9 @@ from ..logging_utils import format_log_event
 
 logger = logging.getLogger(__name__)
 
+ENRICHMENT_ATTEMPTS_KEY = "enrichment_attempts"
+STABLE_ENRICHMENT_ATTEMPT_STATUSES = {"matched", "empty", "skipped"}
+
 
 def _normalize_list(value: object) -> List[str]:
     if not value:
@@ -231,18 +234,74 @@ def setAlbumInfo(album: Album, info: Dict[str, Any]) -> None:
     album.album_info_json = json.dumps(info, ensure_ascii=False, sort_keys=True)
 
 
-def collectAlbumsNeedingEnrichment() -> List[Album]:
+def _get_album_enrichment_attempts(album_info: Dict[str, Any]) -> Dict[str, Any]:
+    attempts = album_info.get(ENRICHMENT_ATTEMPTS_KEY)
+    return attempts if isinstance(attempts, dict) else {}
+
+
+def _has_stable_provider_attempt(
+    album_info: Dict[str, Any],
+    provider: str,
+    artist_name: str,
+    album_name: str,
+) -> bool:
+    attempt = _get_album_enrichment_attempts(album_info).get(provider)
+    if not isinstance(attempt, dict):
+        return False
+    if attempt.get("status") not in STABLE_ENRICHMENT_ATTEMPT_STATUSES:
+        return False
+    return attempt.get("artist") == artist_name and attempt.get("album") == album_name
+
+
+def _record_provider_attempt(
+    album: Album,
+    provider: str,
+    artist_name: str,
+    status: str,
+    reason: Optional[str] = None,
+) -> None:
+    album_info = getAlbumInfo(album)
+    attempts = dict(_get_album_enrichment_attempts(album_info))
+    attempt = {
+        "status": status,
+        "attempted_at": now().isoformat(),
+        "artist": artist_name,
+        "album": album.name,
+    }
+    if reason:
+        attempt["reason"] = reason
+    attempts[provider] = attempt
+    album_info[ENRICHMENT_ATTEMPTS_KEY] = attempts
+    setAlbumInfo(album, album_info)
+    album.save()
+
+
+def collectAlbumsNeedingEnrichment(discogs_enabled: bool = True) -> List[Album]:
     albums = []
     for album in Album.select():
         album_info = getAlbumInfo(album)
-        if (
-            album.year
-            and album.release_date
-            and album.release_type
-            and album_info.get("primary_genre")
-        ):
-            continue
-        albums.append(album)
+        artist_name = album.artist.get_artist_name()
+        needs_musicbrainz = (
+            not (album.year and album.release_date and album.release_type)
+            and not _has_stable_provider_attempt(
+                album_info,
+                "musicbrainz",
+                artist_name,
+                album.name,
+            )
+        )
+        needs_discogs = (
+            discogs_enabled
+            and not album_info.get("primary_genre")
+            and not _has_stable_provider_attempt(
+                album_info,
+                "discogs",
+                artist_name,
+                album.name,
+            )
+        )
+        if needs_musicbrainz or needs_discogs:
+            albums.append(album)
     return albums
 
 
@@ -454,7 +513,11 @@ def runAlbumEnrichmentPass(
     if discogs_client is None and hasattr(scanner, "scan_config"):
         discogs_client = DiscogsClient(getattr(scanner.scan_config, "DISCOGS", {}))
     discogs_enabled = _isDiscogsEnabled(trace_logger, discogs_client)
-    album_list = list(albums) if albums is not None else collectAlbumsNeedingEnrichment()
+    album_list = (
+        list(albums)
+        if albums is not None
+        else collectAlbumsNeedingEnrichment(discogs_enabled=discogs_enabled)
+    )
     processed = 0
     matched = 0
     applied = 0
@@ -477,57 +540,97 @@ def runAlbumEnrichmentPass(
             musicbrainz_result = {}
             discogs_result = {}
 
-            try:
-                musicbrainz_payload = musicbrainz_client.search_album(
-                    artist_name,
-                    album.name,
-                )
-                if _isProviderAlbumMatch(
-                    "musicbrainz",
-                    artist_name,
-                    album.name,
-                    musicbrainz_payload,
-                ):
-                    _logProviderResult(
-                        trace_logger,
-                        "musicbrainz",
-                        album,
+            if not _has_stable_provider_attempt(
+                getAlbumInfo(album),
+                "musicbrainz",
+                artist_name,
+                album.name,
+            ):
+                try:
+                    musicbrainz_payload = musicbrainz_client.search_album(
                         artist_name,
-                        "matched",
+                        album.name,
+                    )
+                    if _isProviderAlbumMatch(
+                        "musicbrainz",
+                        artist_name,
+                        album.name,
                         musicbrainz_payload,
-                    )
-                    musicbrainz_result = normalizeMusicBrainzAlbum(musicbrainz_payload)
-                elif musicbrainz_payload:
+                    ):
+                        _logProviderResult(
+                            trace_logger,
+                            "musicbrainz",
+                            album,
+                            artist_name,
+                            "matched",
+                            musicbrainz_payload,
+                        )
+                        _record_provider_attempt(
+                            album,
+                            "musicbrainz",
+                            artist_name,
+                            "matched",
+                        )
+                        musicbrainz_result = normalizeMusicBrainzAlbum(
+                            musicbrainz_payload,
+                        )
+                    elif musicbrainz_payload:
+                        _logProviderResult(
+                            trace_logger,
+                            "musicbrainz",
+                            album,
+                            artist_name,
+                            "skipped",
+                            musicbrainz_payload,
+                            reason="candidate_mismatch",
+                        )
+                        _record_provider_attempt(
+                            album,
+                            "musicbrainz",
+                            artist_name,
+                            "skipped",
+                            reason="candidate_mismatch",
+                        )
+                    else:
+                        _logProviderResult(
+                            trace_logger,
+                            "musicbrainz",
+                            album,
+                            artist_name,
+                            "empty",
+                            reason="no_result",
+                        )
+                        _record_provider_attempt(
+                            album,
+                            "musicbrainz",
+                            artist_name,
+                            "empty",
+                            reason="no_result",
+                        )
+                except Exception as exc:
                     _logProviderResult(
                         trace_logger,
                         "musicbrainz",
                         album,
                         artist_name,
-                        "skipped",
-                        musicbrainz_payload,
-                        reason="candidate_mismatch",
+                        "failed",
+                        reason="provider_error",
+                        error=exc,
                     )
-                else:
-                    _logProviderResult(
-                        trace_logger,
-                        "musicbrainz",
+                    _record_provider_attempt(
                         album,
+                        "musicbrainz",
                         artist_name,
-                        "empty",
-                        reason="no_result",
+                        "failed",
+                        reason="provider_error",
                     )
-            except Exception as exc:
-                _logProviderResult(
-                    trace_logger,
-                    "musicbrainz",
-                    album,
-                    artist_name,
-                    "failed",
-                    reason="provider_error",
-                    error=exc,
-                )
 
-            if discogs_enabled:
+            if discogs_enabled and not _has_stable_provider_attempt(
+                getAlbumInfo(album),
+                "discogs",
+                artist_name,
+                album.name,
+            ):
                 try:
                     discogs_payload = discogs_client.search_album(artist_name, album.name)
                     if _isProviderAlbumMatch(
@@ -544,6 +647,12 @@ def runAlbumEnrichmentPass(
                             "matched",
                             discogs_payload,
                         )
+                        _record_provider_attempt(
+                            album,
+                            "discogs",
+                            artist_name,
+                            "matched",
+                        )
                         discogs_result = normalizeDiscogsAlbum(discogs_payload)
                     elif discogs_payload:
                         _logProviderResult(
@@ -555,11 +664,25 @@ def runAlbumEnrichmentPass(
                             discogs_payload,
                             reason="candidate_mismatch",
                         )
+                        _record_provider_attempt(
+                            album,
+                            "discogs",
+                            artist_name,
+                            "skipped",
+                            reason="candidate_mismatch",
+                        )
                     else:
                         _logProviderResult(
                             trace_logger,
                             "discogs",
                             album,
+                            artist_name,
+                            "empty",
+                            reason="no_result",
+                        )
+                        _record_provider_attempt(
+                            album,
+                            "discogs",
                             artist_name,
                             "empty",
                             reason="no_result",
@@ -573,6 +696,13 @@ def runAlbumEnrichmentPass(
                         "failed",
                         reason="provider_error",
                         error=exc,
+                    )
+                    _record_provider_attempt(
+                        album,
+                        "discogs",
+                        artist_name,
+                        "failed",
+                        reason="provider_error",
                     )
 
             enrichment = mergeAlbumEnrichment(musicbrainz_result, discogs_result)

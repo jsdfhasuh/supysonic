@@ -107,7 +107,7 @@ Configuration relative to the HTTP server.
 
 ``log_dir``
    Optional directory for structured web logs. When set, Supysonic writes
-   :file:`supysonic.log`, :file:`access.log`, :file:`task.log`,
+   :file:`supysonic.log`, :file:`access.log`, :file:`stream.log`, :file:`task.log`,
    :file:`emo.log`, :file:`scanner.log`, :file:`api.log`, and
    :file:`metadata.log` there. If ``log_level`` is ``DEBUG``, it also writes
    :file:`web.debug.log`.
@@ -177,8 +177,8 @@ Sample configuration::
    transcode_cache_size = 1024
 
    ; Optional log directory for structured web logs. When set, Supysonic writes
-   ; supysonic.log, access.log, task.log, emo.log, scanner.log, api.log and
-   ; metadata.log here. At DEBUG level it also writes web.debug.log.
+   ; supysonic.log, access.log, stream.log, task.log, emo.log, scanner.log,
+   ; api.log and metadata.log here. At DEBUG level it also writes web.debug.log.
    ; Default: none
    log_dir = /log/web
 
@@ -265,6 +265,28 @@ library folders and providing the jukebox feature.
    Set it to ``no`` if you don't want to rotate the logs or if you use external
    utilities such as :command:`logrotate`. Defaults to ``yes``.
 
+``recommend_daily_refresh``
+   Whether the daemon should create recommended playlists automatically.
+   Defaults to ``yes``.
+
+``recommend_refresh_interval``
+   Poll interval, in seconds, for the daily recommendation refresh check.
+   Defaults to ``300``.
+
+``recommend_playlist_size``
+   Number of tracks to include in each generated recommended playlist.
+   Defaults to ``50``.
+
+``recommend_playlist_archive_enabled``
+   Whether recommended playlists older than the retention window should be
+   archived to JSON and removed from the playlist table during the recommendation
+   creation task. Defaults to ``yes``.
+
+``recommend_playlist_retention_days``
+   Number of recommendation days to keep in the playlist table. Older
+   recommended playlists are archived under
+   :file:`<webapp.cache_dir>/recommend-playlists/<user>/`. Defaults to ``5``.
+
 Sample configuration::
 
    [daemon]
@@ -297,6 +319,26 @@ Sample configuration::
 
    ; Enable log rotation. Default: yes
    log_rotate = yes
+
+   ; Create recommended playlists automatically each day. Default: yes
+   recommend_daily_refresh = yes
+
+   ; Poll interval in seconds for the daily recommendation refresh check.
+   ; Default: 300
+   recommend_refresh_interval = 300
+
+   ; Number of tracks to include in each generated recommended playlist.
+   ; Default: 50
+   recommend_playlist_size = 50
+
+   ; Archive recommended playlists older than the retention window into JSON
+   ; files under <webapp.cache_dir>/recommend-playlists/<user>/. Default: yes
+   recommend_playlist_archive_enabled = yes
+
+   ; Keep only this many recommendation days in the playlist table. Older
+   ; ones are archived to JSON when the recommendation creation task runs.
+   ; Default: 5
+   recommend_playlist_retention_days = 5
 
 .. _conf-musicbrainz:
 

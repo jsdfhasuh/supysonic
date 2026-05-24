@@ -7,6 +7,7 @@
 
 import unittest
 import sys
+from unittest.mock import patch
 
 from flask import current_app
 
@@ -52,6 +53,36 @@ class TranscodingTestCase(ApiTestBase):
         self.assertTrue(rv.data.endswith(b"96"))
         self.assertIn("Content-Length", rv.headers)
         self.assertEqual(rv.content_length, 48000)  # 4s at 96kbps
+        self.assertEqual(rv.headers["EmoSonic-Stream-Variant"], "transcode")
+        self.assertEqual(rv.headers["EmoSonic-Source-Container"], "mp3")
+        self.assertEqual(rv.headers["EmoSonic-Output-Container"], "mp3")
+        self.assertEqual(rv.headers["EmoSonic-Output-Audio-Bitrate"], "96000")
+        self.assertNotIn("EmoSonic-Output-Content-Length", rv.headers)
+
+    @unittest.skipIf(
+        sys.platform == "win32",
+        "Can't test transcoding on Windows because of a lack of simple commandline tools",
+    )
+    def test_head_transcode_probe_does_not_start_uncached_transcoder(self):
+        args = {
+            "u": "alice",
+            "p": "Alic3",
+            "c": "tests",
+            "v": "1.9.0",
+            "id": self.trackid,
+            "maxBitRate": 96,
+            "estimateContentLength": "true",
+        }
+
+        with patch("supysonic.api.media.subprocess.Popen") as popen:
+            rv = self.client.head("/rest/stream.view", query_string=args)
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertEqual(rv.data, b"")
+        self.assertEqual(rv.headers["EmoSonic-Stream-Variant"], "transcode")
+        self.assertEqual(rv.headers["EmoSonic-Output-Audio-Bitrate"], "96000")
+        self.assertEqual(rv.headers["Content-Length"], "48000")
+        popen.assert_not_called()
 
     @unittest.skipIf(
         sys.platform == "win32",

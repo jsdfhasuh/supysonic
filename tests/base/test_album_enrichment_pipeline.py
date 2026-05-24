@@ -2,6 +2,8 @@ import json
 import os
 import tempfile
 import unittest
+from typing import Any, Dict, Set
+from uuid import UUID
 
 from supysonic.db import Album, Artist, Folder, Track
 from supysonic.scanner_func.scanner_album_enrich import (
@@ -47,6 +49,17 @@ class AlbumEnrichmentPipelineTestCase(TestBase):
             self.createAlbumFixture(name="First Album"),
             self.createAlbumFixture(name="Second Album"),
         ]
+
+    def get_stored_album_info(self, album: Album) -> Dict[str, Any]:
+        return json.loads(Album[album.id].album_info_json or "{}")
+
+    def get_candidate_ids(self, discogs_enabled: bool = True) -> Set[UUID]:
+        return {
+            candidate.id
+            for candidate in collectAlbumsNeedingEnrichment(
+                discogs_enabled=discogs_enabled,
+            )
+        }
 
     def test_apply_enrichment_fills_empty_album_fields_only(self):
         album = self.createAlbumFixture(year="1999")
@@ -100,6 +113,143 @@ class AlbumEnrichmentPipelineTestCase(TestBase):
 
         self.assertNotIn(album.id, {candidate.id for candidate in candidates})
 
+    def test_collect_suppresses_musicbrainz_no_result_when_discogs_disabled(self):
+        album = self.createAlbumFixture()
+
+        class EmptyMusicBrainzClient:
+            def search_album(self, artist_name, album_name):
+                return {}
+
+        scanner = type("ScannerStub", (), {})()
+
+        with self.assertLogs("supysonic.scanner_func.scanner_album_enrich", level="INFO"):
+            runAlbumEnrichmentPass(
+                scanner,
+                albums=[album],
+                musicbrainz_client=EmptyMusicBrainzClient(),
+                discogs_client=None,
+            )
+
+        info = self.get_stored_album_info(album)
+        attempt = info["enrichment_attempts"]["musicbrainz"]
+        self.assertEqual(attempt["status"], "empty")
+        self.assertEqual(attempt["reason"], "no_result")
+        self.assertNotIn(album.id, self.get_candidate_ids(discogs_enabled=False))
+        self.assertIn(album.id, self.get_candidate_ids(discogs_enabled=True))
+
+        class UnexpectedMusicBrainzClient:
+            def search_album(self, artist_name, album_name):
+                raise AssertionError("stable no-result attempt should skip provider")
+
+        with self.assertLogs("supysonic.scanner_func.scanner_album_enrich", level="INFO") as logs:
+            runAlbumEnrichmentPass(
+                scanner,
+                musicbrainz_client=UnexpectedMusicBrainzClient(),
+                discogs_client=None,
+            )
+
+        output = "\n".join(logs.output)
+        self.assertIn("total_albums=0", output)
+        self.assertIn("processed=0", output)
+
+    def test_album_name_change_makes_stable_attempt_eligible_again(self):
+        album = self.createAlbumFixture()
+
+        class EmptyMusicBrainzClient:
+            def search_album(self, artist_name, album_name):
+                return {}
+
+        scanner = type("ScannerStub", (), {})()
+        with self.assertLogs("supysonic.scanner_func.scanner_album_enrich", level="INFO"):
+            runAlbumEnrichmentPass(
+                scanner,
+                albums=[album],
+                musicbrainz_client=EmptyMusicBrainzClient(),
+                discogs_client=None,
+            )
+
+        self.assertNotIn(album.id, self.get_candidate_ids(discogs_enabled=False))
+        album = Album[album.id]
+        album.name = "Renamed Enrichment Album"
+        album.save()
+
+        self.assertIn(album.id, self.get_candidate_ids(discogs_enabled=False))
+
+    def test_artist_name_change_makes_stable_attempt_eligible_again(self):
+        album = self.createAlbumFixture()
+
+        class EmptyMusicBrainzClient:
+            def search_album(self, artist_name, album_name):
+                return {}
+
+        scanner = type("ScannerStub", (), {})()
+        with self.assertLogs("supysonic.scanner_func.scanner_album_enrich", level="INFO"):
+            runAlbumEnrichmentPass(
+                scanner,
+                albums=[album],
+                musicbrainz_client=EmptyMusicBrainzClient(),
+                discogs_client=None,
+            )
+
+        self.assertNotIn(album.id, self.get_candidate_ids(discogs_enabled=False))
+        self.artist.name = "Renamed Enrichment Artist"
+        self.artist.save()
+
+        self.assertIn(album.id, self.get_candidate_ids(discogs_enabled=False))
+
+    def test_discogs_disabled_ignores_missing_primary_genre_only(self):
+        album = self.createAlbumFixture(year="2024")
+        album.release_date = "2024-03-15"
+        album.release_type = "album"
+        album.save()
+
+        self.assertNotIn(album.id, self.get_candidate_ids(discogs_enabled=False))
+        self.assertIn(album.id, self.get_candidate_ids(discogs_enabled=True))
+
+    def test_discogs_stable_no_result_suppresses_missing_primary_genre(self):
+        album = self.createAlbumFixture(year="2024")
+        album.release_date = "2024-03-15"
+        album.release_type = "album"
+        album.album_info_json = json.dumps(
+            {
+                "enrichment_attempts": {
+                    "musicbrainz": {
+                        "status": "empty",
+                        "attempted_at": "2026-05-18T00:00:00",
+                        "artist": self.artist.name,
+                        "album": album.name,
+                    },
+                },
+            }
+        )
+        album.save()
+
+        class UnexpectedMusicBrainzClient:
+            def search_album(self, artist_name, album_name):
+                raise AssertionError("stable MusicBrainz attempt should skip provider")
+
+        class EmptyDiscogsClient:
+            def is_enabled(self):
+                return True
+
+            def search_album(self, artist_name, album_name):
+                return {}
+
+        scanner = type("ScannerStub", (), {})()
+        with self.assertLogs("supysonic.scanner_func.scanner_album_enrich", level="INFO"):
+            runAlbumEnrichmentPass(
+                scanner,
+                albums=[album],
+                musicbrainz_client=UnexpectedMusicBrainzClient(),
+                discogs_client=EmptyDiscogsClient(),
+            )
+
+        info = self.get_stored_album_info(album)
+        attempt = info["enrichment_attempts"]["discogs"]
+        self.assertEqual(attempt["status"], "empty")
+        self.assertEqual(attempt["reason"], "no_result")
+        self.assertNotIn(album.id, self.get_candidate_ids(discogs_enabled=True))
+
     def test_album_enrichment_pass_continues_after_provider_failure(self):
         album = self.createAlbumFixture()
 
@@ -129,6 +279,12 @@ class AlbumEnrichmentPipelineTestCase(TestBase):
 
         info = json.loads(Album[album.id].album_info_json)
         self.assertEqual(info["primary_genre"], "Rock")
+        self.assertEqual(info["enrichment_attempts"]["musicbrainz"]["status"], "failed")
+        self.assertEqual(
+            info["enrichment_attempts"]["musicbrainz"]["reason"],
+            "provider_error",
+        )
+        self.assertIn(album.id, self.get_candidate_ids(discogs_enabled=False))
         self.assertIn(album.id, scanner.review_task_enriched_album_ids)
 
     def test_album_enrichment_pass_continues_when_discogs_enabled_check_fails(self):
@@ -266,7 +422,18 @@ class AlbumEnrichmentPipelineTestCase(TestBase):
         self.assertIsNone(updated.year)
         self.assertIsNone(updated.release_date)
         self.assertIsNone(updated.release_type)
-        self.assertIsNone(updated.album_info_json)
+        info = self.get_stored_album_info(album)
+        self.assertEqual(info["enrichment_attempts"]["musicbrainz"]["status"], "skipped")
+        self.assertEqual(
+            info["enrichment_attempts"]["musicbrainz"]["reason"],
+            "candidate_mismatch",
+        )
+        self.assertEqual(info["enrichment_attempts"]["discogs"]["status"], "skipped")
+        self.assertEqual(
+            info["enrichment_attempts"]["discogs"]["reason"],
+            "candidate_mismatch",
+        )
+        self.assertNotIn(album.id, self.get_candidate_ids(discogs_enabled=True))
         self.assertIsNone(Track[track.id].genre)
         self.assertFalse(hasattr(scanner, "review_task_enriched_album_ids"))
 
@@ -316,6 +483,8 @@ class AlbumEnrichmentPipelineTestCase(TestBase):
         self.assertIn("matched=1", output)
         self.assertIn("applied=0", output)
         self.assertIn("skipped=1", output)
+        info = self.get_stored_album_info(album)
+        self.assertEqual(info["enrichment_attempts"]["musicbrainz"]["status"], "matched")
         self.assertFalse(hasattr(scanner, "review_task_enriched_album_ids"))
 
     def test_album_enrichment_pass_continues_after_single_album_failure(self):

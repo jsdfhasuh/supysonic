@@ -28,6 +28,7 @@ __ https://listenbrainz.org/
    usage
    transcoding
    jukebox
+   logging_integration
    man/index
    api
 

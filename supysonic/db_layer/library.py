@@ -86,24 +86,19 @@ class Folder(PathMixin, _Model):
 
     def __delete_hierarchy(self, cond):
         from .annotations import (
-            RatingFolder,
-            RatingTrack,
-            StarredFolder,
-            StarredTrack,
+            delete_folder_annotations,
+            delete_track_annotations,
         )
-        from .users import User
+        from .users import clear_last_play_for_tracks
 
-        users = User.select(User.id).join(Track).where(cond)
-        User.update(last_play=None).where(User.id.in_(users)).execute()
+        clear_last_play_for_tracks(cond)
 
         tracks = Track.select(Track.id).where(cond)
-        RatingTrack.delete().where(RatingTrack.rated.in_(tracks)).execute()
-        StarredTrack.delete().where(StarredTrack.starred.in_(tracks)).execute()
+        delete_track_annotations(tracks)
 
         path_cond = Folder.path.startswith(self.path)
         folders = Folder.select(Folder.id).where(path_cond)
-        RatingFolder.delete().where(RatingFolder.rated.in_(folders)).execute()
-        StarredFolder.delete().where(StarredFolder.starred.in_(folders)).execute()
+        delete_folder_annotations(folders)
 
         deleted_tracks = Track.delete().where(cond).execute()
 
@@ -173,20 +168,19 @@ class Artist(_Model):
     # Remove artists that are no longer referenced.
     @classmethod
     def prune(cls):
-        from .annotations import StarredArtist
+        from .annotations import delete_orphaned_artist_annotations
 
         # Collect all referenced artist IDs.
         album_artists = Album.select(Album.artist)
         track_artists = Track.select(Track.artist)
         album_multi_artists = AlbumArtist.select(AlbumArtist.artist_id)
         track_multi_artists = TrackArtist.select(TrackArtist.artist_id)
-        # Delete starred markers for artists that are no longer referenced.
-        StarredArtist.delete().where(
-            StarredArtist.starred.not_in(album_artists),
-            StarredArtist.starred.not_in(track_artists),
-            StarredArtist.starred.not_in(album_multi_artists),
-            StarredArtist.starred.not_in(track_multi_artists),
-        ).execute()
+        delete_orphaned_artist_annotations(
+            album_artists,
+            track_artists,
+            album_multi_artists,
+            track_multi_artists,
+        )
 
         # Delete artist records that are no longer referenced.
         return (
@@ -242,10 +236,10 @@ class Album(_Model):
 
     @classmethod
     def prune(cls):
-        from .annotations import StarredAlbum
+        from .annotations import delete_orphaned_album_annotations
 
         albums = Track.select(Track.album)
-        StarredAlbum.delete().where(StarredAlbum.starred.not_in(albums)).execute()
+        delete_orphaned_album_annotations(albums)
         AlbumArtist.delete().where(AlbumArtist.album_id.not_in(albums)).execute()
         return cls.delete().where(cls.id.not_in(albums)).execute()
 

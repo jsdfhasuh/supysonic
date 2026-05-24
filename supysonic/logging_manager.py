@@ -16,6 +16,7 @@ LOG_FILE_NAMES = {
   "summary": "supysonic.log",
   "debug": "web.debug.log",
   "access": "access.log",
+  "stream": "stream.log",
   "task": "task.log",
   "emo": "emo.log",
   "metadata": "metadata.log",
@@ -99,6 +100,7 @@ def _build_file_handler(log_path, log_rotate, log_backup_count, prefixes=None, e
 def _build_route_prefixes(logger_name):
   return {
     "access": (f"{logger_name}.access",),
+    "stream": (f"{logger_name}.stream",),
     "task": (f"{logger_name}.TaskManger",),
     "emo": (f"{logger_name}.emo",),
     "metadata": (f"{logger_name}.frontend.metadata",),
@@ -207,6 +209,10 @@ def _get_access_type(request_path):
   return "WEB"
 
 
+def _is_stream_request(request_path):
+  return request_path.startswith("/rest/stream")
+
+
 def _get_request_target():
   query_string = request.query_string.decode("utf-8") if request.query_string else ""
   if not query_string:
@@ -233,6 +239,22 @@ def _sanitize_query_string(query_string):
     sanitized_parts.append(part)
 
   return "&".join(sanitized_parts)
+
+
+def _sanitize_request_headers(headers):
+  sanitized_parts = []
+  for key, value in headers.items():
+    normalized_key = str(key).strip().lower()
+    if not normalized_key:
+      continue
+
+    if normalized_key in SENSITIVE_FIELD_NAMES:
+      value = "***"
+    sanitized_parts.append(f"{normalized_key}={value}")
+
+  if not sanitized_parts:
+    return "-"
+  return ";".join(sanitized_parts)
 
 
 def _sanitize_request_id(request_id):
@@ -283,6 +305,7 @@ def register_access_logging(app, logger_name="supysonic"):
     return
 
   access_logger = logging.getLogger(f"{logger_name}.access")
+  stream_logger = logging.getLogger(f"{logger_name}.stream")
 
   @app.before_request
   def _record_access_start_time():
@@ -300,21 +323,35 @@ def register_access_logging(app, logger_name="supysonic"):
     content_length = _get_response_size(response)
     response.headers["X-Request-ID"] = request_id
 
+    log_fields = {
+      "type": _get_access_type(request.path),
+      "request_id": request_id,
+      "remote": request.remote_addr or "-",
+      "method": request.method,
+      "path": request.path,
+      "query": _sanitize_query_string(request.query_string.decode("utf-8") if request.query_string else ""),
+      "status": response.status_code,
+      "bytes": content_length,
+      "duration": f"{duration:.6f}s",
+    }
+
     access_logger.info(
       format_log_event(
         "access",
         "request",
-        type=_get_access_type(request.path),
-        request_id=request_id,
-        remote=request.remote_addr or "-",
-        method=request.method,
-        path=request.path,
-        query=_sanitize_query_string(request.query_string.decode("utf-8") if request.query_string else ""),
-        status=response.status_code,
-        bytes=content_length,
-        duration=f"{duration:.6f}s",
+        **log_fields,
       )
     )
+
+    if _is_stream_request(request.path):
+      stream_logger.info(
+        format_log_event(
+          "stream",
+          "request",
+          headers=_sanitize_request_headers(request.headers),
+          **log_fields,
+        )
+      )
     return response
 
   app.extensions["supysonic_access_logging"] = True

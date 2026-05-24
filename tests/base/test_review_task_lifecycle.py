@@ -102,6 +102,52 @@ class ReviewTaskLifecycleTestCase(unittest.TestCase):
         self.assertEqual(refreshed_task.status, "confirmed")
         self.assertIsNotNone(refreshed_task.expires_at)
 
+    def test_run_review_task_maintenance_backfills_expiry_for_external_enrichment_tasks(self):
+        from supysonic.scanner_func.scanner_review_tasks import runReviewTaskMaintenance
+
+        artist = db.Artist.create(name="External Artist")
+        album = db.Album.create(name="External Album", artist=artist, year="2024")
+        task = db.ReviewTask.create(
+            entity_type="album",
+            entity_id=str(album.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="external_enrichment",
+            snapshot_json='{"issues": []}',
+            expires_at=None,
+        )
+
+        updated_count = runReviewTaskMaintenance()
+
+        refreshed_task = db.ReviewTask.get_by_id(task.id)
+        self.assertEqual(updated_count, 1)
+        self.assertEqual(refreshed_task.status, "pending")
+        self.assertIsNotNone(refreshed_task.expires_at)
+
+    def test_run_review_task_maintenance_confirms_external_enrichment_tasks_after_backfill(self):
+        from supysonic.scanner_func.scanner_review_tasks import runReviewTaskMaintenance
+
+        artist = db.Artist.create(name="Old External Artist")
+        album = db.Album.create(name="Old External Album", artist=artist, year="2024")
+        task = db.ReviewTask.create(
+            entity_type="album",
+            entity_id=str(album.id),
+            task_type="metadata_review",
+            status="pending",
+            reason="external_enrichment",
+            snapshot_json='{"issues": []}',
+            created=db.now() - timedelta(days=5),
+            updated=db.now() - timedelta(days=5),
+            expires_at=None,
+        )
+
+        updated_count = runReviewTaskMaintenance()
+
+        refreshed_task = db.ReviewTask.get_by_id(task.id)
+        self.assertEqual(updated_count, 2)
+        self.assertEqual(refreshed_task.status, "confirmed")
+        self.assertIsNotNone(refreshed_task.expires_at)
+
     def test_run_review_task_maintenance_keeps_album_tasks_with_issues_pending(self):
         from supysonic.scanner_func.scanner_review_tasks import runReviewTaskMaintenance
 
@@ -184,7 +230,7 @@ class ReviewTaskLifecycleTestCase(unittest.TestCase):
         self.assertIsNone(db.ReviewTask.get_or_none(db.ReviewTask.id == new_artist_task.id))
         self.assertIsNotNone(db.ReviewTask.get_or_none(db.ReviewTask.id == missing_image_task.id))
 
-    def test_run_review_task_maintenance_logs_pending_task_details(self):
+    def test_run_review_task_maintenance_logs_pending_task_summary_only(self):
         from supysonic.scanner_func.scanner_review_tasks import runReviewTaskMaintenance
 
         artist = db.Artist.create(name="Pending Artist")
@@ -205,9 +251,10 @@ class ReviewTaskLifecycleTestCase(unittest.TestCase):
         self.assertEqual(updated_count, 0)
         combined_logs = "\n".join(captured.output)
         self.assertIn("Pending review tasks after maintenance: 1", combined_logs)
-        self.assertIn("reason=missing_year", combined_logs)
-        self.assertIn("title=Pending Album", combined_logs)
-        self.assertIn("expiry_policy=awaiting_album_year", combined_logs)
+        self.assertNotIn("Pending review task detail", combined_logs)
+        self.assertNotIn("reason=missing_year", combined_logs)
+        self.assertNotIn("title=Pending Album", combined_logs)
+        self.assertNotIn("expiry_policy=awaiting_album_year", combined_logs)
 
     def test_reopen_metadata_review_task_reopens_confirmed_task(self):
         artist = db.Artist.create(name="Reopen Artist")

@@ -9,6 +9,7 @@ import unittest
 import uuid
 
 from supysonic.db import Folder, Artist, Album, Track, Playlist, User
+from supysonic.recommend import RECOMMENDED_PLAYLIST_COMMENT
 
 from .frontendtestbase import FrontendTestBase
 
@@ -46,6 +47,21 @@ class PlaylistTestCase(FrontendTestBase):
         self._login("alice", "Alic3")
         rv = self.client.get("/playlist")
         self.assertIn("My playlists", rv.data)
+
+    def test_index_hides_recommended_playlists(self):
+        playlist = Playlist.create(
+            name="alice's 2026-05-01 recommend playlist",
+            user=User.get(name="alice"),
+            comment=RECOMMENDED_PLAYLIST_COMMENT,
+        )
+        playlist.add(Track.select().first())
+        playlist.save()
+
+        self._login("alice", "Alic3")
+        rv = self.client.get("/playlist")
+
+        self.assertIn("Playlist!", rv.data)
+        self.assertNotIn("2026-05-01 recommend playlist", rv.data)
 
     def test_details(self):
         self._login("alice", "Alic3")

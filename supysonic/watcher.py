@@ -143,63 +143,86 @@ class ScannerProcessingQueue(Thread):
         self.__suppressed_nfo_paths = {}
 
     def run(self):
-        try:
-            self.__run()
-        except Exception as e:  # pragma: nocover
-            logger.critical(e)
-            raise e
-
-    def __run(self):
         while self.__running:
-            time.sleep(0.1)
-            with self.__cond:
-                # If a timer fired while the thread was still processing the previous
-                # batch, the notify is gone but the queue is already populated.
-                while self.__running and not self.__queue:
-                    self.__cond.wait()
+            try:
+                self.__run_next_batch()
+            except Exception as exc:  # pragma: nocover
+                logger.exception(
+                    format_log_event(
+                        "watcher",
+                        "queue_batch_failed",
+                        error_type=exc.__class__.__name__,
+                    )
+                )
+                self.__wait_after_failure()
 
-                if not self.__queue:
+    def __wait_after_failure(self):
+        with self.__cond:
+            if self.__running:
+                self.__cond.wait(min(max(self.__timeout, 0.1), 5))
+
+    def __run_next_batch(self):
+        time.sleep(0.1)
+        with self.__cond:
+            # If a timer fired while the thread was still processing the previous
+            # batch, the notify is gone but the queue is already populated.
+            while self.__running and not self.__queue:
+                self.__cond.wait()
+
+            if not self.__queue:
+                return
+
+        logger.debug("Instantiating scanner")
+        connection_ready = False
+        scanner = None
+        try:
+            connection_ready = open_connection(True)
+            scanner = Scanner()
+            self.__process_batch(scanner)
+            scanner.prune()
+        finally:
+            if connection_ready:
+                close_connection()
+            if scanner is not None:
+                logger.debug("Freeing scanner")
+
+    def __process_batch(self, scanner):
+        find_lost_information_flag = False
+        while True:
+            item = self.__next_item()
+            if item is None:
+                with self.__cond:
+                    queue_empty = not self.__queue
+
+                if not queue_empty:
+                    time.sleep(0.05)
                     continue
 
-            logger.debug("Instantiating scanner")
-            open_connection()
-            scanner = Scanner()
-
-            find_lost_information_flag = False
-            while True:
-                item = self.__next_item()
-                if item is None:
-                    with self.__cond:
-                        queue_empty = not self.__queue
-
-                    if not queue_empty:
-                        time.sleep(0.05)
-                        continue
-
-                    if find_lost_information_flag:
-                        logger.info("Beginging cover scan")
-                        scanner.find_lost_information()
-                        createReviewTasks(scanner)
-                        logger.info("Cover scan finished")
-                        find_lost_information_flag = False
-                        stats = scanner.stats()
+                if find_lost_information_flag:
+                    logger.info("Beginging cover scan")
+                    scanner.find_lost_information()
+                    createReviewTasks(scanner)
+                    logger.info("Cover scan finished")
+                    find_lost_information_flag = False
+                    stats = scanner.stats()
+                    logger.info(
+                        "Cover scan completed,results: lost artists: %d, lost albums: %d",
+                        stats.lost_covers.artists,
+                        stats.lost_covers.albums,
+                    )
+                    for album in stats.lost_covers_albums:
                         logger.info(
-                            "Cover scan completed,results: lost artists: %d, lost albums: %d",
-                            stats.lost_covers.artists,
-                            stats.lost_covers.albums,
+                            f"album lost cover: {album} - {stats.lost_covers_albums[album]}"
                         )
-                        for album in stats.lost_covers_albums:
-                            logger.info(
-                                f"album lost cover: {album} - {stats.lost_covers_albums[album]}"
-                            )
-                        for artist in stats.lost_covers_artists:
-                            logger.info(f"artist lost cover: {artist}")
-                        for album in stats.lost_year_albums:
-                            logger.info(
-                                f"album lost year: {album} - {stats.lost_year_albums[album]}"
-                            )
-                    break
+                    for artist in stats.lost_covers_artists:
+                        logger.info(f"artist lost cover: {artist}")
+                    for album in stats.lost_year_albums:
+                        logger.info(
+                            f"album lost year: {album} - {stats.lost_year_albums[album]}"
+                        )
+                break
 
+            try:
                 if item.operation & FLAG_COVER:
                     self.__process_cover_item(scanner, item)
                 elif item.operation & FLAG_NFO:
@@ -207,9 +230,16 @@ class ScannerProcessingQueue(Thread):
                 else:
                     self.__process_regular_item(scanner, item)
                     find_lost_information_flag = True
-            scanner.prune()
-            close_connection()
-            logger.debug("Freeing scanner")
+            except Exception as exc:
+                logger.exception(
+                    format_log_event(
+                        "watcher",
+                        "queue_item_failed",
+                        path=item.path,
+                        operation=item.operation,
+                        error_type=exc.__class__.__name__,
+                    )
+                )
 
     def __process_regular_item(self, scanner, item):
         if item.operation & OP_MOVE:

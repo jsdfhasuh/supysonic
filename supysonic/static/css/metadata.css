@@ -6,6 +6,60 @@
     padding: 0;
 }
 
+.artist-search-bar,
+.album-search-bar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+    padding: 16px;
+    border: 1px solid var(--console-border);
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(18, 94, 114, 0.08), rgba(222, 143, 63, 0.08));
+}
+
+.artist-search-field,
+.album-search-field {
+    flex: 1 1 280px;
+}
+
+.artist-search-field label,
+.album-search-field label {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--console-muted);
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.artist-search-field input,
+.album-search-field input {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1px solid var(--console-border);
+    border-radius: 14px;
+    background: #fff;
+    color: var(--console-text);
+}
+
+.artist-search-field input:focus,
+.album-search-field input:focus {
+    border-color: var(--console-brand);
+    box-shadow: 0 0 0 3px rgba(18, 94, 114, 0.12);
+    outline: none;
+}
+
+.artist-search-count,
+.album-search-count {
+    flex: 0 0 auto;
+    color: var(--console-muted);
+    font-weight: 700;
+    white-space: nowrap;
+}
+
 .artist-card,
 .album-card {
     position: relative;
@@ -257,6 +311,19 @@
     background: var(--console-brand);
     border-color: var(--console-brand);
     color: #fff;
+}
+
+@media (max-width: 640px) {
+    .artist-search-bar,
+    .album-search-bar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .artist-search-count,
+    .album-search-count {
+        white-space: normal;
+    }
 }
 
 .artist-autocomplete-empty {

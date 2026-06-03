@@ -4,6 +4,18 @@
     <span class="console-chip">Metadata operations</span>
   </div>
   <div class="card-body">
+    <div class="artist-search-bar">
+      <div class="artist-search-field">
+        <label for="artistSearchInput">Search artists</label>
+        <input
+          type="search"
+          id="artistSearchInput"
+          placeholder="Search artists..."
+          autocomplete="off"
+        >
+      </div>
+      <div id="artistSearchCount" class="artist-search-count">Loading artists...</div>
+    </div>
     <div id="artist-wall" class="artist-wall">
       <div class="loading">Loading artist data...</div>
     </div>
@@ -57,6 +69,7 @@ password = "&v=1.15.0&c=web";
 artistInfoUrl = {{ url_for('api.artist_info2')|tojson }};
 artistSuggestionsUrl = {{ url_for('frontend.metadata_artist_suggestions')|tojson }};
 let activeArtistAutocomplete = null;
+let allArtists = [];
 async function loadData() {
     try {
         artistsurl = {{ url_for('api.list_artists')|tojson }};
@@ -109,6 +122,7 @@ async function loadArtistMetadataForModal(artist) {
 }
 
 const artistPhotoInput = document.getElementById('artistPhoto');
+const artistSearchInput = document.getElementById('artistSearchInput');
 setupArtistAutocomplete(
     document.getElementById('primaryArtist'),
     document.getElementById('primary-artist-suggestions'),
@@ -119,6 +133,7 @@ setupArtistAutocomplete(
         },
     }
 );
+artistSearchInput.addEventListener('input', filterArtistCards);
 artistPhotoInput.addEventListener('change', function() {
     const photoPreview = document.getElementById('artistPhotoPreview');
     const nextFile = artistPhotoInput.files[0];
@@ -137,16 +152,53 @@ artistPhotoInput.addEventListener('change', function() {
 });
 
 function renderPage(artistsDict) {
+    allArtists = Object.entries(artistsDict).map(([id, info]) => normalizeArtistCardData({
+        id,
+        name: info.name,
+        image: info.image
+    }));
+    allArtists.sort(compareArtistsByName);
+    filterArtistCards();
+}
+
+function compareArtistsByName(leftArtist, rightArtist) {
+    return leftArtist.name.localeCompare(rightArtist.name);
+}
+
+function normalizeArtistCardData(artist) {
+    return {
+        id: String(artist.id),
+        name: artist.name || 'Unknown artist',
+        image: artist.image || ''
+    };
+}
+
+function normalizeArtistSearchValue(value) {
+    return (value || '').trim().toLowerCase();
+}
+
+function filterArtistCards() {
+    const searchTerm = normalizeArtistSearchValue(artistSearchInput.value);
+    const matchingArtists = searchTerm
+        ? allArtists.filter((artist) => normalizeArtistSearchValue(artist.name).includes(searchTerm))
+        : allArtists;
+
+    renderArtistCards(matchingArtists);
+    updateArtistSearchCount(matchingArtists.length, allArtists.length);
+}
+
+function updateArtistSearchCount(visibleCount, totalCount) {
+    document.getElementById('artistSearchCount').textContent = `${visibleCount} / ${totalCount} artists`;
+}
+
+function renderArtistCards(artistsArray) {
     const container = document.getElementById('artist-wall');
     container.innerHTML = '';
 
-    const artistsArray = Object.entries(artistsDict).map(([id, info]) => ({
-        id,
-        name: info.name || 'Unknown artist',
-        image: info.image
-    }));
-
-    artistsArray.sort((a, b) => a.name.localeCompare(b.name));
+    if (!artistsArray.length) {
+        container.innerHTML = '<div class="loading">No matching artists found.</div>';
+        return;
+    }
 
     for (const artist of artistsArray) {
         container.appendChild(createArtistCardElement(artist));
@@ -199,25 +251,23 @@ function sortArtistCards() {
 }
 
 function upsertArtistCard(artist) {
-    const container = document.getElementById('artist-wall');
-    const existingCard = container.querySelector(`[data-artist-card-id="${artist.id}"]`);
-    const nextCard = createArtistCardElement(artist);
-    if (existingCard) {
-        existingCard.replaceWith(nextCard);
+    const nextArtist = normalizeArtistCardData(artist);
+    const existingIndex = allArtists.findIndex((item) => item.id === nextArtist.id);
+    if (existingIndex >= 0) {
+        allArtists[existingIndex] = nextArtist;
     } else {
-        container.appendChild(nextCard);
+        allArtists.push(nextArtist);
     }
-    sortArtistCards();
+    allArtists.sort(compareArtistsByName);
+    filterArtistCards();
 }
 
 function removeArtistCard(artistId) {
     if (!artistId) {
         return;
     }
-    const existingCard = document.querySelector(`[data-artist-card-id="${artistId}"]`);
-    if (existingCard) {
-        existingCard.remove();
-    }
+    allArtists = allArtists.filter((artist) => artist.id !== String(artistId));
+    filterArtistCards();
 }
 
 function applyArtistModalChanges(successData) {

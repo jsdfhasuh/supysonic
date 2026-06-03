@@ -4,6 +4,18 @@
     <span class="console-chip">Metadata operations</span>
   </div>
   <div class="card-body">
+    <div class="album-search-bar">
+      <div class="album-search-field">
+        <label for="albumSearchInput">Search albums</label>
+        <input
+          type="search"
+          id="albumSearchInput"
+          placeholder="Search albums..."
+          autocomplete="off"
+        >
+      </div>
+      <div id="albumSearchCount" class="album-search-count">Loading albums...</div>
+    </div>
     <div id="artist-wall" class="artist-wall">
       <div class="loading">Loading album data...</div>
     </div>
@@ -102,18 +114,15 @@ const pageSize = 100;
 password = "&v=1.15.0&c=web";
 albumurl = {{ url_for('api.album_list_id3')|tojson }};
 albumidurl = {{ url_for('api.album_info')|tojson }};
+image_base_url = {{ url_for('api.cover_art')|tojson }} ;
+const albumSearchInput = document.getElementById('albumSearchInput');
+albumSearchInput.addEventListener('input', filterAlbumCards);
 async function loadData() {
     try {
         const new_rawalbum = await getAlbum(albumurl, pageSize, offset, password);
-        all_album = all_album.concat(new_rawalbum);
-        image_base_url = {{ url_for('api.cover_art')|tojson }} ;
+        all_album = all_album.concat(normalizeAlbumList(new_rawalbum));
 
-        for (const album of all_album) {
-            const image_url = `${image_base_url}?id=al-${album.id}${password}`;
-            album.image = image_url;
-        }
-
-        renderPage(all_album);
+        filterAlbumCards();
 
     } catch (error) {
         console.error('Error loading data:', error);
@@ -142,12 +151,8 @@ window.addEventListener('scroll', async () => {
         try {
             const new_rawalbum = await getAlbum(albumurl, pageSize, offset, password);
             if (new_rawalbum && new_rawalbum.length > 0) {
-                for (const album of new_rawalbum) {
-                    const image_url = `${image_base_url}?id=al-${album.id}${password}`;
-                    album.image = image_url;
-                }
-                all_album = all_album.concat(new_rawalbum);
-                renderPage(all_album);
+                all_album = all_album.concat(normalizeAlbumList(new_rawalbum));
+                filterAlbumCards();
             }
         } catch (error) {
             console.error('Failed to load more albums:', error);
@@ -157,16 +162,45 @@ window.addEventListener('scroll', async () => {
     }
 });
 
-function renderPage(album_array) {
+function normalizeAlbumList(albumArray) {
+    return (albumArray || []).map((album) => ({
+        ...album,
+        image: `${image_base_url}?id=al-${album.id}${password}`
+    }));
+}
+
+function normalizeAlbumSearchValue(value) {
+    return (value || '').trim().toLowerCase();
+}
+
+function filterAlbumCards() {
+    const searchTerm = normalizeAlbumSearchValue(albumSearchInput.value);
+    const matchingAlbums = searchTerm
+        ? all_album.filter((album) => {
+            const albumName = normalizeAlbumSearchValue(album.name);
+            const artistName = normalizeAlbumSearchValue(album.artist);
+            return albumName.includes(searchTerm) || artistName.includes(searchTerm);
+        })
+        : all_album;
+
+    renderPage(matchingAlbums);
+    updateAlbumSearchCount(matchingAlbums.length, all_album.length);
+}
+
+function updateAlbumSearchCount(visibleCount, totalCount) {
+    document.getElementById('albumSearchCount').textContent = `${visibleCount} / ${totalCount} albums`;
+}
+
+function renderPage(albumArray) {
     const container = document.getElementById('artist-wall');
-    if (container.querySelector('.loading')) {
-        container.innerHTML = '';
+    container.innerHTML = '';
+
+    if (!albumArray.length) {
+        container.innerHTML = '<div class="loading">No matching albums found.</div>';
+        return;
     }
 
-    for (const album of album_array) {
-        if (album.hasrendered) {
-            continue;
-        }
+    for (const album of albumArray) {
         const card = document.createElement('div');
         card.className = 'album-card';
         card.onclick = () => openEditModal(album);
@@ -179,7 +213,6 @@ function renderPage(album_array) {
         imgContainer.appendChild(placeholder);
         const img = document.createElement('img');
         img.className = 'artist-image';
-        album.hasrendered = true;
         img.src = album.image;
         img.alt = album.name;
         img.onload = () => { placeholder.style.display = 'none'; };

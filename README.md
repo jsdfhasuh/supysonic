@@ -26,13 +26,42 @@ Emosonic Server 是基于 Flask 的音乐流媒体与运维平台，脱胎于 [s
 
 
 ## 快速开始
-* 当前项目建议通过 Docker 进行部署
-* cd supysonic  （进入到项目地址）
-* 改名config.sample 为 supysonic.conf，并填入到自己的配置
-* docker build -t supysonic .
- 挂载音乐文件夹运行容器
- docker run -d -p 4040:4040 -v /path/to/your/music:/music -v /path/to/your/config/supysonic.conf:/app/supysonic.conf supysonic
- 
+当前项目建议通过 Docker 进行部署。
+
+当前部署信息:
+* Docker 容器名: `my_supysonic`
+* Web 访问地址: <https://supysonic.19970219.xyz/>
+* 本地 Python 环境: conda 环境 `supysonic`
+
+进入项目目录:
+```bash
+cd supysonic
+```
+
+复制配置文件并按需填写自己的配置:
+```bash
+cp config.sample supysonic.conf
+```
+
+构建镜像:
+```bash
+docker build -t supysonic .
+```
+
+挂载音乐文件夹并运行容器:
+```bash
+docker run -d \
+  --name my_supysonic \
+  -p 4040:4040 \
+  -v /path/to/your/music:/music \
+  -v /path/to/your/config/supysonic.conf:/app/supysonic.conf \
+  supysonic
+```
+
+如果只需要使用本地 Python 环境进行开发或维护，先激活 conda 环境:
+```bash
+conda activate supysonic
+```
 
 ## script
 build_nfo.py 可以用于组织本地存放音乐文件的nfo文件

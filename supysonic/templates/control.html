@@ -189,6 +189,7 @@
     eventLines: [],
     subscriptions: new Set(),
     pendingCommands: new Map(),
+    heartbeatTimer: null,
   };
 
   const socket = io(window.location.origin + '/emo', {
@@ -259,6 +260,30 @@
 
   function nextRequestId(prefix) {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function sendHeartbeat() {
+    if (!socket.connected) {
+      return;
+    }
+    socket.emit('message', {
+      type: 'system',
+      action: 'system.ping',
+      requestId: nextRequestId('system.ping'),
+      payload: {},
+      timestamp: Date.now() / 1000,
+    });
+  }
+
+  function startHeartbeat() {
+    window.clearInterval(controlState.heartbeatTimer);
+    sendHeartbeat();
+    controlState.heartbeatTimer = window.setInterval(sendHeartbeat, 30000);
+  }
+
+  function stopHeartbeat() {
+    window.clearInterval(controlState.heartbeatTimer);
+    controlState.heartbeatTimer = null;
   }
 
   function pushEventLine(message, level = 'info') {
@@ -812,6 +837,7 @@
 
   socket.on('connect', () => {
     updateConnectionState('ONLINE');
+    startHeartbeat();
     pushEventLine('Socket connected.', 'success');
     socket.emit('message', {
       type: 'auth',
@@ -823,6 +849,7 @@
   });
 
   socket.on('disconnect', () => {
+    stopHeartbeat();
     updateConnectionState('OFFLINE');
     pushEventLine('Socket disconnected.', 'error');
   });

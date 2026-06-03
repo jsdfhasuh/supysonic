@@ -51,6 +51,11 @@ log_rotate = yes
 ; Enable the emosonic websocket endpoint at /emo/ws. Default: on
 ;emo_ws_enabled = on
 
+; Seconds before a registered Emo Socket.IO client is considered offline if it
+; sends no business message or system.ping. Set to 0 to disable stale cleanup.
+; Default: 90
+;emo_client_timeout = 90
+
 ; Directory used by /emo/upload_log and /emo/logs for uploaded diagnostic files.
 ; Default: ./logs
 emo_log_upload_dir = /var/supysonic/emo-logs

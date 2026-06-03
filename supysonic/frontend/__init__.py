@@ -32,7 +32,7 @@ from ..daemon.client import DaemonClient
 from ..daemon.exceptions import DaemonUnavailableError
 from ..db import Artist, Album, EmoLocalQueue, EmoPlaybackState, EmoSessionQueue, Track
 from ..api.media import _get_cover_path
-from ..emo.ws_state import get_state
+from ..emo.ws_state import DEFAULT_CLIENT_STALE_SECONDS, get_state
 from ..managers.user import UserManager
 from ..api.media import __new_get_cover_path
 from ..cache import CacheMiss
@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 
 frontend = Blueprint("frontend", __name__)
 state = get_state()
+DEFAULT_DEVICE_TIMEOUT_SECONDS = DEFAULT_CLIENT_STALE_SECONDS
 ANONYMOUS_FRONTEND_ENDPOINTS = {
     "frontend.login",
     "frontend.register",
@@ -143,7 +144,17 @@ def login_only(f):
 
 
 def getConnectedDevices(user_name=None):
-    devices = state.list_clients(user_name=user_name)
+    device_timeout = current_app.config["WEBAPP"].get(
+        "emo_client_timeout", DEFAULT_DEVICE_TIMEOUT_SECONDS
+    )
+    try:
+        device_timeout = float(device_timeout)
+    except (TypeError, ValueError):
+        device_timeout = DEFAULT_DEVICE_TIMEOUT_SECONDS
+    devices = state.list_clients(
+        user_name=user_name,
+        stale_after_seconds=device_timeout if device_timeout and device_timeout > 0 else None,
+    )
     devices.sort(key=lambda item: (item.get("userName", ""), item.get("deviceName", "")))
     return devices
 

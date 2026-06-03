@@ -18,7 +18,7 @@ class EmoWebSocketStateTestCase(unittest.TestCase):
         self.state = WebSocketState()
 
     def test_register_and_unregister_client(self):
-        self.state.register_session("sid-1")
+        self.state.register_session("sid-1", now=100)
         self.state.authenticate_session("sid-1", "alice")
         client = self.state.register_client(
             "sid-1",
@@ -29,9 +29,11 @@ class EmoWebSocketStateTestCase(unittest.TestCase):
                 "roles": ["player"],
                 "sessionId": "sess-1",
             },
+            now=100,
         )
 
         self.assertEqual(client["clientId"], "player-1")
+        self.assertEqual(client["lastSeenAt"], 100)
         self.assertEqual(self.state.get_sid_for_client("player-1"), "sid-1")
         self.assertEqual(len(self.state.list_clients(user_name="alice")), 1)
 
@@ -39,6 +41,48 @@ class EmoWebSocketStateTestCase(unittest.TestCase):
         self.assertEqual(session_info["userName"], "alice")
         self.assertEqual(removed["deviceName"], "Living Room")
         self.assertIsNone(self.state.get_sid_for_client("player-1"))
+
+    def test_touch_session_updates_client_last_seen(self):
+        self.state.register_session("sid-1", now=100)
+        self.state.authenticate_session("sid-1", "alice")
+        self.state.register_client(
+            "sid-1",
+            "player-1",
+            {
+                "userName": "alice",
+                "deviceName": "Living Room",
+                "roles": ["player"],
+                "sessionId": "sess-1",
+            },
+            now=100,
+        )
+
+        self.state.touch_session("sid-1", now=180)
+
+        client = self.state.get_client("player-1")
+        self.assertEqual(client["lastSeenAt"], 180)
+        self.assertEqual(len(self.state.list_clients(stale_after_seconds=90, now=260)), 1)
+
+    def test_list_clients_prunes_stale_client(self):
+        self.state.register_session("sid-1", now=100)
+        self.state.authenticate_session("sid-1", "alice")
+        self.state.register_client(
+            "sid-1",
+            "player-1",
+            {
+                "userName": "alice",
+                "deviceName": "Living Room",
+                "roles": ["player"],
+                "sessionId": "sess-1",
+            },
+            now=100,
+        )
+
+        clients = self.state.list_clients(stale_after_seconds=90, now=191)
+
+        self.assertEqual(clients, [])
+        self.assertIsNone(self.state.get_sid_for_client("player-1"))
+        self.assertIsNone(self.state.get_client_for_sid("sid-1"))
 
     def test_queue_and_playback_state_are_stored_per_session(self):
         queue_state = self.state.update_queue(

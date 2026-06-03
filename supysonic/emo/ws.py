@@ -18,7 +18,7 @@ from .ws_store import (
     savePlaybackState,
     saveQueueState,
 )
-from .ws_state import get_state
+from .ws_state import DEFAULT_CLIENT_STALE_SECONDS, get_state
 
 
 logger = logging.getLogger(__name__)
@@ -86,6 +86,25 @@ def _get_action_event_name(action):
     if action in CONTROL_ACTIONS:
         return "control_forward"
     return ACTION_EVENT_NAMES.get(action)
+
+
+def _get_client_stale_seconds():
+    value = current_app.config["WEBAPP"].get(
+        "emo_client_timeout", DEFAULT_CLIENT_STALE_SECONDS
+    )
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return DEFAULT_CLIENT_STALE_SECONDS
+    return value if value > 0 else None
+
+
+def _list_clients(user_name=None, session_id=None):
+    return state.list_clients(
+        user_name=user_name,
+        session_id=session_id,
+        stale_after_seconds=_get_client_stale_seconds(),
+    )
 
 
 def _build_action_log_context(action, request_id, current_user_name, current_client, payload, message):
@@ -183,7 +202,7 @@ def _authenticate(payload):
 
 def _broadcast_clients(user_name):
     message = _build_message(
-        "state", "device.list", {"devices": state.list_clients(user_name=user_name)}
+        "state", "device.list", {"devices": _list_clients(user_name=user_name)}
     )
     for target_sid, _ in state.list_sids(user_name=user_name):
         socketio.emit("message", message, to=target_sid, namespace="/emo")
@@ -494,6 +513,9 @@ class EmoNamespace(Namespace):
         current_user_name = None if session_info is None else session_info.get("userName")
         current_client = state.get_client_for_sid(request.sid)
 
+        state.touch_session(request.sid)
+        state.prune_stale_clients(_get_client_stale_seconds())
+
         if action == "system.ping":
             emit("message", _build_message("system", "system.pong", {}, requestId=request_id))
             return
@@ -561,7 +583,7 @@ class EmoNamespace(Namespace):
                     _build_message(
                         "state",
                         "device.list",
-                        {"devices": state.list_clients(user_name=current_user_name)},
+                        {"devices": _list_clients(user_name=current_user_name)},
                     ),
                 )
             elif action in SESSION_ACTIONS:
@@ -573,7 +595,7 @@ class EmoNamespace(Namespace):
                 if action == "session.subscribe":
                     if not any(
                         device.get("sessionId") == session_id
-                        for device in state.list_clients(user_name=current_user_name)
+                        for device in _list_clients(user_name=current_user_name)
                     ):
                         raise PermissionError("Cannot subscribe to a session outside your scope")
                     subscriptions = state.subscribe_session(request.sid, session_id)

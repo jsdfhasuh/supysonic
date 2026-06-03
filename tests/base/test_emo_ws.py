@@ -107,6 +107,28 @@ class EmoWebSocketTestCase(unittest.TestCase):
       namespace="/emo",
     )
 
+  def test_system_ping_refreshes_registered_client_last_seen(self):
+    client = self.connect_device("alice", "Alic3", "player-1", "sess-1", ["player"])
+    state = get_state()
+    state._clients["player-1"]["lastSeenAt"] = 1
+
+    client.emit(
+      "message",
+      {
+        "type": "system",
+        "action": "system.ping",
+        "requestId": "ping-1",
+        "payload": {},
+      },
+      namespace="/emo",
+    )
+
+    messages = self.get_messages(client)
+    self.assertTrue(
+      any(message["action"] == "system.pong" and message["requestId"] == "ping-1" for message in messages)
+    )
+    self.assertGreater(state.get_client("player-1")["lastSeenAt"], 1)
+
   def test_forward_queue_play_item_for_session_queue(self):
     player = self.connect_device("alice", "Alic3", "player-1", "sess-1", ["player"])
     controller = self.connect_device("alice", "Alic3", "controller-1", "sess-1", ["controller"])

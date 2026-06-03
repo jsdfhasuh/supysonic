@@ -110,6 +110,11 @@ Session cookies may also be used if the connection originates from the web UI.
 - `system.ack`
 - `system.error`
 
+Registered clients should send `system.ping` every 30 seconds. The server
+uses the last received business message or ping to decide whether a registered
+client is still online; by default a client is removed from `device.list` after
+90 seconds without activity.
+
 ### Devices
 
 - `device.register`

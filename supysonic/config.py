@@ -41,6 +41,7 @@ class DefaultConfig:
         "mount_api": True,
         "mount_emosonic": False,
         "emo_ws_enabled": True,
+        "emo_client_timeout": 90,
         "emo_log_upload_dir": "./logs",
         "allow_user_registration": True,
         "registration_invite_code": "",

@@ -302,6 +302,7 @@
                   <li><span>Session</span><code>${escapeHtml(device.sessionId || "")}</code></li>
                   <li><span>Playback source</span><code>${escapeHtml(device.playbackSourceClientId || device.clientId || "")}</code></li>
                   <li><span>Connected</span><strong>${formatTimestamp(device.connectedAt)}</strong></li>
+                  <li><span>Last seen</span><strong>${formatTimestamp(device.lastSeenAt)}</strong></li>
                   <li><span>Playback update</span><strong>${formatTimestamp(device.playbackUpdatedAt)}</strong></li>
                 </ul>
                 <div class="mt-3">${trackBlock}</div>

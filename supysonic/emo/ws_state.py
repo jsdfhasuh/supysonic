@@ -2,6 +2,9 @@ import threading
 import time
 
 
+DEFAULT_CLIENT_STALE_SECONDS = 90
+
+
 class WebSocketState:
     def __init__(self):
         self._lock = threading.RLock()
@@ -20,11 +23,13 @@ class WebSocketState:
         # sid -> subscribed sessionIds for passive observers/controllers
         self._session_subscriptions = {}
 
-    def register_session(self, sid):
+    def register_session(self, sid, now=None):
+        now = time.time() if now is None else now
         with self._lock:
             self._sessions[sid] = {
                 "sid": sid,
-                "connectedAt": time.time(),
+                "connectedAt": now,
+                "lastSeenAt": now,
                 "authenticated": False,
                 "userName": None,
                 "clientId": None,
@@ -44,12 +49,14 @@ class WebSocketState:
             session_info = self._sessions.get(sid)
             return dict(session_info) if session_info is not None else None
 
-    def register_client(self, sid, client_id, info):
+    def register_client(self, sid, client_id, info, now=None):
         # Registered device metadata usually includes userName, deviceName,
         # roles, sessionId, capabilities, clientId, and connectedAt.
+        now = time.time() if now is None else now
         client_info = dict(info)
         client_info["clientId"] = client_id
-        client_info["connectedAt"] = time.time()
+        client_info["connectedAt"] = now
+        client_info["lastSeenAt"] = now
         with self._lock:
             previous_sid = self._client_to_sid.get(client_id)
             if previous_sid is not None and previous_sid != sid:
@@ -61,10 +68,46 @@ class WebSocketState:
             session_info = self._sessions.get(sid)
             if session_info is not None:
                 session_info["clientId"] = client_id
+                session_info["lastSeenAt"] = now
                 if client_info.get("userName"):
                     session_info["userName"] = client_info["userName"]
                     session_info["authenticated"] = True
         return dict(client_info)
+
+    def touch_session(self, sid, now=None):
+        now = time.time() if now is None else now
+        with self._lock:
+            session_info = self._sessions.get(sid)
+            if session_info is None:
+                return None
+            session_info["lastSeenAt"] = now
+            client_id = session_info.get("clientId")
+            if client_id and self._client_to_sid.get(client_id) == sid:
+                client_info = self._clients.get(client_id)
+                if client_info is not None:
+                    client_info["lastSeenAt"] = now
+            return dict(session_info)
+
+    def prune_stale_clients(self, stale_after_seconds=DEFAULT_CLIENT_STALE_SECONDS, now=None):
+        if stale_after_seconds is None or stale_after_seconds <= 0:
+            return []
+
+        now = time.time() if now is None else now
+        removed = []
+        with self._lock:
+            for client_id, client_info in list(self._clients.items()):
+                last_seen_at = client_info.get("lastSeenAt") or client_info.get("connectedAt")
+                if last_seen_at is None or now - last_seen_at <= stale_after_seconds:
+                    continue
+
+                sid = self._client_to_sid.get(client_id)
+                if sid is not None:
+                    session_info = self._sessions.get(sid)
+                    if session_info is not None and session_info.get("clientId") == client_id:
+                        session_info["clientId"] = None
+                self._client_to_sid.pop(client_id, None)
+                removed.append(self._clients.pop(client_id))
+            return [dict(client) for client in removed]
 
     def unregister_session(self, sid):
         with self._lock:
@@ -99,7 +142,9 @@ class WebSocketState:
             client = self._clients.get(session_info["clientId"])
             return dict(client) if client is not None else None
 
-    def list_clients(self, user_name=None, session_id=None):
+    def list_clients(self, user_name=None, session_id=None, stale_after_seconds=None, now=None):
+        if stale_after_seconds is not None:
+            self.prune_stale_clients(stale_after_seconds, now=now)
         with self._lock:
             clients = []
             for client in self._clients.values():

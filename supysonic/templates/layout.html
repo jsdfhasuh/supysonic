@@ -44,6 +44,11 @@
                 {% endblock %}
               </li>
               <li class="nav-item">
+                {% block navbar_music_requests %}
+                <a class="nav-link" href="{{ url_for('frontend.music_request_index') }}"><span data-i18n-en="Requests" data-i18n-zh="登记板">Requests</span></a>
+                {% endblock %}
+              </li>
+              <li class="nav-item">
                 {% block navbar_control %}
                 <a class="nav-link" href="{{ url_for('frontend.control_index') }}"><span data-i18n-en="Control" data-i18n-zh="控制台">Control</span></a>
                 {% endblock %}

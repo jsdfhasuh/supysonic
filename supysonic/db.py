@@ -26,6 +26,7 @@ from .db_layer.library import (
     TrackArtist,
 )
 from .db_layer.misc import ChatMessage, RadioStation
+from .db_layer.music_requests import MusicRequest
 from .db_layer.playlists import Playlist, SharedTrackLink
 from .db_layer.review_tasks import AlbumReviewTask, ReviewTask
 from .db_layer.runtime import (

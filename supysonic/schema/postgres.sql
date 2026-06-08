@@ -125,6 +125,23 @@ CREATE TABLE IF NOT EXISTS user_recommendation_feedback (
 CREATE UNIQUE INDEX IF NOT EXISTS index_user_recommendation_feedback_user_song_scope ON user_recommendation_feedback(user_id, song_id, scope);
 CREATE INDEX IF NOT EXISTS index_user_recommendation_feedback_user_scope_deleted ON user_recommendation_feedback(user_id, scope, deleted_at);
 
+CREATE TABLE IF NOT EXISTS music_request (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES "user",
+    artist_name VARCHAR(256) NOT NULL,
+    album_name VARCHAR(256),
+    tracks_json TEXT,
+    note TEXT,
+    status VARCHAR(32) NOT NULL,
+    status_note TEXT,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    resolved_at TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS index_music_request_status_created_at ON music_request(status, created_at);
+CREATE INDEX IF NOT EXISTS index_music_request_user_created_at ON music_request(user_id, created_at);
+CREATE INDEX IF NOT EXISTS index_music_request_artist_album_status ON music_request(artist_name, album_name, status);
+
 CREATE TABLE IF NOT EXISTS starred_folder (
     user_id UUID NOT NULL REFERENCES "user",
     starred_id INTEGER NOT NULL REFERENCES folder,

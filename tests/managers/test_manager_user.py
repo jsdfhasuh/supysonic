@@ -107,8 +107,18 @@ class UserManagerTestCase(unittest.TestCase):
             db.ClientPrefs.create(
                 user=user, client_name="tests"
             )  # test for FK handling
+            db.MusicRequest.create(
+                user=user,
+                artist_name="Missing Artist",
+                album_name="Missing Album",
+            )
             UserManager.delete(user.id)
             self.assertRaises(db.User.DoesNotExist, db.User.__getitem__, user.id)
+            self.assertFalse(
+                db.MusicRequest.select()
+                .where(db.MusicRequest.user == user.id)
+                .exists()
+            )
         self.assertEqual(db.User.select().count(), 0)
 
     def test_delete_by_name(self):

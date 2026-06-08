@@ -1,0 +1,158 @@
+{#-
+ This file is part of Supysonic.
+ Supysonic is a Python implementation of the Subsonic server API.
+
+ Distributed under terms of the GNU AGPLv3 license.
+-#}
+{% extends "layout.html" %}
+{% block title %}Music requests · Emosonic Server{% endblock %}
+{% block navbar_music_requests %}
+<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.music_request_index') }}"><span data-i18n-en="Requests" data-i18n-zh="登记板">Requests</span></a>
+{% endblock %}
+{% block page_title %}<span data-i18n-en="Missing music requests" data-i18n-zh="缺失音乐登记板">Missing music requests</span>{% endblock %}
+{% block page_subtitle %}<span data-i18n-en="Collect albums and songs that users want added when they are not available in the current library." data-i18n-zh="登记当前曲库中不存在、用户希望后续加入的专辑与歌曲。">Collect albums and songs that users want added when they are not available in the current library.</span>{% endblock %}
+{% block body %}
+<div class="row row-cols-1 row-cols-md-3 g-3 console-section-spacer">
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header"><span data-i18n-en="Pending" data-i18n-zh="待处理">Pending</span></div>
+      <div class="card-body">
+        <div class="console-metric-value">{{ counts.pending }}</div>
+        <div class="console-metric-caption" data-i18n-en="Requests waiting for library action." data-i18n-zh="等待曲库处理的登记。">Requests waiting for library action.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header"><span data-i18n-en="Resolved" data-i18n-zh="已完成">Resolved</span></div>
+      <div class="card-body">
+        <div class="console-metric-value">{{ counts.resolved }}</div>
+        <div class="console-metric-caption" data-i18n-en="Requests marked as added or handled." data-i18n-zh="已标记为加入或处理完成的登记。">Requests marked as added or handled.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header"><span data-i18n-en="Rejected" data-i18n-zh="已拒绝">Rejected</span></div>
+      <div class="card-body">
+        <div class="console-metric-value">{{ counts.rejected }}</div>
+        <div class="console-metric-caption" data-i18n-en="Requests that cannot be fulfilled." data-i18n-zh="无法满足的登记。">Requests that cannot be fulfilled.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card console-section-spacer">
+  <div class="card-header"><span data-i18n-en="Add request" data-i18n-zh="添加登记">Add request</span></div>
+  <div class="card-body">
+    <form method="post" action="{{ url_for('frontend.music_request_create') }}" class="d-flex flex-column gap-3">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label" for="artist-name"><span data-i18n-en="Artist" data-i18n-zh="艺人">Artist</span></label>
+          <input type="text" class="form-control" id="artist-name" name="artist_name" maxlength="256" required>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="album-name"><span data-i18n-en="Album" data-i18n-zh="专辑">Album</span></label>
+          <input type="text" class="form-control" id="album-name" name="album_name" maxlength="256">
+        </div>
+      </div>
+      <div>
+        <label class="form-label" for="tracks"><span data-i18n-en="Tracks" data-i18n-zh="曲目">Tracks</span></label>
+        <textarea class="form-control" id="tracks" name="tracks" rows="4" placeholder="One track title per line"></textarea>
+      </div>
+      <div>
+        <label class="form-label" for="note"><span data-i18n-en="Note" data-i18n-zh="备注">Note</span></label>
+        <textarea class="form-control" id="note" name="note" rows="3"></textarea>
+      </div>
+      <div class="d-flex justify-content-end">
+        <button class="btn btn-dark" type="submit"><span data-i18n-en="Save request" data-i18n-zh="保存登记">Save request</span></button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card console-section-spacer">
+  <div class="card-header d-flex justify-content-between align-items-center gap-3 flex-wrap">
+    <span data-i18n-en="Request board" data-i18n-zh="登记列表">Request board</span>
+    <div class="btn-group btn-group-sm" role="group" aria-label="Filter requests by status">
+      <a class="btn btn-outline-dark {% if not status_filter %}active{% endif %}" href="{{ url_for('frontend.music_request_index') }}"><span data-i18n-en="All" data-i18n-zh="全部">All</span></a>
+      {% for status in statuses %}
+      <a class="btn btn-outline-dark {% if status_filter == status %}active{% endif %}" href="{{ url_for('frontend.music_request_index', status=status) }}">{{ status }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="card-body p-0">
+    {% if not requests %}
+    <div class="p-4 text-body-secondary" data-i18n-en="No music requests found." data-i18n-zh="暂无音乐登记。">No music requests found.</div>
+    {% else %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th><span data-i18n-en="Album" data-i18n-zh="专辑">Album</span></th>
+            <th><span data-i18n-en="Tracks" data-i18n-zh="曲目">Tracks</span></th>
+            <th><span data-i18n-en="Requested by" data-i18n-zh="登记人">Requested by</span></th>
+            <th><span data-i18n-en="Status" data-i18n-zh="状态">Status</span></th>
+            <th><span data-i18n-en="Created" data-i18n-zh="创建时间">Created</span></th>
+            <th><span data-i18n-en="Actions" data-i18n-zh="操作">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for record in requests %}
+          {% set track_titles = record.get_track_titles() %}
+          <tr>
+            <td>
+              <div class="console-table-title">{{ record.album_name or '-' }}</div>
+              <small class="console-muted">{{ record.artist_name }}</small>
+              {% if record.note %}
+              <div class="small text-body-secondary mt-1">{{ record.note }}</div>
+              {% endif %}
+            </td>
+            <td>
+              {% if track_titles %}
+              <ol class="mb-0 ps-3">
+                {% for title in track_titles %}
+                <li>{{ title }}</li>
+                {% endfor %}
+              </ol>
+              {% else %}
+              <span class="text-body-secondary">-</span>
+              {% endif %}
+            </td>
+            <td>{{ record.user.name }}</td>
+            <td>
+              <span class="console-status status-{{ 'playing' if record.status == 'resolved' else 'unknown' }}">{{ record.status }}</span>
+              {% if record.status_note %}
+              <div class="small text-body-secondary mt-1">{{ record.status_note }}</div>
+              {% endif %}
+            </td>
+            <td>{{ record.created_at }}</td>
+            <td>
+              <div class="d-flex gap-2 flex-wrap">
+                {% if request.user.admin %}
+                <form method="post" action="{{ url_for('frontend.music_request_update_status', uid=record.id) }}" class="d-flex gap-2">
+                  <select class="form-select form-select-sm" name="status" aria-label="Request status">
+                    {% for status in statuses %}
+                    <option value="{{ status }}" {% if record.status == status %}selected{% endif %}>{{ status }}</option>
+                    {% endfor %}
+                  </select>
+                  <input class="form-control form-control-sm" type="text" name="status_note" value="{{ record.status_note or '' }}" placeholder="Status note">
+                  <button class="btn btn-outline-dark btn-sm" type="submit"><span data-i18n-en="Update" data-i18n-zh="更新">Update</span></button>
+                </form>
+                {% endif %}
+                {% if request.user.admin or record.user.id == request.user.id %}
+                <form method="post" action="{{ url_for('frontend.music_request_delete', uid=record.id) }}">
+                  <button class="btn btn-outline-danger btn-sm" type="submit"><span data-i18n-en="Delete" data-i18n-zh="删除">Delete</span></button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

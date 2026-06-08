@@ -51,6 +51,7 @@ class DbLayerContractTestCase(unittest.TestCase):
             "User_Play_Activity",
             "UserRecommendationFeedback",
             "ClientPrefs",
+            "MusicRequest",
             "EmoSessionQueue",
             "EmoLocalQueue",
             "EmoPlaybackState",
@@ -178,6 +179,7 @@ class DbLayerContractTestCase(unittest.TestCase):
         users = importlib.import_module("supysonic.db_layer.users")
         annotations = importlib.import_module("supysonic.db_layer.annotations")
         review_tasks = importlib.import_module("supysonic.db_layer.review_tasks")
+        music_requests = importlib.import_module("supysonic.db_layer.music_requests")
         playlists = importlib.import_module("supysonic.db_layer.playlists")
         misc = importlib.import_module("supysonic.db_layer.misc")
 
@@ -216,6 +218,7 @@ class DbLayerContractTestCase(unittest.TestCase):
         self.assertIs(db_module.ReviewTask, review_tasks.ReviewTask)
         self.assertIs(db_module.AlbumReviewTask, review_tasks.AlbumReviewTask)
         self.assertIs(review_tasks.AlbumReviewTask, review_tasks.ReviewTask)
+        self.assertIs(db_module.MusicRequest, music_requests.MusicRequest)
         self.assertIs(db_module.Playlist, playlists.Playlist)
         self.assertIs(db_module.SharedTrackLink, playlists.SharedTrackLink)
         self.assertIs(db_module.ChatMessage, misc.ChatMessage)

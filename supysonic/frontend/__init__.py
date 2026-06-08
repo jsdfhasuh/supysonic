@@ -553,5 +553,6 @@ def device_cover(eid):
 from .user import *
 from .folder import *
 from .playlist import *
+from .music_requests import *
 from .metadata import *
 from .share import *

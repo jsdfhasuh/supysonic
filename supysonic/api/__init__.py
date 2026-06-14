@@ -247,6 +247,7 @@ from .annotation import *
 from .chat import *
 from .search import *
 from .playlists import *
+from .music_requests import *
 from .jukebox import *
 from .radio import *
 from .unsupported import *

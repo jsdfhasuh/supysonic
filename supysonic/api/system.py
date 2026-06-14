@@ -35,5 +35,9 @@ def open_subsonic_extensions():
             "name": "template",
             "versions": [1, 2],
         },
+        {
+            "name": "musicRequestBoard",
+            "versions": [1],
+        },
     ]
     return response_data

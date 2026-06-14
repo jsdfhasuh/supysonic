@@ -32,6 +32,18 @@ class SystemTestCase(ApiTestBase):
             {extension["name"] for extension in extensions},
         )
 
+    def test_open_subsonic_extensions_includes_music_request_board(self):
+        rv = self.client.get(
+            "/rest/getOpenSubsonicExtensions.view",
+            query_string={"u": "alice", "p": "Alic3", "c": "tests", "f": "json"},
+        )
+
+        data = rv.get_json()
+        extensions = data["subsonic-response"]["openSubsonicExtensions"]
+        by_name = {extension["name"]: extension for extension in extensions}
+        self.assertIn("musicRequestBoard", by_name)
+        self.assertEqual(by_name["musicRequestBoard"]["versions"], [1])
+
 
 if __name__ == "__main__":
     unittest.main()

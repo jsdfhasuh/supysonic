@@ -10,6 +10,8 @@ import json
 import logging
 import os
 import time
+from typing import Dict, List
+
 from flask import (
     abort,
     current_app,
@@ -30,19 +32,38 @@ from .. import VERSION, DOWNLOAD_URL
 from ..TaskManger import list_task_results
 from ..daemon.client import DaemonClient
 from ..daemon.exceptions import DaemonUnavailableError
-from ..db import Artist, Album, EmoLocalQueue, EmoPlaybackState, EmoSessionQueue, Track
+from ..db import (
+    Artist,
+    Album,
+    EmoLocalQueue,
+    EmoPlaybackState,
+    EmoSessionQueue,
+    Track,
+    random,
+)
 from ..api.media import _get_cover_path
 from ..emo.ws_state import DEFAULT_CLIENT_STALE_SECONDS, get_state
 from ..managers.user import UserManager
 from ..api.media import __new_get_cover_path
 from ..cache import CacheMiss
 from ..client_releases import get_latest_release
+from ..recommend import (
+    getLatestRecommendedPlaylist,
+    getRecommendedPlaylistForDay,
+)
+from ..recommendation_feedback import (
+    HOT_RECOMMENDED_SCOPE,
+    filter_disliked_recommended_tracks,
+    get_disliked_recommended_song_ids,
+)
 
 logger = logging.getLogger(__name__)
 
 frontend = Blueprint("frontend", __name__)
 state = get_state()
 DEFAULT_DEVICE_TIMEOUT_SECONDS = DEFAULT_CLIENT_STALE_SECONDS
+DEFAULT_RECOMMENDATION_COUNT = 30
+MAX_RECOMMENDATION_COUNT = 100
 ANONYMOUS_FRONTEND_ENDPOINTS = {
     "frontend.login",
     "frontend.register",
@@ -375,6 +396,97 @@ def getDeviceMonitorSummary(rows):
         "playingDevices": playing_devices,
         "recentlyUpdated": recently_updated,
     }
+
+
+def _format_duration(total_seconds: int) -> str:
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours:d}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes:02d}:{seconds:02d}"
+
+
+def _get_recommendation_count() -> int:
+    try:
+        count = int(request.args.get("count") or DEFAULT_RECOMMENDATION_COUNT)
+    except (TypeError, ValueError):
+        count = DEFAULT_RECOMMENDATION_COUNT
+    return max(1, min(count, MAX_RECOMMENDATION_COUNT))
+
+
+def _collect_random_recommendation_tracks(user, count: int) -> List[Track]:
+    if count <= 0:
+        return []
+
+    disliked_song_ids = get_disliked_recommended_song_ids(
+        user,
+        scope=HOT_RECOMMENDED_SCOPE,
+    )
+    tracks = []
+    seen_track_ids = set()
+    query_limit = max(count * 3, 50)
+    for track in Track.select().order_by(random()).limit(query_limit):
+        track_id = str(track.id)
+        if track_id in disliked_song_ids or track_id in seen_track_ids:
+            continue
+        tracks.append(track)
+        seen_track_ids.add(track_id)
+        if len(tracks) >= count:
+            break
+
+    return tracks
+
+
+def _build_recommendation_context(user, count: int) -> Dict[str, object]:
+    source = "daily"
+    playlist = getRecommendedPlaylistForDay(user)
+    if playlist is None:
+        playlist = getLatestRecommendedPlaylist(user)
+        source = "latest" if playlist is not None else "random"
+
+    if playlist is not None:
+        tracks = filter_disliked_recommended_tracks(
+            user,
+            playlist.get_tracks(),
+            scope=HOT_RECOMMENDED_SCOPE,
+        )[:count]
+    else:
+        tracks = _collect_random_recommendation_tracks(user, count)
+
+    artist_names = {
+        track.artist.get_artist_name()
+        for track in tracks
+        if getattr(track, "artist", None) is not None
+    }
+    album_ids = {
+        track.album_id
+        for track in tracks
+        if getattr(track, "album_id", None) is not None
+    }
+    total_duration = sum(track.duration or 0 for track in tracks)
+
+    return {
+        "playlist": playlist,
+        "tracks": tracks,
+        "summary": {
+            "source": source,
+            "trackCount": len(tracks),
+            "artistCount": len(artist_names),
+            "albumCount": len(album_ids),
+            "totalDuration": _format_duration(total_duration),
+            "limit": count,
+        },
+    }
+
+
+@frontend.route("/recommendations")
+@login_only
+def recommendation_index():
+    context = _build_recommendation_context(
+        request.user,
+        _get_recommendation_count(),
+    )
+    return render_template("recommendations.html", **context)
 
 
 @frontend.route("/devices")

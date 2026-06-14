@@ -1,0 +1,143 @@
+{#-
+ This file is part of Supysonic.
+ Supysonic is a Python implementation of the Subsonic server API.
+
+ Distributed under terms of the GNU AGPLv3 license.
+-#}
+{% extends "layout.html" %}
+{% block title %}Recommendations · Emosonic Server{% endblock %}
+{% block navbar_recommendations %}
+<a class="nav-link active" aria-current="page" href="{{ url_for('frontend.recommendation_index') }}"><span data-i18n-en="Recommendations" data-i18n-zh="推荐">Recommendations</span></a>
+{% endblock %}
+{% block page_title %}<span data-i18n-en="Recommendations" data-i18n-zh="推荐">Recommendations</span>{% endblock %}
+{% block page_subtitle %}<span data-i18n-en="Review recommended songs from the current generated playlist or the library fallback." data-i18n-zh="查看当前生成歌单或曲库兜底来源中的推荐歌曲。">Review recommended songs from the current generated playlist or the library fallback.</span>{% endblock %}
+{% block body %}
+<div class="row row-cols-1 row-cols-md-3 g-3 console-section-spacer">
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header"><span data-i18n-en="Recommended tracks" data-i18n-zh="推荐歌曲">Recommended tracks</span></div>
+      <div class="card-body">
+        <div class="console-metric-value">{{ summary.trackCount }}</div>
+        <div class="console-metric-caption" data-i18n-en="Visible songs after applying your recommendation feedback." data-i18n-zh="应用你的推荐反馈后可见的歌曲。">Visible songs after applying your recommendation feedback.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header"><span data-i18n-en="Artists represented" data-i18n-zh="覆盖艺人">Artists represented</span></div>
+      <div class="card-body">
+        <div class="console-metric-value">{{ summary.artistCount }}</div>
+        <div class="console-metric-caption" data-i18n-en="Distinct artists in the current recommendation set." data-i18n-zh="当前推荐集合中的不同艺人数量。">Distinct artists in the current recommendation set.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card console-metric-card">
+      <div class="card-header"><span data-i18n-en="Source" data-i18n-zh="来源">Source</span></div>
+      <div class="card-body">
+        <div class="console-metric-value">
+          {% if summary.source == 'daily' %}
+          <span data-i18n-en="Daily" data-i18n-zh="今日">Daily</span>
+          {% elif summary.source == 'latest' %}
+          <span data-i18n-en="Latest" data-i18n-zh="最近">Latest</span>
+          {% else %}
+          <span data-i18n-en="Random" data-i18n-zh="随机">Random</span>
+          {% endif %}
+        </div>
+        <div class="console-metric-caption" data-i18n-en="Current recommendation source selected for this page." data-i18n-zh="当前页面使用的推荐来源。">Current recommendation source selected for this page.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 console-section-spacer">
+  <div class="col-xl-8">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center gap-3">
+        <span data-i18n-en="Recommended songs" data-i18n-zh="推荐歌曲">Recommended songs</span>
+        <span class="console-chip">{{ summary.limit }}</span>
+      </div>
+      <div class="card-body p-0">
+        {% if tracks %}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th data-i18n-en="Song" data-i18n-zh="歌曲">Song</th>
+                <th data-i18n-en="Artist" data-i18n-zh="艺人">Artist</th>
+                <th data-i18n-en="Album" data-i18n-zh="专辑">Album</th>
+                <th data-i18n-en="Genre" data-i18n-zh="流派">Genre</th>
+                <th data-i18n-en="Duration" data-i18n-zh="时长">Duration</th>
+                <th data-i18n-en="Plays" data-i18n-zh="播放">Plays</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for track in tracks %}
+              <tr>
+                <td><span class="console-chip">{{ loop.index }}</span></td>
+                <td>
+                  <div class="console-table-title">{{ track.title }}</div>
+                  <small class="console-muted">{{ track.suffix()|upper }} · {{ track.bitrate }} kbps</small>
+                </td>
+                <td>{{ track.artist.get_artist_name() if track.artist else '-' }}</td>
+                <td>{{ track.album.name if track.album else '-' }}</td>
+                <td>{{ track.genre or '-' }}</td>
+                <td>{{ track.duration_str() }}</td>
+                <td>{{ track.play_count }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="p-4 text-body-secondary" data-i18n-en="No recommendation tracks available." data-i18n-zh="暂无可用的推荐歌曲。">No recommendation tracks available.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="card h-100">
+      <div class="card-header"><span data-i18n-en="Recommendation context" data-i18n-zh="推荐上下文">Recommendation context</span></div>
+      <div class="card-body">
+        <ul class="console-info-list">
+          <li>
+            <span data-i18n-en="Owner" data-i18n-zh="所属用户">Owner</span>
+            <strong>{{ request.user.name }}</strong>
+          </li>
+          <li>
+            <span data-i18n-en="Source" data-i18n-zh="来源">Source</span>
+            <strong>
+              {% if summary.source == 'daily' %}
+              <span data-i18n-en="Daily playlist" data-i18n-zh="今日歌单">Daily playlist</span>
+              {% elif summary.source == 'latest' %}
+              <span data-i18n-en="Latest playlist" data-i18n-zh="最近歌单">Latest playlist</span>
+              {% else %}
+              <span data-i18n-en="Library fallback" data-i18n-zh="曲库兜底">Library fallback</span>
+              {% endif %}
+            </strong>
+          </li>
+          <li>
+            <span data-i18n-en="Albums" data-i18n-zh="专辑">Albums</span>
+            <strong>{{ summary.albumCount }}</strong>
+          </li>
+          <li>
+            <span data-i18n-en="Total duration" data-i18n-zh="总时长">Total duration</span>
+            <strong>{{ summary.totalDuration }}</strong>
+          </li>
+          <li>
+            <span data-i18n-en="Playlist" data-i18n-zh="歌单">Playlist</span>
+            <strong>{{ playlist.name if playlist else '-' }}</strong>
+          </li>
+          {% if playlist and playlist.created %}
+          <li>
+            <span data-i18n-en="Created" data-i18n-zh="创建时间">Created</span>
+            <strong>{{ playlist.created.strftime('%Y-%m-%d') }}</strong>
+          </li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

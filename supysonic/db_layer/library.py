@@ -1,5 +1,5 @@
 import mimetypes
-import os.path
+import os
 
 from peewee import (
     AutoField,
@@ -17,6 +17,29 @@ from peewee import (
 
 from .core import PathMixin, PrimaryKeyField, _Model, db, now
 from ..tool import read_dict_from_json
+
+
+def _path_tree_candidates(path: str):
+    candidates = []
+    for candidate in (os.path.normpath(path), os.path.abspath(path)):
+        candidate = candidate.rstrip(os.sep) or os.sep
+        if candidate not in candidates:
+            candidates.append(candidate)
+    return candidates
+
+
+def _path_tree_condition(field, path: str):
+    condition = None
+    for base_path in _path_tree_candidates(path):
+        if base_path == os.sep:
+            path_condition = field.startswith(os.sep)
+        else:
+            path_condition = (field == base_path) | field.startswith(
+                base_path + os.sep
+            )
+        condition = path_condition if condition is None else condition | path_condition
+
+    return condition
 
 
 class Image(_Model):
@@ -80,7 +103,7 @@ class Folder(PathMixin, _Model):
         if self.root:
             cond = Track.root_folder == self
         else:
-            cond = Track.path.startswith(self.path)
+            cond = _path_tree_condition(Track.path, self.path)
 
         return self.__delete_hierarchy(cond)
 
@@ -96,7 +119,7 @@ class Folder(PathMixin, _Model):
         tracks = Track.select(Track.id).where(cond)
         delete_track_annotations(tracks)
 
-        path_cond = Folder.path.startswith(self.path)
+        path_cond = _path_tree_condition(Folder.path, self.path)
         folders = Folder.select(Folder.id).where(path_cond)
         delete_folder_annotations(folders)
 

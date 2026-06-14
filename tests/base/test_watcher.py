@@ -18,7 +18,14 @@ from unittest.mock import patch
 
 from supysonic.db import Album, AlbumReviewTask, init_database, release_database, Track, Artist, Folder, Image
 from supysonic.managers.folder import FolderManager
-from supysonic.watcher import OP_SCAN, SupysonicWatcher
+from supysonic.watcher import (
+    FLAG_CREATE,
+    FLAG_DIRECTORY,
+    OP_MOVE,
+    OP_REMOVE,
+    OP_SCAN,
+    SupysonicWatcher,
+)
 
 from ..testbase import TestConfig
 
@@ -198,6 +205,9 @@ class WatcherTestCase(WatcherTestBase):
         with tempfile.NamedTemporaryFile() as f:
             return os.path.basename(f.name)
 
+    def _rootdir(self):
+        return self.__dir
+
     def _temppath(self, suffix, depth=0):
         if depth > 0:
             dirpath = os.path.join(
@@ -223,6 +233,15 @@ class WatcherTestCase(WatcherTestBase):
 class AudioWatcherTestCase(WatcherTestCase):
     def assertTrackCountEqual(self, expected):
         self.assertEqual(Track.select().count(), expected)
+
+    def _queue(self):
+        return self._WatcherTestBase__watcher._SupysonicWatcher__queue
+
+    def _add_file_to_dir(self, dirpath):
+        os.makedirs(dirpath, exist_ok=True)
+        path = os.path.join(dirpath, self._tempname() + ".mp3")
+        shutil.copyfile("tests/assets/folder/silence.mp3", path)
+        return path
 
     def test_add(self):
         self._addfile()
@@ -316,6 +335,80 @@ class AudioWatcherTestCase(WatcherTestCase):
         self.assertTrackCountEqual(0)
 
         os.unlink(newpath)
+
+    def test_directory_create_scans_existing_files(self):
+        dirpath = os.path.join(self._rootdir(), self._tempname())
+        path = self._add_file_to_dir(dirpath)
+        self._queue().put(dirpath, OP_SCAN | FLAG_CREATE | FLAG_DIRECTORY)
+
+        self.assertTrue(
+            self._wait_until(
+                lambda: Track.select().count() == 1
+                and Track.select().first().path == path
+            )
+        )
+
+    def test_directory_delete(self):
+        path = self._addfile(depth=1)
+        self._sleep()
+        self.assertTrackCountEqual(1)
+
+        dirpath = os.path.dirname(path)
+        shutil.rmtree(dirpath)
+        self._queue().put(dirpath, OP_REMOVE | FLAG_DIRECTORY)
+
+        self.assertTrue(
+            self._wait_until(
+                lambda: Track.select().count() == 0
+                and not Folder.select().where(Folder.path == dirpath).exists()
+            )
+        )
+        self.assertTrackCountEqual(0)
+
+    def test_directory_rename(self):
+        path = self._addfile(depth=1)
+        self._sleep()
+        self.assertTrackCountEqual(1)
+
+        old_dir = os.path.dirname(path)
+        new_dir = os.path.join(os.path.dirname(old_dir), self._tempname())
+        new_path = os.path.join(new_dir, os.path.basename(path))
+        shutil.move(old_dir, new_dir)
+        self._queue().put(new_dir, OP_MOVE | FLAG_DIRECTORY, src_path=old_dir)
+
+        self.assertTrue(
+            self._wait_until(
+                lambda: Track.select().count() == 1
+                and Track.select().first().path == new_path
+                and not Folder.select().where(Folder.path == old_dir).exists()
+            )
+        )
+
+        track = Track.select().first()
+        self.assertEqual(track.path, new_path)
+        self.assertFalse(Folder.select().where(Folder.path == old_dir).exists())
+
+    def test_directory_delete_keeps_prefix_sibling(self):
+        dirpath = os.path.join(self._rootdir(), "album")
+        sibling_dir = os.path.join(self._rootdir(), "album-extra")
+        self._add_file_to_dir(dirpath)
+        sibling_path = self._add_file_to_dir(sibling_dir)
+
+        self.assertTrue(self._wait_until(lambda: Track.select().count() == 2))
+
+        shutil.rmtree(dirpath)
+        self._queue().put(dirpath, OP_REMOVE | FLAG_DIRECTORY)
+
+        self.assertTrue(
+            self._wait_until(
+                lambda: Track.select().count() == 1
+                and Track.select().first().path == sibling_path
+                and not Folder.select().where(Folder.path == dirpath).exists()
+                and Folder.select().where(Folder.path == sibling_dir).exists()
+            )
+        )
+        self.assertFalse(Folder.select().where(Folder.path == dirpath).exists())
+        self.assertTrue(Folder.select().where(Folder.path == sibling_dir).exists())
 
     def test_delete(self):
         path = self._addfile()

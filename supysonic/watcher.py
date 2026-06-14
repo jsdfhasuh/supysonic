@@ -6,15 +6,16 @@
 # Distributed under terms of the GNU AGPLv3 license.
 
 import logging
-import os.path
+import os
 import time
 
 from threading import Thread, Condition, Timer
+from typing import Optional
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 
 from . import covers
-from .db import Folder, open_connection, close_connection
+from .db import Folder, Track, open_connection, close_connection
 from .logging_utils import format_log_event
 from .scanner import Scanner
 from .scanner_func.scanner_review_tasks import createReviewTasks
@@ -26,8 +27,32 @@ OP_MOVE = 4 # 100
 FLAG_CREATE = 8 # 1000
 FLAG_COVER = 16 # 10000
 FLAG_NFO = 32 # 100000
+FLAG_DIRECTORY = 64 # 1000000
 
 logger = logging.getLogger(__name__)
+
+
+def _path_tree_candidates(path: str):
+    candidates = []
+    for candidate in (os.path.normpath(path), os.path.abspath(path)):
+        candidate = candidate.rstrip(os.sep) or os.sep
+        if candidate not in candidates:
+            candidates.append(candidate)
+    return candidates
+
+
+def _path_tree_condition(field, path: str):
+    condition = None
+    for base_path in _path_tree_candidates(path):
+        if base_path == os.sep:
+            path_condition = field.startswith(os.sep)
+        else:
+            path_condition = (field == base_path) | field.startswith(
+                base_path + os.sep
+            )
+        condition = path_condition if condition is None else condition | path_condition
+
+    return condition
 
 
 class SupysonicWatcherEventHandler(PatternMatchingEventHandler):
@@ -41,11 +66,20 @@ class SupysonicWatcherEventHandler(PatternMatchingEventHandler):
 
     def dispatch(self, event):
         try:
+            if getattr(event, "is_directory", False):
+                if event.event_type in ("created", "deleted", "moved"):
+                    getattr(self, "on_" + event.event_type)(event)
+                return
             super().dispatch(event)
         except Exception as e:  # pragma: nocover
             logger.critical(e)
 
     def on_created(self, event):
+        if getattr(event, "is_directory", False):
+            logger.debug("Directory created: '%s'", event.src_path)
+            self.queue.put(event.src_path, OP_SCAN | FLAG_CREATE | FLAG_DIRECTORY)
+            return
+
         logger.debug("File created: '%s'", event.src_path)
 
         op = OP_SCAN | FLAG_CREATE
@@ -56,6 +90,11 @@ class SupysonicWatcherEventHandler(PatternMatchingEventHandler):
         self.queue.put(event.src_path, op)
 
     def on_deleted(self, event):
+        if getattr(event, "is_directory", False):
+            logger.debug("Directory deleted: '%s'", event.src_path)
+            self.queue.put(event.src_path, OP_REMOVE | FLAG_DIRECTORY)
+            return
+
         logger.debug("File deleted: '%s'", event.src_path)
 
         op = OP_REMOVE
@@ -75,6 +114,11 @@ class SupysonicWatcherEventHandler(PatternMatchingEventHandler):
         self.queue.put(event.src_path, op)
 
     def on_moved(self, event):
+        if getattr(event, "is_directory", False):
+            logger.debug("Directory moved: '%s' -> '%s'", event.src_path, event.dest_path)
+            self.queue.put(event.dest_path, OP_MOVE | FLAG_DIRECTORY, src_path=event.src_path)
+            return
+
         logger.debug("File moved: '%s' -> '%s'", event.src_path, event.dest_path)
         op = OP_MOVE
         _, ext = os.path.splitext(event.src_path)
@@ -199,6 +243,7 @@ class ScannerProcessingQueue(Thread):
                     continue
 
                 if find_lost_information_flag:
+                    scanner.prune()
                     logger.info("Beginging cover scan")
                     scanner.find_lost_information()
                     createReviewTasks(scanner)
@@ -223,7 +268,10 @@ class ScannerProcessingQueue(Thread):
                 break
 
             try:
-                if item.operation & FLAG_COVER:
+                if item.operation & FLAG_DIRECTORY:
+                    self.__process_directory_item(scanner, item)
+                    find_lost_information_flag = True
+                elif item.operation & FLAG_COVER:
                     self.__process_cover_item(scanner, item)
                 elif item.operation & FLAG_NFO:
                     self.__process_nfo_item(scanner, item)
@@ -253,6 +301,93 @@ class ScannerProcessingQueue(Thread):
         if item.operation & OP_REMOVE:
             logger.info("Removing: '%s'", item.path)
             scanner.remove_file(item.path)
+
+    def __find_root_folder_for_path(self, path: str) -> Optional[Folder]:
+        path = os.path.abspath(path)
+        matched_folder = None
+        matched_path_length = -1
+
+        for folder in Folder.select().where(Folder.root):
+            folder_path = os.path.abspath(folder.path)
+            try:
+                if os.path.commonpath([path, folder_path]) != folder_path:
+                    continue
+            except ValueError:
+                continue
+
+            if len(folder_path) > matched_path_length:
+                matched_folder = folder
+                matched_path_length = len(folder_path)
+
+        return matched_folder
+
+    def __find_folder_for_path(self, path: str) -> Optional[Folder]:
+        folder = Folder.get_or_none(Folder.path.in_(_path_tree_candidates(path)))
+        if folder is not None:
+            return folder
+
+        path = os.path.abspath(path)
+        for folder in Folder.select():
+            if os.path.abspath(folder.path) == path:
+                return folder
+
+        return None
+
+    def __remove_directory(self, scanner: Scanner, path: str) -> None:
+        folder = self.__find_folder_for_path(path)
+        if folder is not None:
+            if folder.root:
+                return
+            scanner.stats().deleted.tracks += folder.delete_hierarchy()
+            return
+
+        for track in list(Track.select().where(_path_tree_condition(Track.path, path))):
+            scanner.remove_file(track.path)
+
+    def __scan_directory(self, scanner: Scanner, path: str) -> None:
+        if not os.path.isdir(path):
+            return
+        if self.__find_root_folder_for_path(path) is None:
+            return
+
+        def on_error(error: OSError) -> None:
+            if getattr(error, "filename", None):
+                scanner.stats().errors.append(error.filename)
+
+        for dirpath, dirnames, filenames in os.walk(
+            path,
+            topdown=True,
+            onerror=on_error,
+            followlinks=scanner.follow_symlinks,
+        ):
+            if scanner.stop_requested:
+                break
+
+            dirnames[:] = [name for name in dirnames if not name.startswith(".")]
+            for filename in filenames:
+                if filename.startswith("."):
+                    continue
+
+                filepath = os.path.join(dirpath, filename)
+                if scanner.should_scan_extension(filepath):
+                    scanner.scan_file(filepath)
+                    scanner.stats().scanned += 1
+
+            scanner.find_cover(dirpath)
+
+    def __process_directory_item(self, scanner: Scanner, item: Event) -> None:
+        if item.operation & OP_MOVE:
+            logger.info("Moving directory: '%s' -> '%s'", item.src_path, item.path)
+            self.__remove_directory(scanner, item.src_path)
+            self.__scan_directory(scanner, item.path)
+
+        if item.operation & OP_SCAN:
+            logger.info("Scanning directory: '%s'", item.path)
+            self.__scan_directory(scanner, item.path)
+
+        if item.operation & OP_REMOVE:
+            logger.info("Removing directory: '%s'", item.path)
+            self.__remove_directory(scanner, item.path)
 
     def __process_cover_item(self, scanner, item):
         if item.operation & OP_SCAN:

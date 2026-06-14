@@ -151,10 +151,16 @@ def repairAlbumCover(
         )
         return
 
+    track_dir = os.path.dirname(track.path)
     trace_header = {"album": album.name, "track_path": track.path}
-    cover_file = find_cover_in_folder(path=os.path.dirname(track.path), album_name=album.name)
+    try:
+        cover_file = find_cover_in_folder(path=track_dir, album_name=album.name)
+    except ValueError:
+        cover_file = None
+        trace_details.append("folder cover lookup: miss")
+
     if cover_file:
-        image_path = os.path.join(os.path.dirname(track.path), cover_file.name)
+        image_path = os.path.join(track_dir, cover_file.name)
         Image.get_or_create(image_type="album", related_id=album.id, path=image_path)
         markAlbumCoverRestored(scanner, album)
         logTrace(
@@ -168,7 +174,8 @@ def repairAlbumCover(
         )
         return
 
-    trace_details.append("folder cover lookup: miss")
+    if not trace_details:
+        trace_details.append("folder cover lookup: miss")
 
     if not os.path.exists(track.path):
         logTrace(
